@@ -23,13 +23,13 @@
 | 维度 | 预算 | 命令 | 阶段 | 失败 | 理由 | 状态 |
 |---|---|---|---|---|---|---|
 | secrets | 0 | `gitleaks detect --source . --redact --no-banner` | 编辑循环 | block | 仓库公开、安装包对外分发 | 可运行 |
-| 类型 | 0 error | `npm run typecheck` | 编辑循环 | block | 无噪声、秒级 | 待接线 |
-| lint | 0 error | `npm run lint` | 编辑循环 | block | 同上 | 待接线 |
-| 架构边界 | 0 违规 | `npm run check:boundaries` | 交还前 | block | 防止绕开 bd 桥直读 Dolt | 待接线 |
+| 类型 | 0 error | `npm run typecheck` | 编辑循环 | block | 无噪声、秒级 | 可运行 |
+| lint | 0 error | `npm run lint` | 编辑循环 | block | 同上 | 可运行 |
+| 架构边界 | 0 违规 | `npm run check:boundaries` | 交还前 | block | 防止绕开 bd 桥直读 Dolt | 可运行 |
 | bridge 行覆盖 | ≥ 80% | `npm run test:unit -- --coverage` | 交还前 | warn→block | 只有会真坏的那层值得设门槛 | 待接线 |
 | 关键 E2E | 3 条全绿 | `npm run e2e` | CI | block | 装→列表→详情→改状态 | 待接线 |
 | 依赖高危漏洞 | 0 | `osv-scanner --lockfile=package-lock.json` | CI | block | 会随安装包分发出去 | 待接线 |
-| 安装包体积 | ≤ 15 MB | `npm run build && npm run check:size` | CI | block | Tauri 空壳 5–10MB；超过即说明选型错了 | 待接线 |
+| 安装包体积 | ≤ 15 MB | `npm run build && npm run check:size` | CI | block | Tauri 空壳 5–10MB；超过即说明选型错了 | 可运行（需先 `build:app`） |
 | 冷启动→可交互 | ≤ 2.0s（P95） | `npm run measure:startup` | CI | warn | WebView2 冷启动实测量级 | 待接线 |
 | 热启动→可交互 | ≤ 800ms | 同上 | CI | warn | 双击即开是核心卖点 | 待接线 |
 | 常驻内存（1000 条票） | ≤ 150 MB | `npm run measure:memory` | CI | warn | WebView2 常见占用 | 待接线 |

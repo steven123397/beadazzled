@@ -1,0 +1,15 @@
+node_modules
+dist
+coverage
+package-lock.json
+src-tauri/target
+src-tauri/gen
+src-tauri/icons
+src-tauri/app-icon.svg
+*.md
+.beads
+.beads.gate.lock
+.upstream
+.agents
+.claude
+LICENSE
