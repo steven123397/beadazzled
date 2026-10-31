@@ -26,8 +26,8 @@ export default tseslint.config(
     },
   },
   {
-    // Vite requires a default export for the config file.
-    files: ['vite.config.ts'],
+    // Framework entry points require a default export.
+    files: ['vite.config.ts', 'vitest.config.ts', 'playwright.config.ts'],
     rules: { 'no-restricted-syntax': 'off' },
   },
   prettierConfig
