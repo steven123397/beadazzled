@@ -1,0 +1,137 @@
+#!/usr/bin/env node
+// Scans npm and Rust lockfiles with osv-scanner (CONSTRAINTS.md: 0 high-severity
+// vulnerabilities). osv-scanner exits 1 whenever any advisory is found, so the
+// severity decision is made here: only high/critical block.
+import { spawnSync } from 'node:child_process';
+import { existsSync, readdirSync } from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+import { summarizeDependencyAudit } from './lib/dependency-audit.mjs';
+
+const scriptPath = fileURLToPath(import.meta.url);
+const defaultRoot = path.resolve(path.dirname(scriptPath), '..');
+const MAX_BUFFER_BYTES = 128 * 1024 * 1024;
+const binaryName = process.platform === 'win32' ? 'osv-scanner.exe' : 'osv-scanner';
+
+function findOnPath() {
+  for (const directory of (process.env.PATH ?? '').split(path.delimiter)) {
+    if (!directory) {
+      continue;
+    }
+    const candidate = path.join(directory, binaryName);
+    if (existsSync(candidate)) {
+      return candidate;
+    }
+  }
+  return undefined;
+}
+
+function findInWinget() {
+  if (process.platform !== 'win32' || !process.env.LOCALAPPDATA) {
+    return undefined;
+  }
+  const packagesDirectory = path.join(process.env.LOCALAPPDATA, 'Microsoft', 'WinGet', 'Packages');
+  let entries;
+  try {
+    entries = readdirSync(packagesDirectory, { withFileTypes: true });
+  } catch {
+    return undefined;
+  }
+  for (const entry of entries) {
+    if (!entry.isDirectory() || !entry.name.startsWith('Google.OSVScanner_')) {
+      continue;
+    }
+    const candidate = path.join(packagesDirectory, entry.name, binaryName);
+    if (existsSync(candidate)) {
+      return candidate;
+    }
+  }
+  return undefined;
+}
+
+function resolveOsvScanner() {
+  const configured = process.env.OSV_SCANNER_PATH;
+  if (configured && existsSync(configured)) {
+    return configured;
+  }
+  return findOnPath() ?? findInWinget();
+}
+
+function parseRoot(argv) {
+  const flagIndex = argv.indexOf('--root');
+  if (flagIndex === -1) {
+    return defaultRoot;
+  }
+  const value = argv[flagIndex + 1];
+  if (!value) {
+    throw new Error('--root requires a directory argument');
+  }
+  return path.resolve(value);
+}
+
+try {
+  const scanner = resolveOsvScanner();
+  if (!scanner) {
+    console.error(
+      'check-deps: osv-scanner not found. Install it (winget install Google.OSVScanner) ' +
+        'or set OSV_SCANNER_PATH.'
+    );
+    process.exitCode = 1;
+  } else {
+    const root = parseRoot(process.argv.slice(2));
+    const result = spawnSync(
+      scanner,
+      [
+        'scan',
+        'source',
+        '--lockfile=package-lock.json',
+        '--lockfile=src-tauri/Cargo.lock',
+        '-f',
+        'json',
+      ],
+      { cwd: root, encoding: 'utf8', maxBuffer: MAX_BUFFER_BYTES }
+    );
+
+    // 0 = clean, 1 = advisories found; anything else is a scanner failure.
+    if (result.error || (result.status !== 0 && result.status !== 1)) {
+      process.stderr.write(result.stderr ?? '');
+      throw new Error(
+        result.error
+          ? `osv-scanner could not start: ${result.error.message}`
+          : `osv-scanner exited with status ${result.status}`
+      );
+    }
+
+    const audit = summarizeDependencyAudit(JSON.parse(result.stdout || '{"results":[]}'));
+    const { critical, high, medium, low, unknown } = audit.counts;
+    console.log(
+      `check-deps: ${critical} critical, ${high} high, ${medium} medium, ${low} low, ` +
+        `${unknown} unknown`
+    );
+
+    if (unknown > 0) {
+      const ids = audit.findings
+        .filter((finding) => finding.severity === 'unknown')
+        .map((finding) => finding.id)
+        .join(', ');
+      console.log(`check-deps: advisories without severity data (reported, not blocking): ${ids}`);
+    }
+
+    if (audit.status === 'fail') {
+      for (const finding of audit.findings) {
+        if (finding.severity === 'critical' || finding.severity === 'high') {
+          console.error(
+            `check-deps: ${finding.package}@${finding.version ?? '?'} ${finding.id} ` +
+              `(${finding.severity})`
+          );
+        }
+      }
+      console.error('check-deps: high-severity vulnerabilities found');
+      process.exitCode = 1;
+    }
+  }
+} catch (error) {
+  console.error(`check-deps: ${error instanceof Error ? error.message : String(error)}`);
+  process.exitCode = 1;
+}
