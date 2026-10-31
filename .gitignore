@@ -5,3 +5,6 @@
 .beads-credential-key
 .beads/proxieddb/
 *.gate.lock*
+
+# Upstream source clones for reference (not part of this project)
+.upstream/

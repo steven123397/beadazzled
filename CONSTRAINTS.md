@@ -1,0 +1,75 @@
+# CONSTRAINTS
+
+本文件是本仓库的质量契约。agent 与人都必须遵守；**任何一条不得为了让某个变更通过而被弱化**。
+修改阈值、预算或删减检查，只能通过一份 ADR + 本文件同步更新。
+
+状态：2026-10-31 建立。项目尚无代码，标记为「待接线」的检查属于已知欠账，见 Exceptions。
+
+## Floor（不可协商，无数字）
+
+- **不新增 suppression 换绿灯**：`@ts-ignore`、`eslint-disable`、`#[allow]`、关闭规则等，除非同一行写明理由并在 review 中被接受。为通过检查而加的 suppression 一律拒绝。
+- **不跳过、不删除测试**：主分支不允许 `.skip` / `xit` / `it.only` 残留。删测试必须说明替代覆盖在哪里。
+- **不留未实现 stub**：能编译不等于功能存在。`todo!()`、`throw new Error("not implemented")` 不得进入主分支。
+- **不提交 secrets**：示例配置写占位符，真实 key 只走环境变量。
+- **票数据只能经 `bd` 命令获取**：`bd export` / `bd events` / `bd show` / 写命令。禁止打开或解析 `.beads/embeddeddolt/` 下任何文件。允许读取 `.beads/attachments/` 等文档化附件，但不得据此推断票状态。
+- **交互路径上不调用 `bd`**：启动基线与显式刷新除外。实测单次调用 1.0–1.4s，一次就击穿体验。
+- **检查失败不许静默降级**：失败要么修，要么登记进 Exceptions。参照 bv 的反面教材（导出失败静默退回空数据）。
+- **不监听 `.beads/` 递归目录**：embedded Dolt 每次调用都会重写 `noms/`，连只读命令也算，递归监听会自激。变更信号默认走 events journal。
+
+## 强制数值
+
+失败处理遵循：**确定性 → block；测量性 → warn**（见 Exceptions 中的转正期限）。
+
+| 维度 | 预算 | 命令 | 阶段 | 失败 | 理由 | 状态 |
+|---|---|---|---|---|---|---|
+| secrets | 0 | `gitleaks detect --source . --redact --no-banner` | 编辑循环 | block | 仓库公开、安装包对外分发 | 可运行 |
+| 类型 | 0 error | `npm run typecheck` | 编辑循环 | block | 无噪声、秒级 | 待接线 |
+| lint | 0 error | `npm run lint` | 编辑循环 | block | 同上 | 待接线 |
+| 架构边界 | 0 违规 | `npm run check:boundaries` | 交还前 | block | 防止绕开 bd 桥直读 Dolt | 待接线 |
+| bridge 行覆盖 | ≥ 80% | `npm run test:unit -- --coverage` | 交还前 | warn→block | 只有会真坏的那层值得设门槛 | 待接线 |
+| 关键 E2E | 3 条全绿 | `npm run e2e` | CI | block | 装→列表→详情→改状态 | 待接线 |
+| 依赖高危漏洞 | 0 | `osv-scanner --lockfile=package-lock.json` | CI | block | 会随安装包分发出去 | 待接线 |
+| 安装包体积 | ≤ 15 MB | `npm run build && npm run check:size` | CI | block | Tauri 空壳 5–10MB；超过即说明选型错了 | 待接线 |
+| 冷启动→可交互 | ≤ 2.0s（P95） | `npm run measure:startup` | CI | warn | WebView2 冷启动实测量级 | 待接线 |
+| 热启动→可交互 | ≤ 800ms | 同上 | CI | warn | 双击即开是核心卖点 | 待接线 |
+| 常驻内存（1000 条票） | ≤ 150 MB | `npm run measure:memory` | CI | warn | WebView2 常见占用 | 待接线 |
+| 详情页切换 | ≤ 50ms | `npm run measure:navigation` | CI | warn | 纯内存读取，只受渲染限制 | 待接线 |
+| 列表滚动（1000 条） | 60fps 不掉帧 | `npm run measure:scroll` | CI | warn | 虚拟滚动的基本盘 | 待接线 |
+| 正文对比度 | ≥ 4.5:1；大字号 ≥ 3:1 | axe（待有可运行 UI） | 交还前 | block | WCAG AA | 待接线 |
+| 核心流程无鼠标可达 | 必须 | E2E + 手动 | 交还前 | block | 产品定位是键盘优先 | 待接线 |
+
+## 检查分层
+
+| 层 | 预算 | 内容 |
+|---|---|---|
+| 编辑循环 | ≤ 5s | typecheck、lint、secrets；只查改动文件 |
+| 交还给人之前 | ≤ 90s | bridge 单测 + 改动行覆盖率 + 架构边界 |
+| CI / review | 不限 | 全量测试、E2E、依赖扫描、构建、体积与性能测量 |
+
+bridge 测试**禁止真的 spawn `bd`**：单次调用 1.0–1.4s，几十个用例就能把 90 秒预算吃穿，还会把测试绑死在本机 bd 版本上。用录制好的真实 JSON 样本（`bd export` / `bd events`）跑纯逻辑；真实 `bd` 只出现在 3 条 E2E 里。
+
+## 仅测量（当前无基线，先记录不设防）
+
+| 指标 | 今日值 | 备注 |
+|---|---|---|
+| secrets | 0 | 2026-10-31 实测，gitleaks 8.30.1，2 commits / 29.34 KB / 395ms |
+| 安装包体积 | 未测量 | 无构建产物 |
+| 冷启动、热启动、内存、详情切换、滚动 | 未测量 | 无应用壳 |
+| bridge 行覆盖率 | 未测量 | 无代码 |
+| 依赖漏洞 | 未测量 | 无 lockfile |
+| 对比度、键盘可达 | 未测量 | 无 UI |
+
+## Exceptions
+
+| 项 | 原因 | owner | 到期 | 处置 |
+|---|---|---|---|---|
+| 类型 / lint / 覆盖 / 边界 / E2E / 体积 / 性能 / a11y 检查未接线 | 尚无代码与构建系统 | steven123397 | 第一条脚手架 PR 合并前 | 必须补齐 `check:fast` / `check:task` / `check:full` 三个脚本，否则不得标记该 PR 完成 |
+| 覆盖率门槛暂为 warn | 无历史基线 | steven123397 | 2026-12-31 | 首次基线后 ratchet 转 block |
+| 性能预算暂为 warn | 无可测产物 | steven123397 | 2026-12-31 | 应用壳跑通后 ratchet：连续三次超标提 issue 或重设预算，不许默默调阈值 |
+| 依赖扫描未接入 | 无 lockfile | steven123397 | 第一条引入依赖的 PR | 同 PR 内接入 osv-scanner |
+
+## 更新规则
+
+- 预算可以调整，但必须同时更新「理由」列并记录一次 ADR。
+- ratchet 只往紧的方向走：把实测值定为不得下降的 floor。
+- 连续三次测量超标：提 issue 或重设预算，二选一，不允许无限期挂着。

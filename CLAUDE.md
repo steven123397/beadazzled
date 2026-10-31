@@ -5,6 +5,7 @@
 - 规格：`SPEC.md`；多模块用 `spec/SPEC-<id>.md` + `spec/capability-map.md`；外部工具：无
 - task：单一来源为 beads（本项目 `.beads`，通过 `bd` 读写），plan 由 `bd create --graph` 建图承载，不另建 `tasks/plan.md`、`tasks/todo.md`
 - 子智能体模型：派发时显式传 `model` —— code-reviewer、security-auditor 用 opus；doubt-challenger、test-engineer、web-performance-auditor 用 sonnet
+- 质量约束：见 `CONSTRAINTS.md`；任何变更都不得为了让检查通过而弱化它
 - 以上文件在第一次真正产出时创建，不预建空目录
 
 <!-- BEGIN BEADS INTEGRATION v:1 profile:minimal hash:1105d646 -->
@@ -25,7 +26,7 @@ bd close <id>         # Complete work
 
 - Use `bd` for ALL task tracking — do NOT use TodoWrite, TaskCreate, or markdown TODO lists
 - Run `bd prime` for detailed command reference and session close protocol
-- Use `bd remember` for persistent knowledge — do NOT use MEMORY.md files
+- Do NOT use `bd remember` — persistent engineering knowledge belongs in OpenViking; do NOT use MEMORY.md files
 
 **Architecture in one line:** issues live in a local Dolt DB; sync uses `refs/dolt/data` on your git remote; `.beads/issues.jsonl` is a passive export. See https://github.com/gastownhall/beads/blob/main/docs/core-concepts/sync-concepts.md for details and anti-patterns.
 

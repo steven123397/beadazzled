@@ -10,7 +10,7 @@
       {
         "hooks": [
           {
-            "command": "bd prime --hook-json",
+            "command": "bd prime --hook-json --no-memories",
             "type": "command"
           }
         ],
