@@ -19,6 +19,7 @@
   ```
 
 - npm 缓存已在 D 盘（`D:\apps\nodejs\node_cache`）；Rust `target/` 位于项目内（D 盘），C 盘只保留工具链与 crate 缓存。
+- Playwright 浏览器缓存在 D 盘：用户级环境变量 `PLAYWRIGHT_BROWSERS_PATH=D:\tmp\ms-playwright`；新开的终端自动生效，旧终端需重开或手动带上该变量。`D:\apps` 只放应用程序，不放缓存。
 
 <!-- BEGIN BEADS INTEGRATION v:1 profile:minimal hash:1105d646 -->
 ## Beads Issue Tracker
