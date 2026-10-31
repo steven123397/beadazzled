@@ -1,0 +1,49 @@
+{
+  "name": "beadazzled",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Windows desktop frontend for beads",
+  "license": "MIT",
+  "scripts": {
+    "dev": "tauri dev",
+    "dev:web": "vite",
+    "typecheck": "tsc -b",
+    "lint": "eslint .",
+    "test:unit": "vitest run",
+    "test:rust": "cargo test --manifest-path src-tauri/Cargo.toml",
+    "gen:bindings": "cargo test --manifest-path src-tauri/Cargo.toml export_bindings",
+    "check:boundaries": "node scripts/check-boundaries.mjs",
+    "build": "tsc -b && vite build",
+    "build:app": "tauri build",
+    "check:size": "node scripts/check-size.mjs",
+    "e2e": "playwright test",
+    "measure:startup": "node scripts/measure-startup.mjs",
+    "measure:memory": "node scripts/measure-memory.mjs",
+    "measure:navigation": "node scripts/measure-navigation.mjs",
+    "measure:scroll": "node scripts/measure-scroll.mjs",
+    "verify:release": "node scripts/verify-release.mjs"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "^2.12.4",
+    "clsx": "^2.1.1",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "tailwind-merge": "^3.7.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@tailwindcss/vite": "^4.3.3",
+    "@tauri-apps/cli": "^2.12.4",
+    "@types/node": "^26.6.6",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.1.2",
+    "eslint": "^10.14.0",
+    "globals": "^17.13.0",
+    "tailwindcss": "^4.3.3",
+    "typescript": "~5.9.3",
+    "typescript-eslint": "^8.72.1",
+    "vite": "^8.3.5"
+  }
+}

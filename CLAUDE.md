@@ -8,6 +8,18 @@
 - 质量约束：见 `CONSTRAINTS.md`；任何变更都不得为了让检查通过而弱化它
 - 以上文件在第一次真正产出时创建，不预建空目录
 
+## 构建环境
+
+- 本机代理为 `127.0.0.1:7897`。环境变量 `_HTTP_PROXY` / `_HTTPS_PROXY`（带前导下划线）**不要改动**（2026-12-20 前有特殊原因），cargo / npm 不识别这些名字。
+- 需要下载 crate 时，在命令前显式带代理，不要改全局 `~/.cargo/config.toml` 或环境变量：
+
+  ```bash
+  HTTP_PROXY=http://127.0.0.1:7897 HTTPS_PROXY=http://127.0.0.1:7897 \
+  CARGO_HTTP_PROXY=http://127.0.0.1:7897 cargo build --manifest-path src-tauri/Cargo.toml
+  ```
+
+- npm 缓存已在 D 盘（`D:\apps\nodejs\node_cache`）；Rust `target/` 位于项目内（D 盘），C 盘只保留工具链与 crate 缓存。
+
 <!-- BEGIN BEADS INTEGRATION v:1 profile:minimal hash:1105d646 -->
 ## Beads Issue Tracker
 

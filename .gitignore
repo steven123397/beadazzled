@@ -8,3 +8,14 @@
 
 # Upstream source clones for reference (not part of this project)
 .upstream/
+
+# Node / Vite
+node_modules/
+dist/
+coverage/
+*.local
+.vite/
+
+# Test and build artifacts
+playwright-report/
+test-results/
