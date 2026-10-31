@@ -26,7 +26,7 @@
 | 类型 | 0 error | `npm run typecheck` | 编辑循环 | block | 无噪声、秒级 | 可运行 |
 | lint | 0 error | `npm run lint` | 编辑循环 | block | 同上 | 可运行 |
 | 架构边界 | 0 违规 | `npm run check:boundaries` | 交还前 | block | 防止绕开 bd 桥直读 Dolt | 可运行 |
-| bridge 行覆盖 | ≥ 80% | `npm run test:unit -- --coverage` | 交还前 | warn→block | 只有会真坏的那层值得设门槛 | 待接线 |
+| bridge 行覆盖 | ≥ 80% | `npm run test:rust:coverage` | 交还前 | block | 只有会真坏的那层值得设门槛 | 可运行（bridge 落地后生效） |
 | 关键 E2E | 3 条全绿 | `npm run e2e` | CI | block | 装→列表→详情→改状态 | 待接线 |
 | 依赖高危漏洞 | 0 | `osv-scanner --lockfile=package-lock.json` | CI | block | 会随安装包分发出去 | 待接线 |
 | 安装包体积 | ≤ 15 MB | `npm run build && npm run check:size` | CI | block | Tauri 空壳 5–10MB；超过即说明选型错了 | 可运行（需先 `build:app`） |
@@ -55,7 +55,7 @@ bridge 测试**禁止真的 spawn `bd`**：单次调用 1.0–1.4s，几十个�
 | secrets | 0 | 2026-10-31 实测，gitleaks 8.30.1，2 commits / 29.34 KB / 395ms |
 | 安装包体积 | 未测量 | 无构建产物 |
 | 冷启动、热启动、内存、详情切换、滚动 | 未测量 | 无应用壳 |
-| bridge 行覆盖率 | 未测量 | 无代码 |
+| bridge 行覆盖率 | 未测量 | bridge 未实现；命令已接线（`test:rust:coverage`） |
 | 依赖漏洞 | 未测量 | 无 lockfile |
 | 对比度、键盘可达 | 未测量 | 无 UI |
 
@@ -64,7 +64,7 @@ bridge 测试**禁止真的 spawn `bd`**：单次调用 1.0–1.4s，几十个�
 | 项 | 原因 | owner | 到期 | 处置 |
 |---|---|---|---|---|
 | 类型 / lint / 覆盖 / 边界 / E2E / 体积 / 性能 / a11y 检查未接线 | 尚无代码与构建系统 | steven123397 | 第一条脚手架 PR 合并前 | 必须补齐 `check:fast` / `check:task` / `check:full` 三个脚本，否则不得标记该 PR 完成 |
-| 覆盖率门槛暂为 warn | 无历史基线 | steven123397 | 2026-12-31 | 首次基线后 ratchet 转 block |
+| 前端（Vitest）覆盖率无门槛 | 尚无历史基线；bridge 已单独设 80% 门槛 | steven123397 | 2026-12-31 | 前端基线明确后 ratchet 转 block |
 | 性能预算暂为 warn | 无可测产物 | steven123397 | 2026-12-31 | 应用壳跑通后 ratchet：连续三次超标提 issue 或重设预算，不许默默调阈值 |
 | 依赖扫描未接入 | 无 lockfile | steven123397 | 第一条引入依赖的 PR | 同 PR 内接入 osv-scanner |
 
