@@ -17,7 +17,12 @@ import { Shell } from './shell/Shell';
 import { SkeletonScreen } from './shell/SkeletonScreen';
 import { SyncStatusProvider } from './shell/SyncStatus';
 import { Welcome } from './shell/Welcome';
-import { activeWorkspace, WorkspaceProvider, useWorkspaceContext } from './shell/WorkspaceProvider';
+import {
+  activeWorkspace,
+  isMissingWorkspace,
+  WorkspaceProvider,
+  useWorkspaceContext,
+} from './shell/WorkspaceProvider';
 
 export type AppProps = {
   workspaceApi?: WorkspaceApi;
@@ -151,9 +156,12 @@ function ProjectGate() {
   const project =
     snapshot?.config.workspaces.find((workspace) => workspace.projectId === projectId) ?? null;
   const isActive = project !== null && snapshot?.active === project.path;
+  // A workspace whose directory was deleted must not be opened: switching to it
+  // would only fail, and the route would render an empty list as if it existed.
+  const missing = project !== null && isMissingWorkspace(snapshot, project.path);
 
   useEffect(() => {
-    if (loading || project === null || isActive || switching) {
+    if (loading || project === null || isActive || switching || missing) {
       return;
     }
     if (attempted.current === project.path) {
@@ -175,7 +183,7 @@ function ProjectGate() {
     return <SkeletonScreen />;
   }
 
-  if (project === null) {
+  if (project === null || missing) {
     return <Navigate to="/welcome" replace state={{ reason: 'workspace-missing' }} />;
   }
 

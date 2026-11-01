@@ -23,10 +23,25 @@ export function useWorkspaceContext(): UseWorkspace {
   return value;
 }
 
-/** The workspace the shell should navigate to, or null when none is active. */
+/**
+ * The workspace the shell should navigate to, or null when none is active.
+ *
+ * A registered workspace whose directory no longer exists is not enterable:
+ * routing it to its list would render an empty screen as if the data were
+ * gone, so it falls through to the welcome screen that explains the reason.
+ */
 export function activeWorkspace(snapshot: WorkspaceSnapshot | null) {
   if (snapshot === null || snapshot.active === null) {
     return null;
   }
-  return snapshot.config.workspaces.find((workspace) => workspace.path === snapshot.active) ?? null;
+  const workspace = snapshot.config.workspaces.find((entry) => entry.path === snapshot.active);
+  if (workspace === undefined || isMissingWorkspace(snapshot, workspace.path)) {
+    return null;
+  }
+  return workspace;
+}
+
+/** Registered, but the directory on disk is gone. */
+export function isMissingWorkspace(snapshot: WorkspaceSnapshot | null, path: string): boolean {
+  return snapshot !== null && snapshot.missing.includes(path);
 }

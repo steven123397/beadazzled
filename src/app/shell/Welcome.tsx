@@ -35,6 +35,16 @@ export function Welcome() {
       <p className="text-sm text-muted-foreground">
         {blockerReason(t, snapshot, bd, error, reason)}
       </p>
+      {snapshot !== null && snapshot.missing.length > 0 ? (
+        <p className="text-sm text-warning">
+          {t('welcome.missingWorkspaces', { paths: snapshot.missing.join(', ') })}
+        </p>
+      ) : null}
+      {snapshot?.corruptBackup !== null && snapshot?.corruptBackup !== undefined ? (
+        <p className="text-sm text-warning">
+          {t('welcome.corruptBackup', { path: snapshot.corruptBackup })}
+        </p>
+      ) : null}
       {bd?.kind === 'not-found' ? (
         <code className="block select-all rounded border border-border bg-muted px-3 py-2 font-mono text-xs text-foreground">
           {t('welcome.installCommand')}

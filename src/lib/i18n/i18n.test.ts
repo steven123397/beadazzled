@@ -28,6 +28,7 @@ test('placeholders are declared and always substituted', () => {
     '{theme}',
     '{language}',
     '{path}',
+    '{paths}',
     '{view}',
   ]);
 

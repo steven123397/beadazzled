@@ -24,6 +24,8 @@ export const en = {
   'welcome.bdUnsupported': 'bd {found} is older than {min}. Upgrade bd to continue.',
   'welcome.workspaceMissing': 'That workspace is no longer available.',
   'welcome.switchFailed': 'The workspace could not be opened. Check its path and try again.',
+  'welcome.missingWorkspaces': 'Workspaces no longer on disk: {paths}',
+  'welcome.corruptBackup': 'The workspace config was damaged; the previous file was kept at {path}.',
 
   'status.loadingWorkspace': 'Loading workspace',
   'status.bdUnknown': 'bd unknown',

@@ -35,7 +35,11 @@ function entry(projectId: string, name = projectId): WorkspaceEntry {
   };
 }
 
-function snapshot(workspaces: WorkspaceEntry[], active: string | null): WorkspaceSnapshot {
+function snapshot(
+  workspaces: WorkspaceEntry[],
+  active: string | null,
+  extra: Partial<WorkspaceSnapshot> = {}
+): WorkspaceSnapshot {
   return {
     config: {
       schemaVersion: 1,
@@ -48,6 +52,7 @@ function snapshot(workspaces: WorkspaceEntry[], active: string | null): Workspac
     missing: [],
     active,
     corruptBackup: null,
+    ...extra,
   };
 }
 
@@ -395,4 +400,78 @@ test('production sync wiring feeds the status bar and ticket search', async () =
   fireEvent.keyDown(window, { key: 'k', ctrlKey: true });
   fireEvent.change(screen.getByRole('combobox'), { target: { value: 'detail' } });
   expect(screen.getByText('Detail reading')).toBeInTheDocument();
+});
+
+test('a workspace whose directory is gone never renders its list', async () => {
+  window.location.hash = '#/';
+
+  render(
+    <App
+      workspaceApi={fakeApi({
+        snapshot: async () =>
+          snapshot([entry('p1', 'alpha')], '/repo/p1', { missing: ['/repo/p1'] }),
+      })}
+    />
+  );
+
+  expect(await screen.findByRole('heading', { name: /welcome/i })).toBeInTheDocument();
+  expect(screen.getByText('That workspace is no longer available.')).toBeInTheDocument();
+  expect(screen.queryByRole('heading', { name: 'List' })).not.toBeInTheDocument();
+});
+
+test('a deep link to a workspace whose directory is gone does not switch to it', async () => {
+  window.location.hash = '#/w/p1/list';
+  const switchTo = vi.fn(async () => entry('p1'));
+
+  render(
+    <App
+      workspaceApi={fakeApi({
+        snapshot: async () =>
+          snapshot([entry('p1', 'alpha'), entry('p2', 'beta')], '/repo/p2', {
+            missing: ['/repo/p1'],
+          }),
+        switchTo,
+      })}
+    />
+  );
+
+  expect(await screen.findByRole('heading', { name: /welcome/i })).toBeInTheDocument();
+  expect(screen.getByText('That workspace is no longer available.')).toBeInTheDocument();
+  expect(switchTo).not.toHaveBeenCalled();
+});
+
+test('welcome names the workspaces that are missing and the corrupt config backup', async () => {
+  window.location.hash = '#/welcome';
+
+  render(
+    <App
+      workspaceApi={fakeApi({
+        snapshot: async () =>
+          snapshot([entry('p1', 'alpha')], null, {
+            missing: ['/repo/p1'],
+            corruptBackup: 'C:/cfg/config.json.corrupt-1',
+          }),
+      })}
+    />
+  );
+
+  expect(await screen.findByRole('heading', { name: /welcome/i })).toBeInTheDocument();
+  expect(screen.getByText(/\/repo\/p1/)).toBeInTheDocument();
+  expect(screen.getByText(/C:\/cfg\/config\.json\.corrupt-1/)).toBeInTheDocument();
+});
+
+test('a healthy snapshot shows no missing or corrupt notices', async () => {
+  window.location.hash = '#/welcome';
+
+  render(
+    <App
+      workspaceApi={fakeApi({
+        snapshot: async () => snapshot([entry('p1', 'alpha')], '/repo/p1'),
+      })}
+    />
+  );
+
+  await screen.findByRole('heading', { name: 'List' });
+  expect(screen.queryByText(/no longer available/i)).not.toBeInTheDocument();
+  expect(screen.queryByText(/damaged/i)).not.toBeInTheDocument();
 });
