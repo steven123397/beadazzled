@@ -4,6 +4,7 @@ import type { BridgeError, WriteCommand } from '@/bindings/bd';
 
 import { createTicketStore } from '../sync/store';
 import { createWriteFlow, submitWrite, type WriteFlow } from './flow';
+import { createWriteQueue } from './queue';
 
 function reopen(id: string): WriteCommand {
   return { Reopen: { id } };
@@ -149,6 +150,55 @@ test('a create waits for the echo of the id bd returned', async () => {
 });
 afterEach(() => {
   vi.useRealTimers();
+});
+
+test('back-to-back edits wait for the sequence at dispatch, not at enqueue', async () => {
+  const store = createTicketStore();
+  store.applySnapshot([], 10);
+  const echoes: Array<[string, number]> = [];
+  let releaseFirst!: () => void;
+  const firstGate = new Promise<void>((resolve) => {
+    releaseFirst = resolve;
+  });
+  const queue = createWriteQueue(async (command) => {
+    if ('Reopen' in command && command.Reopen.id === 'first') {
+      await firstGate;
+    }
+    return { ok: true, createdId: null };
+  });
+  const deps: WriteFlow = {
+    queue,
+    currentSeq: () => store.getState().lastSeq,
+    waitForEcho: async (issueId, afterSeq) => {
+      echoes.push([issueId, afterSeq]);
+      return 'echoed';
+    },
+    refresh: () => {},
+  };
+
+  const first = submitWrite(deps, {
+    key: 'first',
+    issueId: 'bza-1',
+    build: () => reopen('first'),
+  });
+  const second = submitWrite(deps, {
+    key: 'second',
+    issueId: 'bza-1',
+    build: () => reopen('second'),
+  });
+
+  await Promise.resolve();
+  // The first write's echo lands while the second is still queued.
+  store.applyRecords([
+    { seq: 11, ts: '2026-11-01T00:00:11Z', op: 'update', issue_id: 'bza-1', issue: null },
+  ]);
+  releaseFirst();
+  await Promise.all([first, second]);
+
+  expect(echoes).toEqual([
+    ['bza-1', 10],
+    ['bza-1', 11],
+  ]);
 });
 
 test('createWriteFlow wires afterSeq, echo and refresh from the store', async () => {

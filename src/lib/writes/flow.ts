@@ -34,8 +34,15 @@ export async function submitWrite(
   flow: WriteFlow,
   submission: WriteSubmission
 ): Promise<WriteResult> {
-  const afterSeq = flow.currentSeq();
-  const result = await flow.queue.submit(submission.key, submission.build);
+  // Read the sequence when the command is dispatched, not when it is queued:
+  // a previous edit's echo can land while this write waits behind it, and that
+  // record must not satisfy this write's echo wait. The initial value only
+  // covers the deduped path, where `build` is never called.
+  let afterSeq = flow.currentSeq();
+  const result = await flow.queue.submit(submission.key, () => {
+    afterSeq = flow.currentSeq();
+    return submission.build();
+  });
 
   if (result.status === 'conflict') {
     flow.refresh();
