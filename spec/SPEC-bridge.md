@@ -175,12 +175,12 @@ pub enum WriteCommand {
 
 ## Acceptance Criteria
 
-1. **唯一入口**：`check:boundaries` 证明仓库中除 `src-tauri/src/bridge/` 外无 `Command::new` / `std::process` 调用；无 `cmd /C`、`shell` 拼接。
+1. **唯一入口**：`check:boundaries` 证明 `src-tauri/src/` 中除 `bridge/` 外无 `Command::new`；生产代码不得直接引用 `bridge::process/argv/parse`，只能经 `BdBridge`（测试与 `examples/fake_bd` 除外）；无 `cmd /C`、shell 拼接。
 2. **argv 安全**：标题、标签、路径中的空格/引号/中文/换行在 fake_bd 收到的 argv 中逐字一致；≥8 KiB 正文只出现在 stdin，不出现在 argv。
 3. **解析正确**：录制样本（含 comments、dependencies、多状态）解析为 Issue；未知字段进入 `extra` 且序列化后仍在。
 4. **解析失败可见**：缺字段/坏 JSON/末行截断分别得到带行号的 `BD_PARSE_FAILED`，调用方拿不到部分结果。
 5. **超时与进程树**：fake_bd 挂起且派生孙进程持有 stdout 时，bridge 在超时后 ≤1.5s 返回 `BD_TIMEOUT`，无残留进程。
-6. **管道宽限**：fake_bd 退出但孙进程持有 stdout 时，bridge 在退出后 ≤1s 返回，不挂死。
+6. **管道宽限**：fake_bd 退出但孙进程持有 stdout 时，bridge 在退出后 ≤1s 返回；stdout 未 EOF 时返回 `BD_PARSE_FAILED`，不返回可能截断的数据。
 7. **journal 三态**：正常有记录、关闭（stderr note + 空 stdout + exit 0）、裁剪（JSON 错误）分别映射为数据 / `JOURNAL_DISABLED` / `JOURNAL_TRUNCATED`。
 8. **写结果**：`create` 用 `--silent` 取回 id；非零退出携带 exit code 与 stderr 摘要；exit 13 → `WRITE_CONFLICT`。
 9. **版本校验**：`1.3.2` / `1.10.0` 通过，`1.2.9` 拒绝，垃圾输出 → `BD_PARSE_FAILED`。
@@ -188,6 +188,7 @@ pub enum WriteCommand {
 11. **测试不碰真 bd**：bridge 测试只使用录制样本与 `examples/fake_bd`。
 12. **短调用串行**：同一工作区同时触发 refresh export 与 write 时，fake_bd 记录到的调用不重叠；follow 进程不在信号量内（可在其运行时完成 export）。
 13. **迁移错误**：注入 `pending schema migration` 的 stderr → `BD_SCHEMA_MISMATCH`，错误 detail 保留原文提示。
+14. **门面**：sync/writes/workspace 只经 `BdBridge` 的 `version/context/export/journal/write/config_get` 访问 bd；`BdBridge::version` 不带 `-C`；`journal(follow=true)` 返回可增量读取的 `JournalReader`。
 
 ## Module Commands
 

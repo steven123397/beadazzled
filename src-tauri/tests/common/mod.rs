@@ -1,6 +1,11 @@
 //! Shared helpers for bridge integration tests.
 //!
 //! Every test runner points at `examples/fake_bd`; a real `bd` is never used.
+//!
+//! Cargo compiles this module separately into each integration-test crate, and
+//! each crate uses a different subset of the helpers, so unused items are
+//! expected here.
+#![allow(dead_code)]
 
 use std::ffi::OsString;
 use std::fs;

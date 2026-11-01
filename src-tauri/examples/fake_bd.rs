@@ -5,6 +5,7 @@
 //! (which would race with other tests).
 //!
 //! Modes:
+//! - `bd-like` (default): emulate the bd commands BdBridge uses
 //! - `ok`: print `ok` and exit 0 (optionally sleep `FAKE_BD_SLEEP_MS`)
 //! - `dump-argv`: print the received argv as JSON
 //! - `dump-argv-and-stdin`: print argv plus the number of stdin bytes
@@ -28,10 +29,60 @@ use std::process::{self, Child, Command, Stdio};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 fn main() {
-    let mode = env::var("FAKE_BD_MODE").unwrap_or_else(|_| "ok".to_owned());
+    let mode = env::var("FAKE_BD_MODE").unwrap_or_else(|_| "bd-like".to_owned());
     let args: Vec<String> = env::args().skip(1).collect();
 
     match mode.as_str() {
+        "bd-like" => {
+            let command_index = args
+                .iter()
+                .position(|arg| arg == "-C")
+                .map(|index| index + 2)
+                .unwrap_or(0);
+            let command = args.get(command_index).map(String::as_str).unwrap_or("");
+            let workspace = command_index
+                .checked_sub(1)
+                .and_then(|index| args.get(index))
+                .map(String::as_str)
+                .unwrap_or("");
+
+            match command {
+                "--version" => {
+                    if args.iter().any(|arg| arg == "-C") {
+                        eprintln!("cannot use -C directory: no beads project found");
+                        process::exit(1);
+                    }
+                    println!("bd version 1.3.2 (9b65b9e19)");
+                }
+                "context" => print_fixture("context.json"),
+                "export" => print_fixture("export-relations.json"),
+                "events" => {
+                    let workspace = workspace.to_lowercase();
+                    if workspace.contains("journal-disabled") {
+                        eprintln!("note: the events journal is disabled for this workspace");
+                    } else if workspace.contains("journal-truncated") {
+                        println!(
+                            "{{\"code\":\"events_journal_truncated\",\"since\":1,\"floor\":5,\"head\":9}}"
+                        );
+                    } else {
+                        print_fixture("events-writes.jsonl");
+                    }
+                }
+                "config" => println!("true"),
+                "create" => println!("bza-new"),
+                "update" => {
+                    if args.iter().any(|arg| arg == "stale") {
+                        eprintln!("Error: precondition no longer held");
+                        process::exit(13);
+                    }
+                }
+                "close" | "reopen" | "comment" => {}
+                other => {
+                    eprintln!("fake_bd: bd-like unknown command {other}");
+                    process::exit(2);
+                }
+            }
+        }
         "ok" => {
             sleep_ms(env_u64("FAKE_BD_SLEEP_MS", 0));
             println!("ok");
@@ -185,6 +236,15 @@ fn main() {
             process::exit(2);
         }
     }
+}
+
+fn print_fixture(name: &str) {
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../tests/fixtures/bd")
+        .join(name);
+    let bytes = fs::read(&path).expect("read fixture");
+    io::stdout().write_all(&bytes).expect("write fixture");
+    io::stdout().flush().expect("flush fixture");
 }
 
 fn spawn_self(mode: &str, args: &[String]) -> Child {
