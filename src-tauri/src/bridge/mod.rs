@@ -5,11 +5,13 @@
 //! `spec/SPEC-bridge.md`: types, error codes and the generated TypeScript
 //! bindings in `src/bindings/bd.ts`.
 
+pub mod argv;
 pub mod error;
 pub mod parse;
 pub mod process;
 pub mod types;
 
+pub use argv::{argv_for, Argv, AssigneeChange, CreateSpec, UpdateSpec, WriteCommand};
 pub use error::{map_exit, BridgeError, BridgeErrorCode};
 pub use types::{
     Comment, Dependency, Issue, JournalComment, JournalDep, JournalOp, JournalRecord,
