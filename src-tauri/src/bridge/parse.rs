@@ -8,6 +8,9 @@ use serde_json::{json, Map, Value};
 use crate::bridge::types::{Issue, JournalRecord};
 use crate::bridge::{BridgeError, BridgeErrorCode};
 
+#[cfg(test)]
+mod tests;
+
 /// Exact marker bd writes when the events journal is disabled.
 const JOURNAL_DISABLED_MARKER: &str = "events journal is disabled";
 
@@ -93,6 +96,7 @@ impl JournalStream {
     }
 
     /// Overrides the per-line cap, mainly for tests.
+    #[cfg(test)]
     pub fn with_line_limit(line_limit: usize) -> Self {
         Self {
             line_limit,

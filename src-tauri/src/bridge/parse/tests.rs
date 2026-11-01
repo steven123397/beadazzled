@@ -1,14 +1,14 @@
-//! Parsing and stderr mapping tests.
+//! Parsing and stderr-mapping tests.
 //!
-//! Like the other bridge tests, these use recorded bd output and synthetic
-//! stderr only; a real `bd` is never spawned.
+//! They use recorded bd output and synthetic stderr only; a real `bd` is
+//! never spawned. They live inside the crate so `parse` can stay private
+//! (bza-ryr.25).
 
-use beadazzled_lib::bridge::{
-    map_exit,
-    parse::{journal_disabled, journal_truncated, parse_export, JournalStream},
-    BridgeError, BridgeErrorCode, JournalOp,
-};
 use serde_json::Value;
+
+use super::{journal_disabled, journal_truncated, parse_export, JournalStream};
+use crate::bridge::error::{map_exit, BridgeError, BridgeErrorCode};
+use crate::bridge::types::JournalOp;
 
 fn read_fixture(name: &str) -> String {
     let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))

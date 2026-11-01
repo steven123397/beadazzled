@@ -189,7 +189,7 @@ pub enum WriteCommand {
 11. **测试不碰真 bd**：bridge 测试只使用录制样本与 `examples/fake_bd`。
 12. **短调用串行**：同一工作区同时触发 refresh export 与 write 时，fake_bd 记录到的调用不重叠；follow 进程不在信号量内（可在其运行时完成 export）。
 13. **迁移错误**：注入 `pending schema migration` 的 stderr → `BD_SCHEMA_MISMATCH`，错误 detail 保留原文提示。
-14. **门面**：sync/writes/workspace 只经 `BdBridge` 的 `version/context/export/journal/write/config_get` 访问 bd；`BdBridge::version` 不带 `-C`；`journal(follow=true)` 返回可增量读取的 `JournalReader`。
+14. **门面**：sync/writes/workspace 只经 `BdBridge` 的 `version/context/export/journal/write/config_get` 访问 bd；`BdBridge::version` 不带 `-C`；`journal(follow=true)` 返回可增量读取的 `JournalReader`。`process` / `parse` 是模块私有（`mod` 而非 `pub mod`），crate 外无法绕过门面组装进程调用。
 15. **未知 op 前向兼容**：注入 `op: "reopen"` 的 journal 行，解析成功且后续行继续解析；`op` 原样保留，`op_kind()` 为 `None`。
 
 ## Module Commands
@@ -204,13 +204,15 @@ pub enum WriteCommand {
 ```
 src-tauri/src/bridge/
   mod.rs          BdBridge、命令编排
-  process.rs      进程启动、job object、超时、管道宽限
+  process.rs      进程启动、job object、超时、管道宽限（私有；测试见 process/bridge_tests.rs）
   argv.rs         纯函数：WriteCommand → Vec<String>
-  parse.rs        JSONL 解析、journal 行解析、错误 JSON
+  parse.rs        JSONL 解析、journal 行解析、错误 JSON（私有；测试见 parse/tests.rs）
   error.rs        BridgeError、stderr/detail 映射
   types.rs        Issue / JournalRecord / WorkspaceContext
+  test_support.rs 仅测试可见的 fake_bd / 临时目录辅助（#[cfg(test)]）
 src-tauri/examples/fake_bd.rs  测试桩（按环境变量输出样本、睡眠、exit code）
-src-tauri/tests/bridge_*.rs    集成测试
+src-tauri/tests/bridge_api.rs  BdBridge 集成测试
+src-tauri/tests/bridge_argv.rs / bridge_types.rs  公开类型与 argv 集成测试
 src/bindings/bd.ts             生成物
 ```
 

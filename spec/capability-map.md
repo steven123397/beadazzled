@@ -72,7 +72,7 @@ src-tauri/
   src/sync/           基线与 journal 跟随、事件应用、实时性状态机
   src/workspace/      bd 发现、工作区注册表与校验
   src/commands/       Tauri command 暴露面
-  tests/              Rust 集成测试
+  tests/              Rust 公开面集成测试（进程/解析单测在 src/bridge/ 内）
   examples/           fake_bd 测试桩（测试专用）
 scripts/              边界、体积、性能、发布校验脚本
 tests/
@@ -114,7 +114,7 @@ pub enum BridgeError {
 |---|---|---|---|
 | 纯逻辑单测 | Vitest | 与源码同目录 `*.test.ts` | store reducer、筛选/排序、格式化、i18n 键一致 |
 | 组件测试 | Vitest + Testing Library | 同上 | 列表/详情/看板渲染与键盘行为（mock IPC） |
-| Rust 单测/集成 | cargo test | `src-tauri/tests/` | argv 构造、JSONL 解析、错误映射、超时与管道 |
+| Rust 单测/集成 | cargo test | `src-tauri/src/bridge/`（私有模块内单测）+ `src-tauri/tests/`（公开面集成） | argv 构造、JSONL 解析、错误映射、超时与管道 |
 | 浏览器 E2E | Playwright | `tests/e2e/` | 完整 UI 流程（mock IPC，不出真 bd） |
 | 真实 E2E | tauri-driver | `tests/e2e/` | 3 条：安装→列表、详情阅读、改状态并持久化 |
 | 性能/体积 | 脚本 | `scripts/` | CONSTRAINTS 中的数值预算 |

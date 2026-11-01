@@ -1,6 +1,4 @@
-//! Shared helpers for bridge integration tests.
-//!
-//! Every test runner points at `examples/fake_bd`; a real `bd` is never used.
+//! Shared helpers for the bridge API integration tests.
 //!
 //! Cargo compiles this module separately into each integration-test crate, and
 //! each crate uses a different subset of the helpers, so unused items are
@@ -10,8 +8,6 @@
 use std::ffi::OsString;
 use std::fs;
 use std::path::{Path, PathBuf};
-
-use beadazzled_lib::bridge::process::ProcessRunner;
 
 pub fn fake_bd_path() -> PathBuf {
     let path = std::env::var_os("FAKE_BD_PATH")
@@ -79,8 +75,4 @@ pub fn workspace(dir: &Path) -> PathBuf {
 
 pub fn env(key: &str, value: impl Into<OsString>) -> (OsString, OsString) {
     (key.into(), value.into())
-}
-
-pub fn runner() -> ProcessRunner {
-    ProcessRunner::new(fake_bd_path())
 }

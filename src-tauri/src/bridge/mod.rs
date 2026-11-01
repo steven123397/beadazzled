@@ -6,8 +6,10 @@
 
 pub mod argv;
 pub mod error;
-pub mod parse;
-pub mod process;
+mod parse;
+mod process;
+#[cfg(test)]
+mod test_support;
 pub mod types;
 
 use std::ffi::OsString;
@@ -20,12 +22,12 @@ use serde_json::{Map, Value};
 
 use self::parse::{journal_disabled, journal_truncated, parse_export, JournalStream};
 use self::process::{
-    CallRecord, FollowProcess, ProcessRequest, ProcessRunner, READ_TIMEOUT, VERSION_TIMEOUT,
-    WRITE_TIMEOUT,
+    FollowProcess, ProcessRequest, ProcessRunner, READ_TIMEOUT, VERSION_TIMEOUT, WRITE_TIMEOUT,
 };
 
 pub use argv::{argv_for, Argv, AssigneeChange, CreateSpec, UpdateSpec, WriteCommand};
 pub use error::{map_exit, BridgeError, BridgeErrorCode};
+pub use process::CallRecord;
 pub use types::{
     Comment, Dependency, Issue, JournalComment, JournalDep, JournalOp, JournalRecord,
     WorkspaceContext,

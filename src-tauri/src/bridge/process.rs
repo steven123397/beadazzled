@@ -147,10 +147,6 @@ impl ProcessRunner {
         }
     }
 
-    pub fn bd_path(&self) -> &Path {
-        &self.bd_path
-    }
-
     /// Runs a short call. The workspace lock is held for the whole call, so a
     /// refresh and a write on the same workspace never overlap. The timeout
     /// starts after the lock is acquired: queueing behind another call must not
@@ -380,10 +376,6 @@ pub struct FollowProcess {
 }
 
 impl FollowProcess {
-    pub fn id(&self) -> u32 {
-        self.child.id()
-    }
-
     pub fn take_stdout(&mut self) -> Option<ChildStdout> {
         self.stdout.take()
     }
@@ -405,6 +397,7 @@ impl FollowProcess {
         self.child.try_wait()
     }
 
+    #[cfg(test)]
     pub fn kill(&mut self) -> io::Result<()> {
         self.stop();
         Ok(())
@@ -855,6 +848,9 @@ impl Drop for JobHandle {
         }
     }
 }
+
+#[cfg(test)]
+mod bridge_tests;
 
 #[cfg(test)]
 mod tests {
