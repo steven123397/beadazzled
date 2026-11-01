@@ -156,7 +156,10 @@ pub fn map_exit(exit_code: i32, stderr: &str) -> BridgeError {
         .with_detail(detail);
     }
 
-    if lower.contains("not a beads workspace") || lower.contains("no beads database") {
+    if lower.contains("not a beads workspace")
+        || lower.contains("no beads database")
+        || lower.contains("no beads project found")
+    {
         return BridgeError::new(
             BridgeErrorCode::WsNotBeads,
             "this directory is not a beads workspace",

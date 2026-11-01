@@ -18,6 +18,7 @@
 //! - `sleep-long`: sleep for `FAKE_BD_SLEEP_MS` (used by the grandchild modes)
 //! - `stream`: print JSON lines every `FAKE_BD_STREAM_INTERVAL_MS`
 //! - `log-interval`: sleep, then write start/end timestamps to `FAKE_BD_LOG_DIR`
+//! - `stderr-flood`: write `FAKE_BD_STDERR_BYTES` bytes to stderr
 //! - `large`: write `FAKE_BD_OUTPUT_BYTES` bytes with optional newlines
 
 use std::env;
@@ -156,6 +157,23 @@ fn main() {
             fs::create_dir_all(&dir).expect("create log dir");
             fs::write(format!("{dir}/{}.json", process::id()), record.to_string())
                 .expect("write interval log");
+        }
+        "stderr-flood" => {
+            let bytes = env_u64("FAKE_BD_STDERR_BYTES", 128 * 1024) as usize;
+            let mut stderr = io::stderr().lock();
+            stderr
+                .write_all(b"flood-start\n")
+                .expect("write stderr marker");
+            let chunk = [b'e'; 1024];
+            let mut remaining = bytes;
+            while remaining > 0 {
+                let take = remaining.min(chunk.len());
+                stderr
+                    .write_all(&chunk[..take])
+                    .expect("write stderr flood");
+                remaining -= take;
+            }
+            stderr.flush().expect("flush stderr");
         }
         "large" => {
             let bytes = env_u64("FAKE_BD_OUTPUT_BYTES", 4096) as usize;

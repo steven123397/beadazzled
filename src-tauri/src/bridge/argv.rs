@@ -152,6 +152,10 @@ fn update_argv(spec: &UpdateSpec) -> Argv {
     let stdin = if let Some(description) = &spec.description {
         args.push(OsString::from("--body-file"));
         args.push(OsString::from("-"));
+        if description.is_empty() {
+            // bd rejects an empty stdin body without this flag.
+            args.push(OsString::from("--allow-empty-description"));
+        }
         Some(description.clone().into_bytes())
     } else {
         None

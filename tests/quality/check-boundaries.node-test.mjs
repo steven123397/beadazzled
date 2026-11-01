@@ -86,6 +86,17 @@ test('whitespace around :: does not evade the process rule', () => {
   assert.match(result.stdout, /rust-process-spawn/);
 });
 
+test('bridge internals outside the bridge module fail', () => {
+  const root = makeRoot({
+    'src-tauri/src/sync/follow.rs': 'use crate::bridge::process::ProcessRunner;\n',
+  });
+
+  const result = run(root);
+
+  assert.equal(result.status, 1, result.stdout + result.stderr);
+  assert.match(result.stdout, /bridge-internal-api/);
+});
+
 test('references to the embedded dolt store fail', () => {
   const root = makeRoot({
     'src-tauri/src/sync/reader.rs': `const STORE: &str = ".beads/${EMBEDDED_DOLT}";\n`,

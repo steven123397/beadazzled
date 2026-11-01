@@ -123,16 +123,16 @@ pub enum WriteCommand {
 | 规则 | 要求 |
 |---|---|
 | 参数传递 | `Command::new(bd_path).args([...])`，**永不经 shell**；用户文本不拼接 |
-| 工作区 | 每个调用显式 `-C <workspace>`，不依赖继承的 cwd |
+| 工作区 | 每个工作区调用显式 `-C <workspace>`，不依赖继承的 cwd；`bd --version` 等全局探测例外，不带 `-C`（bd 1.3.2 在非 beads 目录会拒绝 `-C`） |
 | 窗口 | Windows `CREATE_NO_WINDOW`（`0x0800_0000`），stderr/stdout 均为管道 |
-| 长文本 | description / comment / acceptance 走 stdin，长度 ≥8 KiB 时一律 stdin |
-| 超时 | version 5s、context/export 30s、write 20s；journal follow 无超时 |
+| 长文本 | description / comment 走 stdin；acceptance 只有 argv 通道，上限 16 KiB（见 `SPEC-writes` OQ1），由写入层在 spawn 前校验；长 close reason 走 `--reason-file -` |
+| 超时 | 短调用必须有超时：version 5s、context/export/journal once 30s、write 20s；journal follow 无超时 |
 | 进程树 | 子进程加入 Job Object（KILL_ON_JOB_CLOSE）；超时关闭 job，杀整棵树 |
-| 管道宽限 | 进程退出后最多再读 1s 至 EOF，仍未 EOF 则强制关闭读端（防 hook 继承管道挂死） |
-| 输出上限 | export 总计 64 MiB、单行 16 MiB、stderr 留前 2 KiB；超限 `BD_OUTPUT_TOO_LARGE` |
+| 管道宽限 | 进程退出后最多再读 1s 至 EOF；仍未 EOF 时强制关闭读端——若 stdout 未 EOF，返回 `BD_PARSE_FAILED`，不把可能截断的数据当成功；stderr 未 EOF 可丢弃尾部 |
+| 输出上限 | export 总计 64 MiB、单行 16 MiB、stderr 留前 2 KiB；journal follow 单行同样 16 MiB；超限 `BD_OUTPUT_TOO_LARGE` |
 | 编码 | 以字节读到行结束再按 UTF-8 严格解析；stdout 非法 UTF-8 → `BD_PARSE_FAILED`；stderr 用 lossy |
 | 重试 | **写命令永不自动重试**；只读命令允许由调用方（sync）决定重试 |
-| 并发 | 同一工作区的短调用串行；长期 `follow` 不参与（见下节） |
+| 并发 | 同一工作区的短调用串行（工作区路径先规范化，避免大小写/尾分隔符产生两个锁）；长期 `follow` 不参与（见下节）；follow 的 stderr 由 bridge 持续 drain，防止管道写满阻塞 |
 | 日志 | 内存环形缓冲保留最近 200 次调用（命令名、argv 摘要、耗时、exit、错误码），供设置页诊断 |
 
 ## 并发与串行化
@@ -146,10 +146,10 @@ pub enum WriteCommand {
 ## 解析规则
 
 - **export**：JSONL，逐行解析；空行跳过；某行 JSON 失败 → 整次失败并报告行号（不返回部分数据）。末行无换行视为截断 → `BD_PARSE_FAILED`。
-- **journal**：逐行流式解析；chunk 边界处的不完整行必须缓冲到下一块；`follow` 模式下进程正常退出时，残留半行丢弃但记录一次警告；非零退出 → `BD_EXIT_NONZERO`。
+- **journal**：逐行流式解析；chunk 边界处的不完整行必须缓冲到下一块；单行上限 16 MiB，超限 → `BD_OUTPUT_TOO_LARGE`；`follow` 模式下进程正常退出时，残留半行丢弃但记录一次警告；非零退出 → `BD_EXIT_NONZERO`。
 - **journal 关闭**：实测 `bd events tail --json` 在 journal 关闭时退出码 0、stdout 为空、stderr 打一行 `note: the events journal is disabled...` → 映射 `JOURNAL_DISABLED`。识别依据为 stderr 包含 `events journal is disabled`；未知 stderr 不得猜测。
 - **journal 裁剪**：stderr 或 stdout 中的 JSON 含 `{"code":"events_journal_truncated","since":N,"floor":F,"head":H}` → `JOURNAL_TRUNCATED`，detail 带 `since/floor/head`。
-- **版本**：`bd --version` 形如 `bd version 1.3.2 (9b65b9e19)`；解析 semver，< 1.3.2 → `BD_VERSION_UNSUPPORTED`。
+- **版本**：`bd --version`（不带 `-C`）形如 `bd version 1.3.2 (9b65b9e19)`；解析 semver，< 1.3.2 → `BD_VERSION_UNSUPPORTED`。
 - **context**：`bd -C <ws> context --json` 必须返回含 `project_id`、`bd_version`、`dolt_mode`、`schema_version` 的对象。
 - **BD_JSON_ENVELOPE**：实测 `BD_JSON_ENVELOPE=1` 只包装 `bd show/list`（`{data, schema_version}`）；`bd export` 仍是原始 JSONL，错误仍是纯文本。本条数据通路不使用该变量。
 
@@ -162,7 +162,7 @@ pub enum WriteCommand {
 | 显式路径不存在 / PATH 找不到 | `BD_NOT_FOUND` |
 | 存在但无法执行（权限、损坏） | `BD_NOT_EXECUTABLE` |
 | 版本低于下限 | `BD_VERSION_UNSUPPORTED` {found, min} |
-| `.beads` 缺失、或 bd 报 not a beads workspace / no beads database | `WS_NOT_BEADS` |
+| `.beads` 缺失、或 bd 报 not a beads workspace / no beads database / no beads project found | `WS_NOT_BEADS` |
 | 工作区不可访问（权限、路径失效） | `WS_INACCESSIBLE` |
 | 超过超时 | `BD_TIMEOUT` {command, timeout_ms} |
 | exit 13 | `WRITE_CONFLICT` |

@@ -148,6 +148,32 @@ fn journal_stream_reports_a_bad_line_with_its_number() {
 }
 
 #[test]
+fn journal_stream_rejects_a_partial_line_over_the_limit() {
+    let mut stream = JournalStream::with_line_limit(64);
+
+    let error = stream
+        .push(&[b'x'; 65])
+        .expect_err("partial line over the cap");
+
+    assert_eq!(error.code, BridgeErrorCode::BdOutputTooLarge);
+    assert_eq!(
+        detail_value(&error, "line_limit_bytes").and_then(Value::as_u64),
+        Some(64)
+    );
+}
+
+#[test]
+fn journal_stream_rejects_a_complete_line_over_the_limit() {
+    let mut stream = JournalStream::with_line_limit(8);
+    let mut line = vec![b'x'; 9];
+    line.push(b'\n');
+
+    let error = stream.push(&line).expect_err("complete line over the cap");
+
+    assert_eq!(error.code, BridgeErrorCode::BdOutputTooLarge);
+}
+
+#[test]
 fn journal_disabled_requires_exit_zero_an_empty_stream_and_the_marker() {
     let stderr = "note: the events journal is disabled for this workspace \
                   (enable with 'bd config set events-journal true')";
@@ -257,6 +283,27 @@ fn map_exit_maps_missing_workspace_errors() {
         map_exit(1, "Error: no beads database found").code,
         BridgeErrorCode::WsNotBeads
     );
+    assert_eq!(
+        map_exit(1, "Error: no beads project found").code,
+        BridgeErrorCode::WsNotBeads
+    );
+}
+
+#[test]
+fn map_exit_maps_every_documented_pattern() {
+    let cases = [
+        ("lock conflict", BridgeErrorCode::BdLocked),
+        ("BD_ALLOW_REMOTE_MIGRATE", BridgeErrorCode::BdSchemaMismatch),
+        ("schema is incompatible", BridgeErrorCode::BdSchemaMismatch),
+        (
+            "schema version is newer than supported",
+            BridgeErrorCode::BdSchemaMismatch,
+        ),
+    ];
+
+    for (stderr, expected) in cases {
+        assert_eq!(map_exit(1, stderr).code, expected, "{stderr}");
+    }
 }
 
 #[test]

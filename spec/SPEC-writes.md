@@ -23,14 +23,14 @@ v0.1.0 支持：新建、改状态/优先级/指派/标题/正文/验收、标�
 | 新建 | `bd create --title <t> --type <type> --priority <p> [--assignee <a>] [--acceptance <s>] [--labels a,b] --silent --stdin` | description 走 stdin；空描述时加 `--allow-empty-description`；`--silent` 只回 id |
 | 改状态 | `bd update <id> -s <status> [--if-status <expected>]` | 看板拖动必须带 expected；列表/详情可不带 |
 | 改优先级 | `bd update <id> -p <0-4>` | |
-| 改指派 | `bd update <id> -a <name>`；取消指派用 `-a ""` | 已实测：空字符串清除 assignee，exit 0 |
+| 改指派 | `bd update <id> -a <name>`；取消指派用 `-a ""` | 已实测：空字符串清除 assignee，exit 0；`--if-assignee ""` 作为“要求未指派”的 guard 也已实测可用 |
 | 改标题 | `bd update <id> --title <t>` | |
-| 改正文 | `bd update <id> --body-file -` | 正文走 stdin（长度与引号安全） |
+| 改正文 | `bd update <id> --body-file -` | 正文走 stdin；空正文需同时加 `--allow-empty-description`（已实测，否则 bd 拒绝） |
 | 改验收 | `bd update <id> --acceptance <s>` | 长度上限见 Open Questions |
 | 加标签 | `bd update <id> --add-label <l>`（可重复） | 不替换全部标签 |
 | 去标签 | `bd update <id> --remove-label <l>`（可重复） | |
 | 评论 | `bd comment <id> --stdin` | 文本走 stdin |
-| 关闭 | `bd close <id> [-r <reason>]` | 长原因用 `--reason-file -`；有未完成子票时 bd 会拒绝，原样上报 |
+| 关闭 | `bd close <id> [-r <reason>]` | 长原因用 `--reason-file -`（bd 1.3.2 已实测可用）；有未完成子票时 bd 会拒绝，原样上报 |
 | 重开 | `bd reopen <id>` | |
 
 同一用户动作涉及多字段时合并为**一条** `bd update`（例如状态 + 优先级 + 标签一次提交）。不允许把一次用户动作拆成多条命令。
@@ -172,6 +172,6 @@ src/lib/writes/
 
 ## Open Questions
 
-1. **验收条件长度**：`--acceptance` 只有 argv 通道，超过约 30 KiB 会被 Windows 拒绝。实现时设 16 KiB 上限并在编辑器提示；若 bd 后续提供 stdin/file 入口再放开。
+1. **验收条件长度**：`--acceptance` 只有 argv 通道（bd 1.3.2 没有 acceptance file/stdin 入口）。写入层/编辑器必须设 16 KiB 上限并在超限时给出可见错误，不能把超长 acceptance 送进 argv 让 `CreateProcessW` 失败。
 2. **关闭有子票的父票**：bd 默认拒绝；v0.1.0 原样显示拒绝原因，不提供 force 入口（避免误伤），是否在 v0.1.x 增加需确认。
-3. **关闭原因**：`-r` 为 argv；超过 8 KiB 时改用 `--reason-file -`，需实测该标志与 `--stdin` 的交互。
+3. **关闭原因**：`-r` 为 argv；超过 8 KiB 时改用 `--reason-file -`（bd 1.3.2 已实测可用）。

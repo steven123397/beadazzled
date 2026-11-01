@@ -88,6 +88,12 @@ const RULES = [
     message: 'process spawning is only allowed in src-tauri/src/bridge',
   },
   {
+    id: 'bridge-internal-api',
+    applies: (relPath) => isRustSource(relPath) && !isBridgeSource(relPath),
+    matches: (line) => /\bbridge::(?:process|argv|parse)::/.test(normalizeRustLine(line)),
+    message: 'use bridge::BdBridge instead of the bridge process/argv/parse internals',
+  },
+  {
     id: 'frontend-process-spawn',
     applies: (relPath) => isFrontendSource(relPath),
     matches: (line) => CHILD_PROCESS_IMPORT.test(line),

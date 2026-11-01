@@ -6,7 +6,7 @@
 mod common;
 
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -22,6 +22,7 @@ use common::{env, runner, temp_dir, workspace};
 
 fn request(workspace: &Path, mode: &str) -> ProcessRequest {
     let mut request = ProcessRequest::new("test", workspace, Vec::new());
+    request.timeout = Duration::from_secs(5);
     request.env.push(env("FAKE_BD_MODE", mode));
     request
 }
@@ -69,6 +70,23 @@ fn wait_for_exit(pid: u32) -> bool {
         std::thread::sleep(Duration::from_millis(20));
     }
     !process_is_running(pid)
+}
+
+fn read_intervals(log_dir: &Path) -> Vec<(u64, u64)> {
+    let mut intervals = Vec::new();
+    for entry in fs::read_dir(log_dir).expect("read log dir") {
+        let path = entry.expect("log entry").path();
+        if path.extension().and_then(|extension| extension.to_str()) != Some("json") {
+            continue;
+        }
+        let value: Value = serde_json::from_str(&fs::read_to_string(path).expect("read log"))
+            .expect("log is JSON");
+        intervals.push((
+            value["start"].as_u64().expect("start"),
+            value["end"].as_u64().expect("end"),
+        ));
+    }
+    intervals
 }
 
 fn now_ms() -> u64 {
@@ -148,6 +166,52 @@ fn a_missing_bd_path_maps_to_bd_not_found() {
 }
 
 #[test]
+fn an_existing_non_executable_file_maps_to_bd_not_executable() {
+    let dir = temp_dir("bad-exe");
+    let workspace = workspace(&dir);
+    let bd = dir.join("bd.txt");
+    fs::write(&bd, "not an executable").expect("write text file");
+    let runner = ProcessRunner::new(bd);
+
+    let error = runner
+        .run(&request(&workspace, "ok"))
+        .expect_err("a text file cannot be executed");
+
+    assert_eq!(error.code, BridgeErrorCode::BdNotExecutable);
+}
+
+#[test]
+fn an_invalid_spawn_path_maps_to_internal() {
+    let dir = temp_dir("bad-path");
+    let workspace = workspace(&dir);
+    let runner = ProcessRunner::new("bad\0path");
+
+    let error = runner
+        .run(&request(&workspace, "ok"))
+        .expect_err("a NUL path cannot be spawned");
+
+    assert_eq!(error.code, BridgeErrorCode::Internal);
+}
+
+#[test]
+fn a_child_that_exits_without_reading_stdin_does_not_block_the_call() {
+    let dir = temp_dir("stdin-close");
+    let workspace = workspace(&dir);
+    let mut request = request(&workspace, "exit");
+    request.stdin = Some(vec![b'x'; 64 * 1024]);
+    request.env.push(env("FAKE_BD_EXIT", "0"));
+
+    let started = Instant::now();
+    let output = runner()
+        .run(&request)
+        .expect("the child exits without reading stdin");
+    let elapsed = started.elapsed();
+
+    assert_eq!(output.exit_code, 0);
+    assert!(elapsed < Duration::from_secs(1), "{elapsed:?}");
+}
+
+#[test]
 fn timeout_returns_bd_timeout_within_budget_and_kills_the_process() {
     let dir = temp_dir("timeout");
     let workspace = workspace(&dir);
@@ -156,7 +220,7 @@ fn timeout_returns_bd_timeout_within_budget_and_kills_the_process() {
     let runner = runner();
 
     let mut request = request(&workspace, "pid-and-sleep");
-    request.timeout = Some(Duration::from_millis(1000));
+    request.timeout = Duration::from_millis(1000);
     request
         .env
         .push(env("FAKE_BD_PID_FILE", pid_file.as_os_str().to_owned()));
@@ -206,7 +270,7 @@ fn timeout_kills_grandchildren_too() {
     let grandchild_pid_file = dir.join("grandchild.pid");
 
     let mut request = request(&workspace, "hang-with-grandchild");
-    request.timeout = Some(Duration::from_millis(1000));
+    request.timeout = Duration::from_millis(1000);
     request.env.push(env(
         "FAKE_BD_PID_FILE",
         parent_pid_file.as_os_str().to_owned(),
@@ -249,13 +313,18 @@ fn a_grandchild_holding_stdout_does_not_hang_the_call() {
 
     let runner = Arc::new(runner());
     let handle = std::thread::spawn(move || runner.run(&request));
-    let output = handle
+    let error = handle
         .join()
         .expect("runner thread")
-        .expect("the parent exits cleanly");
+        .expect_err("stdout held open after exit must not return partial data");
     let finished_at = now_ms();
 
-    assert_eq!(output.exit_code, 0);
+    assert_eq!(error.code, BridgeErrorCode::BdParseFailed);
+    assert!(
+        error.message.contains("stdout was still open"),
+        "{}",
+        error.message
+    );
     let after_exit = Duration::from_millis(finished_at.saturating_sub(read_ms(&exit_marker)));
     assert!(
         after_exit < PIPE_GRACE + Duration::from_millis(500),
@@ -338,8 +407,14 @@ fn stderr_is_capped_but_fully_drained() {
     request.env.push(env("FAKE_BD_STDERR", "x".repeat(3000)));
     request.env.push(env("FAKE_BD_EXIT", "1"));
 
+    let started = Instant::now();
     let output = runner().run(&request).expect("nonzero exit is output");
+    let elapsed = started.elapsed();
     assert_eq!(output.stderr.len(), 64);
+    assert!(
+        elapsed < PIPE_GRACE,
+        "stderr was not drained to EOF: {elapsed:?}"
+    );
 }
 
 #[test]
@@ -370,25 +445,52 @@ fn short_calls_on_the_same_workspace_do_not_overlap() {
     first.join().expect("first thread");
     second.join().expect("second thread");
 
-    let mut intervals = Vec::new();
-    for entry in fs::read_dir(&log_dir).expect("read log dir") {
-        let path = entry.expect("log entry").path();
-        if path.extension().and_then(|extension| extension.to_str()) != Some("json") {
-            continue;
-        }
-        let value: Value = serde_json::from_str(&fs::read_to_string(path).expect("read log"))
-            .expect("log is JSON");
-        intervals.push((
-            value["start"].as_u64().expect("start"),
-            value["end"].as_u64().expect("end"),
-        ));
-    }
-
+    let mut intervals = read_intervals(&log_dir);
     intervals.sort_unstable();
     assert_eq!(intervals.len(), 2);
     assert!(
         intervals[0].1 <= intervals[1].0,
         "calls overlapped: {intervals:?}"
+    );
+}
+
+#[test]
+fn different_spellings_of_one_workspace_share_the_lock() {
+    let dir = temp_dir("workspace-spelling");
+    let ws = workspace(&dir);
+    let log_dir = dir.join("log");
+    fs::create_dir_all(&log_dir).expect("create log dir");
+    let runner = Arc::new(runner());
+
+    let make_request = |workspace: PathBuf| {
+        let mut request = request(&workspace, "log-interval");
+        request
+            .env
+            .push(env("FAKE_BD_LOG_DIR", log_dir.as_os_str().to_owned()));
+        request.env.push(env("FAKE_BD_SLEEP_MS", "250"));
+        request
+    };
+
+    let first_workspace = PathBuf::from(format!("{}\\", ws.display()));
+    let second_workspace = PathBuf::from(ws.display().to_string().to_uppercase());
+
+    let first_runner = Arc::clone(&runner);
+    let first = make_request(first_workspace);
+    let first = std::thread::spawn(move || first_runner.run(&first).expect("first call"));
+
+    let second_runner = Arc::clone(&runner);
+    let second = make_request(second_workspace);
+    let second = std::thread::spawn(move || second_runner.run(&second).expect("second call"));
+
+    first.join().expect("first thread");
+    second.join().expect("second thread");
+
+    let mut intervals = read_intervals(&log_dir);
+    intervals.sort_unstable();
+    assert_eq!(intervals.len(), 2);
+    assert!(
+        intervals[0].1 <= intervals[1].0,
+        "same workspace overlapped across spellings: {intervals:?}"
     );
 }
 
@@ -423,6 +525,32 @@ fn follow_processes_bypass_the_workspace_semaphore() {
 
     follow.kill().expect("kill follow");
     assert!(follow.try_wait().expect("try_wait").is_some());
+}
+
+#[test]
+fn follow_drains_stderr_so_a_chatty_child_cannot_block() {
+    let dir = temp_dir("follow-stderr");
+    let workspace = workspace(&dir);
+    let mut request = request(&workspace, "stderr-flood");
+    request.env.push(env("FAKE_BD_STDERR_BYTES", "131072"));
+    let mut follow = runner().spawn_follow(&request).expect("follow starts");
+
+    let deadline = Instant::now() + Duration::from_secs(2);
+    let mut status = None;
+    while Instant::now() < deadline {
+        status = follow.try_wait().expect("try_wait");
+        if status.is_some() {
+            break;
+        }
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    assert!(status.is_some(), "follow blocked on a full stderr pipe");
+
+    let stderr = follow.stderr_lossy();
+    assert!(stderr.contains("flood-start"), "{stderr}");
+    assert!(follow.stderr_snapshot().len() <= 2048);
+
+    follow.kill().expect("kill follow");
 }
 
 #[test]

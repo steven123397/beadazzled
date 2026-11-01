@@ -64,10 +64,27 @@ pub fn parse_export(stdout: &[u8]) -> Result<Vec<Issue>, BridgeError> {
 /// boundaries that split a JSON line are harmless. Callers in follow mode call
 /// [`JournalStream::take_partial`] when the process exits to discard a final
 /// half line and log one warning.
-#[derive(Debug, Default)]
+/// A single journal record embeds the full issue, so the line cap mirrors the
+/// process layer's 16 MiB stdout line limit.
+pub const JOURNAL_LINE_LIMIT: usize = 16 * 1024 * 1024;
+
+#[derive(Debug)]
 pub struct JournalStream {
     buffer: Vec<u8>,
     lines_seen: usize,
+    scan_offset: usize,
+    line_limit: usize,
+}
+
+impl Default for JournalStream {
+    fn default() -> Self {
+        Self {
+            buffer: Vec::new(),
+            lines_seen: 0,
+            scan_offset: 0,
+            line_limit: JOURNAL_LINE_LIMIT,
+        }
+    }
 }
 
 impl JournalStream {
@@ -75,14 +92,31 @@ impl JournalStream {
         Self::default()
     }
 
+    /// Overrides the per-line cap, mainly for tests.
+    pub fn with_line_limit(line_limit: usize) -> Self {
+        Self {
+            line_limit,
+            ..Self::default()
+        }
+    }
+
     /// Appends a chunk and returns every record completed by it.
     pub fn push(&mut self, chunk: &[u8]) -> Result<Vec<JournalRecord>, BridgeError> {
         self.buffer.extend_from_slice(chunk);
         let mut records = Vec::new();
+        let mut scan_from = self.scan_offset;
 
-        while let Some(newline) = self.buffer.iter().position(|byte| *byte == b'\n') {
+        while let Some(offset) = self.buffer[scan_from..]
+            .iter()
+            .position(|byte| *byte == b'\n')
+        {
+            let newline = scan_from + offset;
             let mut line: Vec<u8> = self.buffer.drain(..=newline).collect();
             line.pop();
+            if line.len() > self.line_limit {
+                return Err(journal_line_too_large(line.len(), self.line_limit));
+            }
+
             self.lines_seen += 1;
             let line_number = self.lines_seen;
 
@@ -94,19 +128,24 @@ impl JournalStream {
                 )
             })?;
             let text = text.trim_end_matches('\r');
-            if text.trim().is_empty() {
-                continue;
+            if !text.trim().is_empty() {
+                let record = serde_json::from_str::<JournalRecord>(text).map_err(|error| {
+                    parse_error(
+                        format!("bd journal line {line_number} is not a valid record: {error}"),
+                        line_number,
+                        Some(error.to_string()),
+                    )
+                })?;
+                records.push(record);
             }
 
-            let record = serde_json::from_str::<JournalRecord>(text).map_err(|error| {
-                parse_error(
-                    format!("bd journal line {line_number} is not a valid record: {error}"),
-                    line_number,
-                    Some(error.to_string()),
-                )
-            })?;
-            records.push(record);
+            scan_from = 0;
         }
+
+        if self.buffer.len() > self.line_limit {
+            return Err(journal_line_too_large(self.buffer.len(), self.line_limit));
+        }
+        self.scan_offset = self.buffer.len();
 
         Ok(records)
     }
@@ -120,6 +159,7 @@ impl JournalStream {
         if self.buffer.is_empty() {
             None
         } else {
+            self.scan_offset = 0;
             Some(std::mem::take(&mut self.buffer))
         }
     }
@@ -188,6 +228,18 @@ fn truncation_from_line(line: &str) -> Option<BridgeError> {
         )
         .with_detail(detail),
     )
+}
+
+fn journal_line_too_large(bytes: usize, limit: usize) -> BridgeError {
+    let mut detail = Map::new();
+    detail.insert("line_bytes".to_owned(), json!(bytes));
+    detail.insert("line_limit_bytes".to_owned(), json!(limit));
+
+    BridgeError::new(
+        BridgeErrorCode::BdOutputTooLarge,
+        "bd journal line exceeded the capture limit",
+    )
+    .with_detail(detail)
 }
 
 fn parse_error(message: String, line: usize, source: Option<String>) -> BridgeError {

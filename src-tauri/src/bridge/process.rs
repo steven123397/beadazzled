@@ -40,6 +40,7 @@ const CALL_LOG_CAPACITY: usize = 200;
 const ARGV_SUMMARY_LIMIT: usize = 200;
 const READ_CHUNK: usize = 64 * 1024;
 const STDERR_CHUNK: usize = 8 * 1024;
+const FOLLOW_STDERR_LIMIT: usize = 2 * 1024;
 const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
 /// Output caps; the defaults are the SPEC-bridge values.
@@ -60,14 +61,19 @@ impl Default for OutputLimits {
     }
 }
 
-/// One `bd` invocation. The process layer always prepends `-C <workspace>`.
+/// One `bd` invocation.
+///
+/// Workspace-scoped calls always prepend `-C <workspace>`. Global probes such
+/// as `bd --version` use [`ProcessRequest::global`] and omit `-C`, because bd
+/// 1.3.2 rejects `-C` on a directory that is not a beads workspace.
 #[derive(Debug, Clone)]
 pub struct ProcessRequest {
     pub command: String,
-    pub workspace: PathBuf,
+    pub workspace: Option<PathBuf>,
     pub args: Vec<OsString>,
     pub stdin: Option<Vec<u8>>,
-    pub timeout: Option<Duration>,
+    /// Short calls always have a timeout; `spawn_follow` ignores this field.
+    pub timeout: Duration,
     pub env: Vec<(OsString, OsString)>,
     pub limits: OutputLimits,
 }
@@ -80,10 +86,23 @@ impl ProcessRequest {
     ) -> Self {
         Self {
             command: command.into(),
-            workspace: workspace.into(),
+            workspace: Some(workspace.into()),
             args,
             stdin: None,
-            timeout: None,
+            timeout: READ_TIMEOUT,
+            env: Vec::new(),
+            limits: OutputLimits::default(),
+        }
+    }
+
+    /// A workspace-less call (for example `bd --version`).
+    pub fn global(command: impl Into<String>, args: Vec<OsString>) -> Self {
+        Self {
+            command: command.into(),
+            workspace: None,
+            args,
+            stdin: None,
+            timeout: READ_TIMEOUT,
             env: Vec::new(),
             limits: OutputLimits::default(),
         }
@@ -137,11 +156,17 @@ impl ProcessRunner {
     /// starts after the lock is acquired: queueing behind another call must not
     /// consume this call's budget.
     pub fn run(&self, request: &ProcessRequest) -> Result<ProcessOutput, BridgeError> {
-        let (result, started) = {
-            let lock = self.workspace_lock(&request.workspace);
-            let _guard = lock.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
-            let started = Instant::now();
-            (self.run_locked(request, started), started)
+        let (result, started) = match &request.workspace {
+            Some(workspace) => {
+                let lock = self.workspace_lock(workspace);
+                let _guard = lock.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+                let started = Instant::now();
+                (self.run_locked(request, started), started)
+            }
+            None => {
+                let started = Instant::now();
+                (self.run_locked(request, started), started)
+            }
         };
 
         match result {
@@ -163,7 +188,6 @@ impl ProcessRunner {
         let started = Instant::now();
         let follow_request = ProcessRequest {
             stdin: None,
-            timeout: None,
             ..request.clone()
         };
 
@@ -176,13 +200,17 @@ impl ProcessRunner {
         };
 
         let stdout = child.stdout.take();
-        let stderr = child.stderr.take();
+        let stderr_buffer = Arc::new(Mutex::new(Vec::new()));
+        if let Some(stderr) = child.stderr.take() {
+            let buffer = Arc::clone(&stderr_buffer);
+            std::thread::spawn(move || drain_follow_stderr(stderr, buffer));
+        }
 
         Ok(FollowProcess {
             child,
             job,
             stdout,
-            stderr,
+            stderr: stderr_buffer,
             log: Arc::clone(&self.calls),
             command: request.command.clone(),
             argv_summary: argv_summary(&request.args),
@@ -229,9 +257,10 @@ impl ProcessRunner {
 
     fn spawn_child(&self, request: &ProcessRequest) -> Result<(Child, JobHandle), BridgeError> {
         let mut command = Command::new(&self.bd_path);
+        if let Some(workspace) = &request.workspace {
+            command.arg("-C").arg(workspace);
+        }
         command
-            .arg("-C")
-            .arg(&request.workspace)
             .args(&request.args)
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
@@ -280,9 +309,22 @@ impl ProcessRunner {
         self.workspace_locks
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner())
-            .entry(workspace.to_path_buf())
+            .entry(Self::normalize_workspace(workspace))
             .or_insert_with(|| Arc::new(Mutex::new(())))
             .clone()
+    }
+
+    fn normalize_workspace(workspace: &Path) -> PathBuf {
+        // Windows treats these as the same directory, but PathBuf equality does
+        // not: normalize before using the path as a mutex key.
+        let trimmed = workspace
+            .to_string_lossy()
+            .trim_end_matches(['\\', '/'])
+            .to_owned();
+        let canonical = std::fs::canonicalize(&trimmed).unwrap_or_else(|_| PathBuf::from(&trimmed));
+        let text = canonical.to_string_lossy();
+        let stripped = text.strip_prefix(r"\\?\").unwrap_or(&text);
+        PathBuf::from(stripped.to_lowercase())
     }
 
     fn record(
@@ -305,12 +347,31 @@ impl ProcessRunner {
     }
 }
 
+fn drain_follow_stderr(mut stderr: ChildStderr, buffer: Arc<Mutex<Vec<u8>>>) {
+    let mut chunk = [0u8; STDERR_CHUNK];
+    loop {
+        match stderr.read(&mut chunk) {
+            Ok(0) | Err(_) => break,
+            Ok(read) => {
+                let mut captured = buffer
+                    .lock()
+                    .unwrap_or_else(|poisoned| poisoned.into_inner());
+                let remaining = FOLLOW_STDERR_LIMIT.saturating_sub(captured.len());
+                if remaining > 0 {
+                    let take = remaining.min(read);
+                    captured.extend_from_slice(&chunk[..take]);
+                }
+            }
+        }
+    }
+}
+
 /// A long-running follow process. Dropping it kills the whole process tree.
 pub struct FollowProcess {
     child: Child,
     job: JobHandle,
     stdout: Option<ChildStdout>,
-    stderr: Option<ChildStderr>,
+    stderr: Arc<Mutex<Vec<u8>>>,
     log: CallLog,
     command: String,
     argv_summary: String,
@@ -327,8 +388,17 @@ impl FollowProcess {
         self.stdout.take()
     }
 
-    pub fn take_stderr(&mut self) -> Option<ChildStderr> {
-        self.stderr.take()
+    /// The first 2 KiB of follow stderr, drained internally so the child can
+    /// never block on a full stderr pipe.
+    pub fn stderr_snapshot(&self) -> Vec<u8> {
+        self.stderr
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .clone()
+    }
+
+    pub fn stderr_lossy(&self) -> String {
+        String::from_utf8_lossy(&self.stderr_snapshot()).into_owned()
     }
 
     pub fn try_wait(&mut self) -> io::Result<Option<ExitStatus>> {
@@ -382,7 +452,7 @@ fn capture(
     started: Instant,
 ) -> Result<ProcessOutput, BridgeError> {
     let limits = request.limits;
-    let deadline = request.timeout.map(|timeout| started + timeout);
+    let deadline = started + request.timeout;
     let mut out = Vec::new();
     let mut err = Vec::new();
     let mut budget = OutputBudget::default();
@@ -396,6 +466,8 @@ fn capture(
     let mut grace_deadline: Option<Instant> = None;
 
     loop {
+        let mut progressed = false;
+
         if !stdout_eof {
             match pump_stdout(
                 &mut stdout,
@@ -405,7 +477,8 @@ fn capture(
                 &mut budget,
                 limits,
             )? {
-                PipeState::Open => {}
+                PipeState::Idle => {}
+                PipeState::Progress => progressed = true,
                 PipeState::Eof => stdout_eof = true,
             }
         }
@@ -418,7 +491,8 @@ fn capture(
                 &mut err,
                 limits,
             ) {
-                PipeState::Open => {}
+                PipeState::Idle => {}
+                PipeState::Progress => progressed = true,
                 PipeState::Eof => stderr_eof = true,
             }
         }
@@ -439,24 +513,30 @@ fn capture(
                     return build_output(exit, out, err, started);
                 }
                 if grace_deadline.is_some_and(|grace| Instant::now() >= grace) {
-                    // The pipes are still held (e.g. by a hook's grandchild).
-                    // Dropping them force-closes the read ends.
+                    if !stdout_eof {
+                        // Force-closing a still-open stdout can drop the tail
+                        // of a JSONL export; never return partial data as Ok.
+                        return Err(partial_stdout_error(out.len(), err.len()));
+                    }
                     return build_output(exit, out, err, started);
                 }
             }
             None => {
-                if deadline.is_some_and(|deadline| Instant::now() >= deadline) {
+                if Instant::now() >= deadline {
                     return Err(timeout_error(request));
                 }
             }
         }
 
-        std::thread::sleep(POLL_INTERVAL);
+        if !progressed {
+            std::thread::sleep(POLL_INTERVAL);
+        }
     }
 }
 
 enum PipeState {
-    Open,
+    Idle,
+    Progress,
     Eof,
 }
 
@@ -475,7 +555,7 @@ fn pump_stdout(
     limits: OutputLimits,
 ) -> Result<PipeState, BridgeError> {
     match available_bytes(handle) {
-        Available::Empty => Ok(PipeState::Open),
+        Available::Empty => Ok(PipeState::Idle),
         Available::Eof => Ok(PipeState::Eof),
         Available::Bytes(available) => {
             let want = available.min(buffer.len());
@@ -486,7 +566,7 @@ fn pump_stdout(
                         return Err(output_too_large(limits, budget.total()));
                     }
                     out.extend_from_slice(&buffer[..read]);
-                    Ok(PipeState::Open)
+                    Ok(PipeState::Progress)
                 }
                 Err(error) => Err(internal_error(format!("reading bd stdout failed: {error}"))),
             }
@@ -502,7 +582,7 @@ fn pump_stderr(
     limits: OutputLimits,
 ) -> PipeState {
     match available_bytes(handle) {
-        Available::Empty => PipeState::Open,
+        Available::Empty => PipeState::Idle,
         Available::Eof => PipeState::Eof,
         Available::Bytes(available) => {
             let want = available.min(buffer.len());
@@ -514,7 +594,7 @@ fn pump_stderr(
                         let take = remaining.min(read);
                         err.extend_from_slice(&buffer[..take]);
                     }
-                    PipeState::Open
+                    PipeState::Progress
                 }
                 Err(_) => PipeState::Eof,
             }
@@ -611,7 +691,7 @@ fn build_output(
 }
 
 fn timeout_error(request: &ProcessRequest) -> BridgeError {
-    let timeout = request.timeout.unwrap_or_default();
+    let timeout = request.timeout;
     let mut detail = serde_json::Map::new();
     detail.insert("command".to_owned(), Value::String(request.command.clone()));
     detail.insert(
@@ -626,6 +706,18 @@ fn timeout_error(request: &ProcessRequest) -> BridgeError {
             request.command,
             timeout.as_millis()
         ),
+    )
+    .with_detail(detail)
+}
+
+fn partial_stdout_error(stdout_bytes: usize, stderr_bytes: usize) -> BridgeError {
+    let mut detail = serde_json::Map::new();
+    detail.insert("stdout_bytes".to_owned(), Value::from(stdout_bytes as u64));
+    detail.insert("stderr_bytes".to_owned(), Value::from(stderr_bytes as u64));
+
+    BridgeError::new(
+        BridgeErrorCode::BdParseFailed,
+        "bd exited while stdout was still open; output may be truncated",
     )
     .with_detail(detail)
 }
@@ -650,23 +742,29 @@ fn spawn_error(path: &Path, error: io::Error) -> BridgeError {
     let mut detail = serde_json::Map::new();
     detail.insert("path".to_owned(), Value::String(path.display().to_string()));
 
-    match error.kind() {
-        io::ErrorKind::NotFound => BridgeError::new(
+    let raw = error.raw_os_error();
+    let (code, message) = match error.kind() {
+        io::ErrorKind::NotFound => (
             BridgeErrorCode::BdNotFound,
             format!("bd was not found at {}", path.display()),
-        )
-        .with_detail(detail),
-        io::ErrorKind::PermissionDenied => BridgeError::new(
+        ),
+        io::ErrorKind::PermissionDenied => (
             BridgeErrorCode::BdNotExecutable,
             format!("bd at {} cannot be executed", path.display()),
-        )
-        .with_detail(detail),
-        _ => BridgeError::new(
+        ),
+        // ERROR_BAD_EXE_FORMAT (193) and ERROR_FILENAME_EXCED_RANGE (206)
+        // surface as ErrorKind::Uncategorized on Windows.
+        _ if raw == Some(193) || raw == Some(206) => (
+            BridgeErrorCode::BdNotExecutable,
+            format!("bd at {} cannot be executed", path.display()),
+        ),
+        _ => (
             BridgeErrorCode::Internal,
             format!("could not start bd at {}: {error}", path.display()),
-        )
-        .with_detail(detail),
-    }
+        ),
+    };
+
+    BridgeError::new(code, message).with_detail(detail)
 }
 
 fn internal_error(message: impl Into<String>) -> BridgeError {

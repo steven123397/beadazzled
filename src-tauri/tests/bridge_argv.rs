@@ -182,6 +182,26 @@ fn clearing_the_assignee_uses_an_empty_argument() {
 }
 
 #[test]
+fn clearing_the_description_adds_allow_empty_description() {
+    let mut spec = UpdateSpec::new("bza-2");
+    spec.description = Some(String::new());
+
+    let argv = argv_for(&WriteCommand::Update(spec));
+
+    assert_args(
+        &argv.args,
+        &[
+            "update",
+            "bza-2",
+            "--body-file",
+            "-",
+            "--allow-empty-description",
+        ],
+    );
+    assert_eq!(argv.stdin.as_deref(), Some(b"".as_slice()));
+}
+
+#[test]
 fn long_descriptions_never_appear_in_argv() {
     let description = format!("中文 \"quoted\" & |\n{}", "x".repeat(64 * 1024));
     let mut spec = UpdateSpec::new("bza-1");
