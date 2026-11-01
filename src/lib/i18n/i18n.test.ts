@@ -30,6 +30,10 @@ test('placeholders are declared and always substituted', () => {
     '{path}',
     '{paths}',
     '{view}',
+    '{seq}',
+    '{state}',
+    '{time}',
+    '{error}',
   ]);
 
   for (const [language, catalog] of Object.entries(catalogs)) {

@@ -8,33 +8,53 @@ import { useShortcuts } from '@/app/keyboard/useShortcuts';
 import { CommandPalette } from '@/app/palette/CommandPalette';
 import { buildCommands } from '@/app/palette/commands';
 import { useI18n } from '@/lib/i18n/I18nProvider';
+import { formatDiagnostics } from '@/lib/diagnostics';
 import { loadSidebarCollapsed, saveSidebarCollapsed } from '@/lib/shell/layout';
 import { useTheme } from '@/lib/theme/ThemeProvider';
 
+import { Diagnostics } from './Diagnostics';
 import { Sidebar } from './Sidebar';
 import { StatusBar } from './StatusBar';
+import { useSyncState } from './SyncStatus';
 import { TopBar } from './TopBar';
 import { activeWorkspace, useWorkspaceContext } from './WorkspaceProvider';
 
 export function Shell({
   issues = [],
   onRefresh,
+  lastSeq = 0,
+  pendingWrites = 0,
 }: {
   issues?: readonly Issue[];
   onRefresh?: () => void;
+  /** Journal position reported by the sync store; 0 when sync is not running. */
+  lastSeq?: number;
+  /** Writes waiting behind the in-flight one; the write flow lands in bza-um8. */
+  pendingWrites?: number;
 }) {
   const { t, language, setLanguage } = useI18n();
   const { preference, setPreference } = useTheme();
-  const { snapshot, bd, reload } = useWorkspaceContext();
+  const { snapshot, bd, error, reload } = useWorkspaceContext();
+  const syncState = useSyncState();
   const navigate = useNavigate();
   const location = useLocation();
   const project = activeWorkspace(snapshot);
   const onIssueRoute = /^\/w\/[^/]+\/issue\//.test(location.pathname);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
+  const [diagnosticsOpen, setDiagnosticsOpen] = useState(false);
   // Read once at mount so a restored collapse never renders expanded first.
   const [sidebarCollapsed, setSidebarCollapsed] = useState(loadSidebarCollapsed);
-  const refresh = onRefresh ?? (() => void reload());
+  const [lastRefreshAt, setLastRefreshAt] = useState(() => Date.now());
+
+  const refreshData = useMemo(
+    () => onRefresh ?? (() => void reload()),
+    [onRefresh, reload]
+  );
+  const refresh = useCallback(() => {
+    refreshData();
+    setLastRefreshAt(Date.now());
+  }, [refreshData]);
 
   useEffect(() => {
     saveSidebarCollapsed(sidebarCollapsed);
@@ -43,20 +63,33 @@ export function Shell({
   const closeOverlay = useCallback(() => {
     setPaletteOpen(false);
     setHelpOpen(false);
+    setDiagnosticsOpen(false);
   }, []);
   const openPalette = useCallback(() => setPaletteOpen(true), []);
+  const openDiagnostics = useCallback(() => setDiagnosticsOpen(true), []);
   const toggleSidebar = useCallback(() => setSidebarCollapsed((collapsed) => !collapsed), []);
 
+  // One payload for the palette action and the diagnostics panel, so the two
+  // copies never drift apart.
+  const diagnosticsText = useCallback(
+    () =>
+      formatDiagnostics({
+        bd: bd?.kind === 'ready' ? bd.version : (bd?.kind ?? 'unknown'),
+        workspace: project?.path ?? '-',
+        project: project?.projectId ?? '-',
+        lastSeq,
+        sync: syncState.kind,
+        lastRefreshAt: new Date(lastRefreshAt).toISOString(),
+        pendingWrites,
+        error,
+        view: window.location.hash || '#/',
+      }),
+    [bd, project, lastSeq, syncState, lastRefreshAt, pendingWrites, error]
+  );
+
   const copyDiagnostics = useCallback(() => {
-    const version = bd?.kind === 'ready' ? bd.version : (bd?.kind ?? 'unknown');
-    const lines = [
-      t('diagnostics.bd', { version }),
-      t('diagnostics.workspace', { path: project?.path ?? '-' }),
-      t('diagnostics.project', { id: project?.projectId ?? '-' }),
-      t('diagnostics.view', { view: window.location.hash || '#/' }),
-    ];
-    void navigator.clipboard?.writeText(lines.join('\n'));
-  }, [bd, project, t]);
+    void navigator.clipboard?.writeText(diagnosticsText());
+  }, [diagnosticsText]);
 
   const context: ShortcutContext = {
     navigate,
@@ -67,7 +100,7 @@ export function Shell({
   };
 
   const shortcuts = useMemo<Shortcut[]>(() => {
-    const overlayOpen = paletteOpen || helpOpen;
+    const overlayOpen = paletteOpen || helpOpen || diagnosticsOpen;
     const list: Shortcut[] = [
       {
         id: 'palette',
@@ -170,7 +203,7 @@ export function Shell({
     }
 
     return list;
-  }, [project, paletteOpen, helpOpen, onIssueRoute]);
+  }, [project, paletteOpen, helpOpen, diagnosticsOpen, onIssueRoute]);
 
   useShortcuts(shortcuts, context);
 
@@ -211,9 +244,18 @@ export function Shell({
           <Outlet />
         </main>
       </div>
-      <StatusBar />
+      <StatusBar lastRefreshAt={lastRefreshAt} open={diagnosticsOpen} onOpen={openDiagnostics} />
       {helpOpen ? <HelpPanel shortcuts={shortcuts} onClose={closeOverlay} /> : null}
       {paletteOpen ? <CommandPalette commands={paletteCommands} onClose={closeOverlay} /> : null}
+      {diagnosticsOpen ? (
+        <Diagnostics
+          lastSeq={lastSeq}
+          lastRefreshAt={lastRefreshAt}
+          pendingWrites={pendingWrites}
+          onCopy={copyDiagnostics}
+          onClose={closeOverlay}
+        />
+      ) : null}
     </div>
   );
 }

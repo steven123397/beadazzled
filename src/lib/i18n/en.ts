@@ -40,6 +40,8 @@ export const en = {
   'status.rebuilding': 'Rebuilding',
   'status.reconnecting': 'Reconnecting (attempt {attempt})',
   'status.bdUnavailable': 'bd unavailable',
+  'status.refreshed': 'Refreshed {time}',
+  'status.openDiagnostics': 'Show diagnostics',
 
   'placeholder.later': 'This view arrives in a later phase.',
   'placeholder.issue': 'Issue {id}',
@@ -85,4 +87,14 @@ export const en = {
   'diagnostics.workspace': 'workspace: {path}',
   'diagnostics.project': 'projectId: {id}',
   'diagnostics.view': 'view: {view}',
+  'diagnostics.title': 'Diagnostics',
+  'diagnostics.lastSeq': 'Journal position: {seq}',
+  'diagnostics.sync': 'Sync state: {state}',
+  'diagnostics.lastRefresh': 'Last refresh: {time}',
+  'diagnostics.pending': 'Pending writes: {count}',
+  'diagnostics.lastError': 'Last error: {error}',
+  'diagnostics.missing': 'Missing workspaces: {paths}',
+  'diagnostics.corruptBackup': 'Config backup: {path}',
+  'diagnostics.copy': 'Copy diagnostics',
+  'diagnostics.close': 'Close',
 } as const;

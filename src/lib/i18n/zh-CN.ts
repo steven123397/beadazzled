@@ -42,6 +42,8 @@ export const zhCN: Record<keyof typeof en, string> = {
   'status.rebuilding': '正在重建',
   'status.reconnecting': '正在重连（第 {attempt} 次）',
   'status.bdUnavailable': 'bd 不可用',
+  'status.refreshed': '上次刷新 {time}',
+  'status.openDiagnostics': '查看诊断',
 
   'placeholder.later': '该视图将在后续阶段提供。',
   'placeholder.issue': '票 {id}',
@@ -87,4 +89,14 @@ export const zhCN: Record<keyof typeof en, string> = {
   'diagnostics.workspace': '工作区：{path}',
   'diagnostics.project': 'projectId：{id}',
   'diagnostics.view': '视图：{view}',
+  'diagnostics.title': '诊断',
+  'diagnostics.lastSeq': '日志位置：{seq}',
+  'diagnostics.sync': '同步状态：{state}',
+  'diagnostics.lastRefresh': '上次刷新：{time}',
+  'diagnostics.pending': '待写入：{count}',
+  'diagnostics.lastError': '最近错误：{error}',
+  'diagnostics.missing': '缺失工作区：{paths}',
+  'diagnostics.corruptBackup': '配置备份：{path}',
+  'diagnostics.copy': '复制诊断信息',
+  'diagnostics.close': '关闭',
 };

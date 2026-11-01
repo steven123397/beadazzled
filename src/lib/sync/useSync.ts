@@ -26,6 +26,8 @@ export type UseSyncOptions = {
 export type SyncControl = {
   issues: readonly Issue[];
   state: SyncState;
+  /** Highest journal seq applied to the store; 0 before the first snapshot. */
+  lastSeq: number;
   refresh: () => void;
 };
 
@@ -117,7 +119,7 @@ export function useSync({
     void api.refresh(workspace).catch((error) => setState(unavailable(error)));
   }, [api, enabled, ready, workspace]);
 
-  return { issues, state, refresh };
+  return { issues, state, lastSeq: ticketState.lastSeq, refresh };
 }
 
 function unavailable(error: unknown): SyncState {

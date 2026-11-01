@@ -89,6 +89,12 @@ function AppFrame({
   });
   const shellIssues = syncEnabled ? sync.issues : issues;
   const shellSyncState = syncEnabled ? sync.state : syncState;
+  // The injected state is what unit tests and the browser e2e seam provide.
+  const shellLastSeq = syncEnabled
+    ? sync.lastSeq
+    : syncState.kind === 'healthy'
+      ? syncState.lastSeq
+      : 0;
   const refresh = useCallback(() => {
     void reload();
     sync.refresh();
@@ -100,7 +106,7 @@ function AppFrame({
         <WorkspaceProvider workspace={workspace}>
           <HashRouter>
             <Routes>
-              <Route element={<Shell issues={shellIssues} onRefresh={refresh} />}>
+              <Route element={<Shell issues={shellIssues} onRefresh={refresh} lastSeq={shellLastSeq} />}>
                 <Route index element={<RootRedirect />} />
                 <Route path="welcome" element={<Welcome />} />
                 <Route path="w/:projectId" element={<ProjectGate />}>

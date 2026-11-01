@@ -543,3 +543,130 @@ test('a collapsed sidebar keeps labelled targets, icons and a mouse toggle', asy
   fireEvent.click(within(sidebar).getByRole('button', { name: 'Expand sidebar' }));
   expect(sidebar).toHaveAttribute('data-collapsed', 'false');
 });
+
+async function openDiagnostics() {
+  const statusBar = screen.getByLabelText('Status bar');
+  fireEvent.click(within(statusBar).getByRole('button'));
+  return screen.findByRole('dialog', { name: 'Diagnostics' });
+}
+
+test('clicking the status bar shows bd, workspace, journal position and refresh time', async () => {
+  window.location.hash = '#/w/p1/list';
+
+  render(
+    <App
+      workspaceApi={fakeApi({
+        snapshot: async () => snapshot([entry('p1', 'alpha')], '/repo/p1'),
+      })}
+      syncState={healthy}
+    />
+  );
+  await screen.findByRole('heading', { name: 'List' });
+
+  const dialog = await openDiagnostics();
+
+  expect(dialog).toHaveTextContent('bd: 1.3.2');
+  expect(dialog).toHaveTextContent('workspace: /repo/p1');
+  expect(dialog).toHaveTextContent('projectId: p1');
+  expect(dialog).toHaveTextContent('Journal position: 42');
+  expect(dialog).toHaveTextContent('Last refresh:');
+  expect(dialog).toHaveTextContent('Pending writes: 0');
+});
+
+test('escape and the backdrop both close the diagnostics dialog', async () => {
+  window.location.hash = '#/w/p1/list';
+
+  render(
+    <App
+      workspaceApi={fakeApi({
+        snapshot: async () => snapshot([entry('p1', 'alpha')], '/repo/p1'),
+      })}
+    />
+  );
+  await screen.findByRole('heading', { name: 'List' });
+
+  await openDiagnostics();
+  fireEvent.keyDown(window, { key: 'Escape' });
+  expect(screen.queryByRole('dialog', { name: 'Diagnostics' })).not.toBeInTheDocument();
+
+  await openDiagnostics();
+  fireEvent.click(document.querySelector('[data-diagnostics-backdrop]') as HTMLElement);
+  expect(screen.queryByRole('dialog', { name: 'Diagnostics' })).not.toBeInTheDocument();
+});
+
+test('opening diagnostics never calls bd again', async () => {
+  window.location.hash = '#/w/p1/list';
+  const bdStatus = vi.fn(async () => bdReady);
+
+  render(
+    <App
+      workspaceApi={fakeApi({
+        snapshot: async () => snapshot([entry('p1', 'alpha')], '/repo/p1'),
+        bdStatus,
+      })}
+    />
+  );
+  await screen.findByRole('heading', { name: 'List' });
+  bdStatus.mockClear();
+
+  await openDiagnostics();
+
+  expect(bdStatus).not.toHaveBeenCalled();
+});
+
+test('the copied diagnostics text has a fixed shape and carries no secrets', async () => {
+  window.location.hash = '#/w/p1/list';
+  const writeText = vi.fn<(text: string) => Promise<void>>(async () => undefined);
+  Object.defineProperty(navigator, 'clipboard', {
+    value: { writeText },
+    configurable: true,
+  });
+
+  render(
+    <App
+      workspaceApi={fakeApi({
+        snapshot: async () => snapshot([entry('p1', 'alpha')], '/repo/p1'),
+      })}
+      syncState={healthy}
+    />
+  );
+  await screen.findByRole('heading', { name: 'List' });
+
+  const dialog = await openDiagnostics();
+  fireEvent.click(within(dialog).getByRole('button', { name: 'Copy diagnostics' }));
+
+  await waitFor(() => expect(writeText).toHaveBeenCalledTimes(1));
+  const text = writeText.mock.calls[0]?.[0] ?? '';
+  const keys = text.split('\n').map((line) => line.slice(0, line.indexOf(':')));
+  expect(keys).toEqual([
+    'bd',
+    'workspace',
+    'projectId',
+    'lastSeq',
+    'sync',
+    'lastRefresh',
+    'pendingWrites',
+    'lastError',
+    'view',
+  ]);
+  expect(text).toContain('workspace: /repo/p1');
+  expect(text).toMatch(/lastSeq: 42/);
+  expect(text).not.toMatch(/token|secret|password|key/i);
+});
+
+test('sync state changes are announced politely', async () => {
+  window.location.hash = '#/w/p1/list';
+
+  render(
+    <App
+      workspaceApi={fakeApi({
+        snapshot: async () => snapshot([entry('p1', 'alpha')], '/repo/p1'),
+      })}
+      syncState={healthy}
+    />
+  );
+  await screen.findByRole('heading', { name: 'List' });
+
+  const live = screen.getByText('Live');
+  expect(live).toHaveAttribute('aria-live', 'polite');
+});
