@@ -1,13 +1,18 @@
 #!/usr/bin/env node
 // Scans npm and Rust lockfiles with osv-scanner (CONSTRAINTS.md: 0 high-severity
 // vulnerabilities). osv-scanner exits 1 whenever any advisory is found, so the
-// severity decision is made here: only high/critical block.
+// severity decision is made here: high/critical block, and advisories with no
+// severity data block too unless osv-allowlist.json waives them (ADR-0007).
 import { spawnSync } from 'node:child_process';
-import { existsSync, readdirSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { summarizeDependencyAudit } from './lib/dependency-audit.mjs';
+import {
+  evaluateAllowlist,
+  parseAllowlist,
+  summarizeDependencyAudit,
+} from './lib/dependency-audit.mjs';
 
 const scriptPath = fileURLToPath(import.meta.url);
 const defaultRoot = path.resolve(path.dirname(scriptPath), '..');
@@ -114,15 +119,35 @@ try {
         `${unknown} unknown`
     );
 
-    if (unknown > 0) {
-      const ids = audit.findings
-        .filter((finding) => finding.severity === 'unknown')
-        .map((finding) => finding.id)
-        .join(', ');
-      console.log(`check-deps: advisories without severity data (reported, not blocking): ${ids}`);
+    const allowlistPath = path.join(root, 'osv-allowlist.json');
+    const allowlistEntries = existsSync(allowlistPath)
+      ? parseAllowlist(JSON.parse(readFileSync(allowlistPath, 'utf8')))
+      : [];
+    const waiver = evaluateAllowlist(audit.findings, allowlistEntries);
+
+    for (const finding of waiver.waived) {
+      console.log(`check-deps: waived ${finding.id} (${finding.package}) until ${finding.expires}`);
+    }
+    for (const finding of waiver.blocking) {
+      console.error(
+        `check-deps: ${finding.package}@${finding.version ?? '?'} ${finding.id} has unknown ` +
+          'severity and is not in osv-allowlist.json'
+      );
+    }
+    for (const entry of waiver.expired) {
+      console.error(
+        `check-deps: osv-allowlist.json entry ${entry.id} expired on ${entry.expires}; ` +
+          'renew or remove it'
+      );
+    }
+    for (const entry of waiver.unmatched) {
+      console.log(
+        `check-deps: osv-allowlist.json entry ${entry.id} matches no unknown advisory; ` +
+          'remove it'
+      );
     }
 
-    if (audit.status === 'fail') {
+    if (audit.status === 'fail' || waiver.status === 'fail') {
       for (const finding of audit.findings) {
         if (finding.severity === 'critical' || finding.severity === 'high') {
           console.error(
@@ -131,7 +156,7 @@ try {
           );
         }
       }
-      console.error('check-deps: high-severity vulnerabilities found');
+      console.error('check-deps: dependency audit failed');
       process.exitCode = 1;
     }
   }

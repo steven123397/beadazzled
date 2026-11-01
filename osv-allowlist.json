@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "entries": [
+    {
+      "id": "RUSTSEC-2024-0370",
+      "reason": "proc-macro-error is unmaintained and the advisory carries no severity/CVSS. It enters only via glib-macros <- glib <- gtk <- tauri, a Linux-only path that the Windows build never compiles.",
+      "expires": "2027-01-31"
+    },
+    {
+      "id": "RUSTSEC-2024-0429",
+      "reason": "The RUSTSEC record carries no severity; the same advisory's GHSA-wrw7-89jp-8q8g record is MODERATE (medium, non-blocking). glib is reached only through the Linux GTK path, not the Windows build.",
+      "expires": "2027-01-31"
+    }
+  ]
+}

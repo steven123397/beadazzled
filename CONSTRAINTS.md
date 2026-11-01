@@ -30,7 +30,7 @@
 | 架构边界 | 0 违规 | `npm run check:boundaries` | 交还前 | block | 防止绕开 bd 桥直读 Dolt | 可运行 |
 | bridge 行覆盖 | ≥ 80% | `npm run test:rust:coverage` | 交还前 | block | 只有会真坏的那层值得设门槛 | 可运行（bridge 落地后生效） |
 | 关键 E2E | 3 条全绿 | `npm run e2e` | CI | block | 装→列表→详情→改状态 | 待接线 |
-| 依赖高危漏洞 | 0 | `npm run check:deps` | CI | block | 会随安装包分发出去 | 可运行 |
+| 依赖高危漏洞 | 0；unknown 未豁免即为失败 | `npm run check:deps` | CI | block | 会随安装包分发出去；无 severity 的记录无法自动判级 | 可运行 |
 | 安装包体积 | ≤ 15 MB | `npm run build:app && npm run check:size` | CI | block | Tauri 空壳 5–10MB；超过即说明选型错了 | 可运行（需先 `build:app`） |
 | 冷启动→可交互 | ≤ 2.0s（P95） | `npm run measure:startup` | CI | warn | WebView2 冷启动实测量级 | 待接线 |
 | 热启动→可交互 | ≤ 800ms | 同上 | CI | warn | 双击即开是核心卖点 | 待接线 |
@@ -39,6 +39,8 @@
 | 列表滚动（1000 条） | 60fps 不掉帧 | `npm run measure:scroll` | CI | warn | 虚拟滚动的基本盘 | 待接线 |
 | 正文对比度 | ≥ 4.5:1；大字号 ≥ 3:1 | axe（待有可运行 UI） | 交还前 | block | WCAG AA | 待接线 |
 | 核心流程无鼠标可达 | 必须 | E2E + 手动 | 交还前 | block | 产品定位是键盘优先 | 待接线 |
+
+依赖扫描的 severity 取 OSV 的 `database_specific.severity`。没有该字段的记录（常见于 RUSTSEC）判为 unknown，默认 **block**；只有登记在 `osv-allowlist.json` 的条目（`id` + `reason` + `expires`）才放行，条目到期后自动失败复审，匹配不到任何 unknown 的条目会提示清理。见 [ADR-0007](docs/adr/0007-osv-unknown-severity-allowlist.md)。
 
 ## 检查分层
 
@@ -64,7 +66,7 @@ bridge 测试**禁止真的 spawn `bd`**：单次调用 1.0–1.4s，几十个�
 | 安装包体积 | 未测量 | 无构建产物 |
 | 冷启动、热启动、内存、详情切换、滚动 | 未测量 | 无应用壳 |
 | bridge 行覆盖率 | 91.2%（1226/1345 行，6 个 bridge 文件） | 2026-11-01 实测；阈值 80% 由 `check:task` 执行 |
-| 依赖漏洞 | 0 高危（2 medium、2 unknown） | 2026-10-31 实测，osv-scanner 2.7.0，npm 285 包 + crates 407 包 |
+| 依赖漏洞 | 0 高危（2 medium；2 unknown 已登记 allowlist） | 2026-11-01 实测，osv-scanner 2.7.0，npm 285 包 + crates 407 包 |
 | 对比度、键盘可达 | 未测量 | 无 UI |
 
 ## Exceptions
