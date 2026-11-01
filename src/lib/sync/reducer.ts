@@ -16,17 +16,31 @@ export type ApplyReport = {
   gap: boolean;
 };
 
+/**
+ * Untrusted keys (issue ids, labels, assignees) must not collide with
+ * `Object.prototype` entries such as `constructor` or `__proto__`: a plain
+ * `{}` makes `map['constructor']` inherit a function and `map['__proto__']`
+ * write through the prototype setter.
+ */
+export function emptyRecord<T>(): Record<string, T> {
+  return Object.create(null) as Record<string, T>;
+}
+
+function copyRecord<T>(source: Record<string, T>): Record<string, T> {
+  return Object.assign(emptyRecord<T>(), source);
+}
+
 export function createTicketState(): TicketState {
-  return { issues: {}, lastSeq: 0, issueSeq: {} };
+  return { issues: emptyRecord<Issue>(), lastSeq: 0, issueSeq: emptyRecord<number>() };
 }
 
 /** Replaces the store with a `bd export` snapshot. */
 export function applySnapshot(issues: readonly Issue[], since = 0): TicketState {
-  const map: Record<string, Issue> = {};
+  const map = emptyRecord<Issue>();
   for (const issue of issues) {
     map[issue.id] = issue;
   }
-  return { issues: map, lastSeq: since, issueSeq: {} };
+  return { issues: map, lastSeq: since, issueSeq: emptyRecord<number>() };
 }
 
 /**
@@ -53,8 +67,8 @@ export function applyRecords(
       gap = true;
       break;
     }
-    issues ??= { ...state.issues };
-    issueSeq ??= { ...state.issueSeq };
+    issues ??= copyRecord(state.issues);
+    issueSeq ??= copyRecord(state.issueSeq);
     applyOne(issues, issueSeq, record);
     lastSeq = record.seq;
     applied += 1;

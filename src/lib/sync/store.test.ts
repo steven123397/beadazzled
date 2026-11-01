@@ -36,6 +36,26 @@ function record(seq: number, issueId: string, overrides: Partial<JournalRecord> 
   };
 }
 
+test('a label named constructor does not break the indexes', () => {
+  const store = createTicketStore();
+  store.applySnapshot([issue('a', { labels: ['constructor'] })]);
+
+  expect(store.getIndexes().byLabel['constructor']).toEqual(['a']);
+});
+
+test('an issue id of __proto__ stays a normal entry', () => {
+  const store = createTicketStore();
+  store.applySnapshot([issue('a')]);
+  store.applyRecords([record(1, 'a'), record(2, '__proto__')]);
+
+  const state = store.getState();
+
+  expect(Object.hasOwn(state.issues, '__proto__')).toBe(true);
+  expect(state.issues['__proto__']?.id).toBe('__proto__');
+  expect(Object.hasOwn(state.issueSeq, '__proto__')).toBe(true);
+  expect(state.issueSeq['__proto__']).toBe(2);
+});
+
 test('a snapshot replaces the contents and restarts seq tracking', () => {
   const store = createTicketStore();
   store.applyRecords([record(1, 'a'), record(2, 'b')]);

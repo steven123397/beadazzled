@@ -4,6 +4,7 @@ import {
   applyRecords as reduceRecords,
   applySnapshot as reduceSnapshot,
   createTicketState,
+  emptyRecord,
   type TicketState,
 } from './reducer';
 
@@ -76,11 +77,11 @@ export function createTicketStore(initial: TicketState = createTicketState()): T
 }
 
 function buildIndexes(issues: Record<string, Issue>): TicketIndexes {
-  const byStatus: Record<string, string[]> = {};
-  const byPriority: Record<string, string[]> = {};
-  const byAssignee: Record<string, string[]> = {};
-  const byLabel: Record<string, string[]> = {};
-  const searchText: Record<string, string> = {};
+  const byStatus = emptyRecord<string[]>();
+  const byPriority = emptyRecord<string[]>();
+  const byAssignee = emptyRecord<string[]>();
+  const byLabel = emptyRecord<string[]>();
+  const searchText = emptyRecord<string>();
 
   for (const issue of Object.values(issues)) {
     push(byStatus, issue.status, issue.id);
