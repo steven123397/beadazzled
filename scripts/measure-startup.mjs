@@ -203,15 +203,15 @@ function newestSource() {
  */
 async function describeFreshness(exe, exeStat) {
   const head = gitValue(['rev-parse', 'HEAD']);
-  const committedAtMs = Number(gitValue(['log', '-1', '--format=%ct'])) * 1000 || null;
   const newest = newestSource();
   const reasons = [];
 
+  // Compare against the inputs, not the commit date: committing right after a
+  // build is normal, and treating that as stale would train readers to ignore
+  // the warning. A checkout or an edit bumps input mtimes, which is the signal
+  // that actually means "this binary is older than the code".
   if (newest.path !== null && newest.mtimeMs > exeStat.mtimeMs) {
     reasons.push(`binary is older than ${newest.path}`);
-  }
-  if (committedAtMs !== null && committedAtMs > exeStat.mtimeMs) {
-    reasons.push('binary is older than HEAD');
   }
 
   return {
