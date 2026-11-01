@@ -1,10 +1,131 @@
 import { render, screen } from '@testing-library/react';
-import { expect, test } from 'vitest';
+import { beforeEach, expect, test } from 'vitest';
+
+import type { BdStatus, SyncState, WorkspaceEntry, WorkspaceSnapshot } from '@/bindings/bd';
+import type { WorkspaceApi } from '@/lib/workspace/api';
 
 import { App } from './App';
 
-test('renders the product name', () => {
-  render(<App />);
+function entry(projectId: string, name = projectId): WorkspaceEntry {
+  return {
+    path: `/repo/${projectId}`,
+    name,
+    projectId,
+    isWorktree: false,
+    lastOpenedAt: '2026-11-01T00:00:00Z',
+    checkpoint: null,
+  };
+}
 
-  expect(screen.getByRole('heading', { name: 'beadazzled' })).toBeInTheDocument();
+function snapshot(workspaces: WorkspaceEntry[], active: string | null): WorkspaceSnapshot {
+  return {
+    config: {
+      schemaVersion: 1,
+      bdPath: null,
+      language: 'en',
+      theme: 'system',
+      lastWorkspacePath: null,
+      workspaces,
+    },
+    missing: [],
+    active,
+    corruptBackup: null,
+  };
+}
+
+const bdReady: BdStatus = { kind: 'ready', path: 'bd', version: '1.3.2' };
+
+function fakeApi(overrides: Partial<WorkspaceApi> = {}): WorkspaceApi {
+  return {
+    snapshot: async () => snapshot([], null),
+    bdStatus: async () => bdReady,
+    setBdPath: async () => bdReady,
+    add: async () => entry('p1'),
+    switchTo: async () => entry('p1'),
+    remove: async () => true,
+    relocate: async () => entry('p1'),
+    setCheckpoint: async () => true,
+    checkpoint: async () => null,
+    flush: async () => undefined,
+    ...overrides,
+  };
+}
+
+const healthy: SyncState = { kind: 'healthy', lastSeq: 42, lastEventAt: null };
+
+beforeEach(() => {
+  window.location.hash = '';
+});
+
+test('shows the welcome screen when no workspace is registered', async () => {
+  window.location.hash = '#/welcome';
+
+  render(<App workspaceApi={fakeApi()} />);
+
+  expect(await screen.findByRole('heading', { name: /welcome/i })).toBeInTheDocument();
+});
+
+test('redirects the root to the active workspace list', async () => {
+  window.location.hash = '#/';
+
+  render(
+    <App
+      workspaceApi={fakeApi({
+        snapshot: async () => snapshot([entry('p1', 'alpha')], '/repo/p1'),
+      })}
+    />
+  );
+
+  expect(await screen.findByRole('heading', { name: 'List' })).toBeInTheDocument();
+  expect(window.location.hash).toBe('#/w/p1/list');
+});
+
+test('restores a deep link and shows the sync state in the status bar', async () => {
+  window.location.hash = '#/w/p1/issue/bza-1';
+
+  render(
+    <App
+      workspaceApi={fakeApi({
+        snapshot: async () => snapshot([entry('p1', 'alpha')], '/repo/p1'),
+      })}
+      syncState={healthy}
+    />
+  );
+
+  expect(await screen.findByRole('heading', { name: /bza-1/ })).toBeInTheDocument();
+  expect(screen.getByLabelText('Status bar')).toHaveTextContent('Live');
+});
+
+test('falls back to welcome when the deep link names an unknown workspace', async () => {
+  window.location.hash = '#/w/missing/list';
+
+  render(
+    <App
+      workspaceApi={fakeApi({
+        snapshot: async () => snapshot([entry('p1', 'alpha')], '/repo/p1'),
+      })}
+    />
+  );
+
+  expect(await screen.findByRole('heading', { name: /welcome/i })).toBeInTheDocument();
+});
+
+test('shows a busy skeleton instead of an empty list while the workspace loads', async () => {
+  window.location.hash = '#/w/p1/list';
+
+  render(<App workspaceApi={fakeApi({ snapshot: () => new Promise(() => undefined) })} />);
+
+  expect(screen.getByRole('status', { name: 'Loading workspace' })).toHaveAttribute(
+    'aria-busy',
+    'true'
+  );
+  expect(screen.queryByRole('list')).not.toBeInTheDocument();
+});
+
+test('keeps the shell reachable for settings without a workspace', async () => {
+  window.location.hash = '#/settings';
+
+  render(<App workspaceApi={fakeApi()} />);
+
+  expect(await screen.findByRole('heading', { name: 'Settings' })).toBeInTheDocument();
 });
