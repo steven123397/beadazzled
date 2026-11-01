@@ -10,7 +10,7 @@ function readJson(relativePath) {
   return JSON.parse(readFileSync(path.join(root, relativePath), 'utf8'));
 }
 
-// Every command listed in spec/capability-map.md must be declared in package.json.
+// Every command listed in docs/spec/capability-map.md must be declared in package.json.
 const CAPABILITY_MAP_SCRIPTS = [
   'dev',
   'dev:web',

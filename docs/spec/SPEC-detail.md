@@ -126,7 +126,7 @@ src/lib/store/selectors.ts  getIssue、getBlockedBy、getBlocks
 - Markdown 管道只在一处配置 `rehype-sanitize` 白名单，禁止组件内另开渲染器。
 - 所有写操作经 `useWrite`，不直接调用 IPC。
 
-参考实现（MIT，移植规则见 [ADR-0001](../docs/adr/0001-ui-foundation-and-linear-references.md)）：Circle 的 `issues/details/issue-details.tsx`（页面结构）、`issue-properties-panel.tsx`（元数据栏）、`status-selector.tsx` / `priority-selector.tsx`（选择器）。
+参考实现（MIT，移植规则见 [ADR-0001](../adr/0001-ui-foundation-and-linear-references.md)）：Circle 的 `issues/details/issue-details.tsx`（页面结构）、`issue-properties-panel.tsx`（元数据栏）、`status-selector.tsx` / `priority-selector.tsx`（选择器）。
 
 ## Boundaries
 

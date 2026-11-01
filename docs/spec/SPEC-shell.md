@@ -93,7 +93,7 @@ Hash 路由（`react-router-dom` v7），工作区由 `projectId` 标识：
 
 ## UI 基线与参考实现
 
-决策见 [ADR-0001](../docs/adr/0001-ui-foundation-and-linear-references.md)。摘要：
+决策见 [ADR-0001](../adr/0001-ui-foundation-and-linear-references.md)。摘要：
 
 - **组件基线**：shadcn/ui 源码内联到 `src/components/ui/`（MIT，基于 Radix）；命令面板 `cmdk`，拖拽 `dnd-kit`，虚拟滚动 `@tanstack/react-virtual`。不引入运行时成品组件库。
 - **主题 token**：以 Cuelark UI 的 Linear 主题（MIT）为起点，落到 `src/styles/tokens.css` 后按本项目预算调整；不使用 Linear 商标、Logo、品牌文案。

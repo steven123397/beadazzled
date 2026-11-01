@@ -2,7 +2,7 @@
 
 状态：已接受（2026-11-01）
 影响模块：`bridge`、前端类型层（`src/bindings/bd.ts`）
-相关：`spec/SPEC-bridge.md` 契约：类型；实现见 `src-tauri/src/bridge/types.rs`
+相关：`docs/spec/SPEC-bridge.md` 契约：类型；实现见 `src-tauri/src/bridge/types.rs`
 
 ## 背景
 
@@ -48,7 +48,7 @@ export type Issue = { ...; extra: Record<string, unknown> };
   `WorkspaceContext`）都按同样方式保留未知字段。
 - **未知字段是逃生舱，不是常规访问路径。** 某个 key 一旦有业务含义，就把它
   提升为 Rust 命名字段并重新生成绑定；不长期靠 `issue['some_key']` 访问。
-- `spec/SPEC-bridge.md` 的 TS 片段同步为索引签名，避免文档与生成物漂移。
+- `docs/spec/SPEC-bridge.md` 的 TS 片段同步为索引签名，避免文档与生成物漂移。
 
 ## 后果
 
