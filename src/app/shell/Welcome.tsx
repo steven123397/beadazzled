@@ -35,6 +35,11 @@ export function Welcome() {
       <p className="text-sm text-muted-foreground">
         {blockerReason(t, snapshot, bd, error, reason)}
       </p>
+      {bd?.kind === 'not-found' ? (
+        <code className="block select-all rounded border border-border bg-muted px-3 py-2 font-mono text-xs text-foreground">
+          {t('welcome.installCommand')}
+        </code>
+      ) : null}
       <button
         type="button"
         onClick={() => {

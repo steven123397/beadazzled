@@ -238,7 +238,23 @@ test('shows a busy skeleton instead of an empty list while the workspace loads',
   expect(screen.queryByRole('list')).not.toBeInTheDocument();
 });
 
-test('keeps the shell reachable for settings without a workspace', async () => {
+test('shows the winget command when bd is missing', async () => {
+  window.location.hash = '#/welcome';
+
+  render(
+    <App
+      workspaceApi={fakeApi({
+        snapshot: async () => snapshot([], null),
+        bdStatus: async () => ({ kind: 'not-found', searched: [] }),
+      })}
+    />
+  );
+
+  expect(await screen.findByText(/bd was not found/i)).toBeInTheDocument();
+  expect(screen.getByText('winget install --id GasTownHall.Beads -e')).toBeInTheDocument();
+});
+
+test('settings stays reachable without a workspace', async () => {
   window.location.hash = '#/settings';
 
   render(<App workspaceApi={fakeApi()} />);
