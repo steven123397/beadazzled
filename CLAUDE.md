@@ -5,6 +5,7 @@
 - 规格：`SPEC.md`；多模块用 `spec/SPEC-<id>.md` + `spec/capability-map.md`；外部工具：无
 - task：单一来源为 beads（本项目 `.beads`，通过 `bd` 读写），plan 由 `bd create --graph` 建图承载，不另建 `tasks/plan.md`、`tasks/todo.md`
 - 子智能体模型：派发时显式传 `model` —— code-reviewer、security-auditor 用 opus；doubt-challenger、test-engineer、web-performance-auditor 用 sonnet
+- secret 卫生：`.beads/config.yaml` 必须保持 secret-free；集成密钥只走环境变量（`GITHUB_TOKEN` / `LINEAR_API_KEY` 等），不要用 `bd config set --force-git-tracked`。`npm run check:secrets` 会先做确定性键检查，再跑 gitleaks。
 - 质量约束：见 `CONSTRAINTS.md`；任何变更都不得为了让检查通过而弱化它
 - 以上文件在第一次真正产出时创建，不预建空目录
 

@@ -20,9 +20,11 @@
 
 失败处理遵循：**确定性 → block；测量性 → warn**（见 Exceptions 中的转正期限）。
 
+`.beads/config.yaml` 必须保持 secret-free：`check:secrets` 会解析 active YAML 键，出现 `token` / `api_key` / `password` / `secret` / `credential` 后缀即失败；集成密钥只走环境变量（`GITHUB_TOKEN` / `LINEAR_API_KEY` 等），禁止 `bd config set --force-git-tracked`。见 [ADR-0006](docs/adr/0006-beads-config-secret-hygiene.md)。
+
 | 维度 | 预算 | 命令 | 阶段 | 失败 | 理由 | 状态 |
 |---|---|---|---|---|---|---|
-| secrets | 0 | `gitleaks detect --source . --redact --no-banner` | 编辑循环 | block | 仓库公开、安装包对外分发 | 可运行 |
+| secrets | 0 | `npm run check:secrets`（配置键检查 + gitleaks） | 编辑循环 | block | 仓库公开、安装包对外分发 | 可运行 |
 | 类型 | 0 error | `npm run typecheck` | 编辑循环 | block | 无噪声、秒级 | 可运行 |
 | lint | 0 error | `npm run lint` | 编辑循环 | block | 同上 | 可运行 |
 | 架构边界 | 0 违规 | `npm run check:boundaries` | 交还前 | block | 防止绕开 bd 桥直读 Dolt | 可运行 |

@@ -1,10 +1,13 @@
 #!/usr/bin/env node
-// Runs gitleaks with the command pinned in CONSTRAINTS.md. gitleaks is not always
-// on PATH on Windows, so fall back to the WinGet package directory.
+// Runs the deterministic .beads/config.yaml secret-key guard, then gitleaks
+// with the command pinned in CONSTRAINTS.md. gitleaks is not always on PATH on
+// Windows, so fall back to the WinGet package directory outside CI.
 import { spawnSync } from 'node:child_process';
-import { existsSync, readdirSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+
+import { findSecretConfigKeys } from './lib/beads-config.mjs';
 
 const scriptPath = fileURLToPath(import.meta.url);
 const defaultRoot = path.resolve(path.dirname(scriptPath), '..');
@@ -66,7 +69,31 @@ function parseRoot(argv) {
   return path.resolve(value);
 }
 
+function checkBeadsConfig(root) {
+  const configPath = path.join(root, '.beads', 'config.yaml');
+  if (!existsSync(configPath)) {
+    return false;
+  }
+
+  const findings = findSecretConfigKeys(readFileSync(configPath, 'utf8'));
+  for (const key of findings) {
+    console.error(
+      `check-secrets: ${path.relative(root, configPath)} contains active secret key "${key}"`
+    );
+  }
+  if (findings.length > 0) {
+    console.error(
+      'check-secrets: use GITHUB_TOKEN / LINEAR_API_KEY environment variables; ' +
+        'never run `bd config set --force-git-tracked`'
+    );
+  }
+
+  return findings.length > 0;
+}
+
 try {
+  const root = parseRoot(process.argv.slice(2));
+  const configFailed = checkBeadsConfig(root);
   const gitleaks = resolveGitleaks();
   if (!gitleaks) {
     console.error(
@@ -75,11 +102,10 @@ try {
     );
     process.exitCode = 1;
   } else {
-    const root = parseRoot(process.argv.slice(2));
     const result = spawnSync(gitleaks, ['detect', '--source', root, '--redact', '--no-banner'], {
       stdio: 'inherit',
     });
-    process.exitCode = result.status ?? 1;
+    process.exitCode = configFailed ? 1 : (result.status ?? 1);
   }
 } catch (error) {
   console.error(`check-secrets: ${error instanceof Error ? error.message : String(error)}`);
