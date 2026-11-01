@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 
 import type { Issue } from '@/bindings/bd';
@@ -8,6 +8,7 @@ import { useShortcuts } from '@/app/keyboard/useShortcuts';
 import { CommandPalette } from '@/app/palette/CommandPalette';
 import { buildCommands } from '@/app/palette/commands';
 import { useI18n } from '@/lib/i18n/I18nProvider';
+import { loadSidebarCollapsed, saveSidebarCollapsed } from '@/lib/shell/layout';
 import { useTheme } from '@/lib/theme/ThemeProvider';
 
 import { Sidebar } from './Sidebar';
@@ -31,8 +32,13 @@ export function Shell({
   const onIssueRoute = /^\/w\/[^/]+\/issue\//.test(location.pathname);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  // Read once at mount so a restored collapse never renders expanded first.
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(loadSidebarCollapsed);
   const refresh = onRefresh ?? (() => void reload());
+
+  useEffect(() => {
+    saveSidebarCollapsed(sidebarCollapsed);
+  }, [sidebarCollapsed]);
 
   const closeOverlay = useCallback(() => {
     setPaletteOpen(false);
@@ -200,7 +206,7 @@ export function Shell({
     <div className="flex h-screen flex-col bg-background text-foreground">
       <TopBar project={project} onRefresh={refresh} />
       <div className="flex min-h-0 flex-1">
-        <Sidebar project={project} collapsed={sidebarCollapsed} />
+        <Sidebar project={project} collapsed={sidebarCollapsed} onToggle={toggleSidebar} />
         <main className="min-w-0 flex-1 overflow-auto">
           <Outlet />
         </main>

@@ -6,6 +6,8 @@ export const en = {
   'shell.workspace.none': 'No workspace',
   'shell.workspace.noneOpen': 'No workspace open',
   'shell.sidebar': 'Sidebar',
+  'shell.sidebar.collapse': 'Collapse sidebar',
+  'shell.sidebar.expand': 'Expand sidebar',
   'shell.views': 'Views',
   'shell.app': 'App',
   'shell.statusBar': 'Status bar',

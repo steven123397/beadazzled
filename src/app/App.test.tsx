@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, expect, test, vi } from 'vitest';
 
 import type { BdStatus, Issue, SyncState, WorkspaceEntry, WorkspaceSnapshot } from '@/bindings/bd';
@@ -474,4 +474,72 @@ test('a healthy snapshot shows no missing or corrupt notices', async () => {
   await screen.findByRole('heading', { name: 'List' });
   expect(screen.queryByText(/no longer available/i)).not.toBeInTheDocument();
   expect(screen.queryByText(/damaged/i)).not.toBeInTheDocument();
+});
+
+test('ctrl+b collapses the sidebar and the choice survives a restart', async () => {
+  window.location.hash = '#/w/p1/list';
+  const api = fakeApi({ snapshot: async () => snapshot([entry('p1', 'alpha')], '/repo/p1') });
+  const first = render(<App workspaceApi={api} />);
+  await screen.findByRole('heading', { name: 'List' });
+
+  fireEvent.keyDown(window, { key: 'b', ctrlKey: true });
+
+  expect(screen.getByRole('complementary', { name: 'Sidebar' })).toHaveAttribute(
+    'data-collapsed',
+    'true'
+  );
+  expect(localStorage.getItem('beadazzled.sidebar.collapsed')).toBe('true');
+
+  first.unmount();
+  render(<App workspaceApi={api} />);
+  await screen.findByRole('heading', { name: 'List' });
+
+  expect(screen.getByRole('complementary', { name: 'Sidebar' })).toHaveAttribute(
+    'data-collapsed',
+    'true'
+  );
+});
+
+test('an unrecognised stored sidebar value falls back to expanded', async () => {
+  window.location.hash = '#/w/p1/list';
+  localStorage.setItem('beadazzled.sidebar.collapsed', 'garbage');
+
+  render(
+    <App
+      workspaceApi={fakeApi({
+        snapshot: async () => snapshot([entry('p1', 'alpha')], '/repo/p1'),
+      })}
+    />
+  );
+  await screen.findByRole('heading', { name: 'List' });
+
+  expect(screen.getByRole('complementary', { name: 'Sidebar' })).toHaveAttribute(
+    'data-collapsed',
+    'false'
+  );
+});
+
+test('a collapsed sidebar keeps labelled targets, icons and a mouse toggle', async () => {
+  window.location.hash = '#/w/p1/list';
+
+  render(
+    <App
+      workspaceApi={fakeApi({
+        snapshot: async () => snapshot([entry('p1', 'alpha')], '/repo/p1'),
+      })}
+    />
+  );
+  await screen.findByRole('heading', { name: 'List' });
+
+  const sidebar = screen.getByRole('complementary', { name: 'Sidebar' });
+  fireEvent.click(within(sidebar).getByRole('button', { name: 'Collapse sidebar' }));
+
+  expect(sidebar).toHaveAttribute('data-collapsed', 'true');
+  expect(within(sidebar).getByRole('link', { name: 'List' })).toBeInTheDocument();
+  expect(within(sidebar).getByRole('link', { name: 'Board' })).toBeInTheDocument();
+  expect(within(sidebar).getByRole('link', { name: 'Settings' })).toBeInTheDocument();
+  expect(sidebar.querySelectorAll('svg').length).toBeGreaterThanOrEqual(4);
+
+  fireEvent.click(within(sidebar).getByRole('button', { name: 'Expand sidebar' }));
+  expect(sidebar).toHaveAttribute('data-collapsed', 'false');
 });

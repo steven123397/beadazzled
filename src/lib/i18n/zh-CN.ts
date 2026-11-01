@@ -8,6 +8,8 @@ export const zhCN: Record<keyof typeof en, string> = {
   'shell.workspace.none': '未打开工作区',
   'shell.workspace.noneOpen': '未打开工作区',
   'shell.sidebar': '侧栏',
+  'shell.sidebar.collapse': '折叠侧栏',
+  'shell.sidebar.expand': '展开侧栏',
   'shell.views': '视图',
   'shell.app': '应用',
   'shell.statusBar': '状态栏',
