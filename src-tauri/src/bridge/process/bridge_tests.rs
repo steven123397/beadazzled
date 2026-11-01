@@ -19,8 +19,8 @@ use windows_sys::Win32::System::Threading::{
 };
 
 use super::{
-    workspace_lock, OutputBudget, OutputLimits, ProcessRequest, ProcessRunner, ScanBounds,
-    ScanStop, PIPE_GRACE,
+    workspace_lock, LineCursor, OutputBudget, OutputLimits, ProcessRequest, ProcessRunner,
+    ScanBounds, ScanStop, PIPE_GRACE,
 };
 use crate::bridge::argv::{argv_for, CreateSpec, WriteCommand};
 use crate::bridge::error::{map_exit, BridgeError, BridgeErrorCode};
@@ -497,6 +497,19 @@ fn separate_runners_for_one_workspace_still_serialize() {
         intervals[0].1 <= intervals[1].0,
         "calls from separate runners overlapped: {intervals:?}"
     );
+}
+
+#[test]
+fn the_line_cursor_stops_exactly_at_the_limit() {
+    let mut seen = 0;
+    let mut cursor = LineCursor {
+        max: Some(2),
+        seen: &mut seen,
+    };
+
+    assert!(!cursor.count(b"one\n"), "one line is below the limit");
+    assert!(cursor.count(b"two\n"), "the second line reaches the limit");
+    assert_eq!(seen, 2);
 }
 
 #[test]

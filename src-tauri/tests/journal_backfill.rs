@@ -14,6 +14,23 @@ fn fixture() -> String {
     fs::read_to_string(path).expect("read the journal fixture")
 }
 
+fn process_is_running(pid: u32) -> bool {
+    use windows_sys::Win32::Foundation::{CloseHandle, STILL_ACTIVE};
+    use windows_sys::Win32::System::Threading::{
+        GetExitCodeProcess, OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION,
+    };
+    unsafe {
+        let handle = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid);
+        if handle.is_null() {
+            return false;
+        }
+        let mut exit_code = 0u32;
+        let ok = GetExitCodeProcess(handle, &mut exit_code);
+        CloseHandle(handle);
+        ok != 0 && exit_code == STILL_ACTIVE as u32
+    }
+}
+
 fn workspace_with_journal(dir: &Path, lines: usize) -> PathBuf {
     let workspace = common::workspace(dir);
     let template: Vec<serde_json::Value> = fixture()
@@ -52,6 +69,7 @@ fn the_deadline_stops_the_read_and_kills_the_process() {
     let dir = common::temp_dir("backfill-deadline");
     let workspace = workspace_with_journal(&dir, 200);
     fs::write(workspace.join("journal-slow"), b"").expect("mark a slow journal");
+    fs::write(workspace.join("journal-pid"), b"").expect("mark a pid file");
     let bridge = BdBridge::new(common::fake_bd_path(), &workspace);
 
     let started = Instant::now();
@@ -70,11 +88,33 @@ fn the_deadline_stops_the_read_and_kills_the_process() {
         "the whole fixture must not be read"
     );
 
-    std::thread::sleep(Duration::from_millis(400));
+    let pid: u32 = fs::read_to_string(workspace.join("journal.pid"))
+        .expect("the fake journal wrote its pid")
+        .trim()
+        .parse()
+        .expect("the pid is a number");
     assert!(
-        !workspace.join("journal-done").exists(),
-        "the fake journal process was killed"
+        !process_is_running(pid),
+        "the fake journal process was killed, not left running"
     );
+}
+
+#[test]
+fn a_partial_line_at_the_end_is_dropped_not_an_error() {
+    let dir = common::temp_dir("backfill-partial");
+    let workspace = workspace_with_journal(&dir, 3);
+    let journal = workspace.join("journal.jsonl");
+    let contents = fs::read_to_string(&journal).expect("read the journal");
+    fs::write(&journal, contents.trim_end_matches('\n')).expect("drop the final newline");
+    let bridge = BdBridge::new(common::fake_bd_path(), &workspace);
+
+    let batch = bridge
+        .journal_backfill(0, 50_000, Duration::from_secs(2))
+        .expect("a partial tail is not an error");
+
+    assert!(!batch.stopped, "the process reached end of output");
+    assert_eq!(batch.records.len(), 2, "only complete lines are returned");
+    assert_eq!(batch.records.last().map(|record| record.seq), Some(2));
 }
 
 #[test]

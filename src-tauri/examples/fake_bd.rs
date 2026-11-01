@@ -79,6 +79,10 @@ fn main() {
                     } else if root.join("journal-split").exists() {
                         stream_journal_split();
                     } else if let Some(contents) = journal_file(workspace) {
+                        if root.join("journal-pid").exists() {
+                            fs::write(root.join("journal.pid"), process::id().to_string())
+                                .expect("write the journal pid");
+                        }
                         if root.join("journal-slow").exists() {
                             stream_journal_slow(workspace, &contents);
                         } else {

@@ -470,7 +470,8 @@ mod tests {
     use std::cell::{Cell, RefCell};
     use std::collections::VecDeque;
     use std::rc::Rc;
-    use std::sync::Mutex;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::{Arc, Mutex};
     use std::time::Duration;
 
     const TS: &str = "2026-11-01T00:00:00Z";
@@ -988,6 +989,87 @@ mod tests {
             }
         );
         assert_eq!(seqs(&sink.records), vec![1, 2]);
+    }
+
+    /// A source whose export can be repeated and whose backfills are scripted.
+    struct RebuildSource {
+        exports: AtomicUsize,
+        backfills: Mutex<VecDeque<Vec<JournalRecord>>>,
+        since: Mutex<Vec<i64>>,
+    }
+
+    impl RebuildSource {
+        fn new(batches: Vec<Vec<JournalRecord>>) -> Self {
+            Self {
+                exports: AtomicUsize::new(0),
+                backfills: Mutex::new(batches.into()),
+                since: Mutex::new(Vec::new()),
+            }
+        }
+    }
+
+    impl SyncSource for RebuildSource {
+        fn export(&self) -> Result<Vec<Issue>, BridgeError> {
+            self.exports.fetch_add(1, Ordering::SeqCst);
+            Ok(vec![issue("a")])
+        }
+
+        fn journal(&self, since: i64, _follow: bool) -> Result<Box<dyn FollowStream>, BridgeError> {
+            self.since.lock().unwrap().push(since);
+            let records = self
+                .backfills
+                .lock()
+                .unwrap()
+                .pop_front()
+                .unwrap_or_default();
+            Ok(Box::new(FakeFollow::new(vec![Ok(records)])))
+        }
+    }
+
+    #[test]
+    fn a_gap_during_the_baseline_rebuilds_from_zero() {
+        let source = Arc::new(RebuildSource::new(vec![
+            vec![record(1, "a"), record(3, "a")],
+            vec![record(1, "a"), record(2, "a"), record(3, "a")],
+        ]));
+        let mut engine = SyncEngine::new(Arc::clone(&source), SyncConfig::default());
+        let mut sink = RecordingSink::default();
+
+        assert_eq!(
+            engine.baseline(&mut sink, 0),
+            BaselineOutcome::Healthy { applied: 3 }
+        );
+
+        assert_eq!(
+            source.exports.load(Ordering::SeqCst),
+            2,
+            "the gap forces a second export"
+        );
+        assert_eq!(
+            *source.since.lock().unwrap(),
+            vec![0, 0],
+            "the rebuild restarts at zero"
+        );
+        assert_eq!(sink.snapshots.len(), 2, "the store is replaced again");
+        assert_eq!(engine.last_seq(), 3);
+    }
+
+    #[test]
+    fn a_second_gap_gives_up_instead_of_looping() {
+        let source = Arc::new(RebuildSource::new(vec![
+            vec![record(1, "a"), record(3, "a")],
+            vec![record(1, "a"), record(4, "a")],
+        ]));
+        let mut engine = SyncEngine::new(Arc::clone(&source), SyncConfig::default());
+        let mut sink = RecordingSink::default();
+
+        let outcome = engine.baseline(&mut sink, 0);
+
+        assert!(
+            matches!(outcome, BaselineOutcome::BdUnavailable(_)),
+            "a second gap must not loop forever: {outcome:?}"
+        );
+        assert_eq!(source.exports.load(Ordering::SeqCst), 2);
     }
 
     struct BackfillSource {
