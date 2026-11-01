@@ -1,6 +1,9 @@
 // Pure helpers for measuring the bridge module's line coverage from
-// `cargo llvm-cov --json` output. Kept free of process spawning so the
-// threshold logic can be unit-tested without building Rust.
+// `cargo llvm-cov --json` output. The file discovery is kept here so the CLI
+// and the tests agree on what counts as a bridge source.
+
+import { existsSync, readdirSync } from 'node:fs';
+import path from 'node:path';
 
 export const BRIDGE_COVERAGE_THRESHOLD = 80;
 
@@ -8,12 +11,23 @@ export function normalizePath(filename) {
   return filename.replaceAll('\\', '/');
 }
 
-function isBridgeSource(filename) {
+export function isBridgeSource(filename) {
   const normalized = normalizePath(filename);
   return (
     /(?:^|\/)src-tauri\/src\/bridge\//.test(normalized) ||
     /(?:^|\/)src-tauri\/src\/bridge\.rs$/.test(normalized)
   );
+}
+
+export function listBridgeSourceFiles(root) {
+  const sourceRoot = path.join(root, 'src-tauri', 'src');
+  if (!existsSync(sourceRoot)) {
+    return [];
+  }
+  return readdirSync(sourceRoot, { recursive: true })
+    .filter((file) => file.endsWith('.rs'))
+    .map((file) => path.join(sourceRoot, file))
+    .filter((absolutePath) => isBridgeSource(path.relative(root, absolutePath)));
 }
 
 export function summarizeBridgeCoverage(report) {

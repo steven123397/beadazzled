@@ -29,7 +29,7 @@
 | bridge 行覆盖 | ≥ 80% | `npm run test:rust:coverage` | 交还前 | block | 只有会真坏的那层值得设门槛 | 可运行（bridge 落地后生效） |
 | 关键 E2E | 3 条全绿 | `npm run e2e` | CI | block | 装→列表→详情→改状态 | 待接线 |
 | 依赖高危漏洞 | 0 | `npm run check:deps` | CI | block | 会随安装包分发出去 | 可运行 |
-| 安装包体积 | ≤ 15 MB | `npm run build && npm run check:size` | CI | block | Tauri 空壳 5–10MB；超过即说明选型错了 | 可运行（需先 `build:app`） |
+| 安装包体积 | ≤ 15 MB | `npm run build:app && npm run check:size` | CI | block | Tauri 空壳 5–10MB；超过即说明选型错了 | 可运行（需先 `build:app`） |
 | 冷启动→可交互 | ≤ 2.0s（P95） | `npm run measure:startup` | CI | warn | WebView2 冷启动实测量级 | 待接线 |
 | 热启动→可交互 | ≤ 800ms | 同上 | CI | warn | 双击即开是核心卖点 | 待接线 |
 | 常驻内存（1000 条票） | ≤ 150 MB | `npm run measure:memory` | CI | warn | WebView2 常见占用 | 待接线 |

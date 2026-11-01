@@ -51,7 +51,7 @@ Windows 桌面应用，成为 **beads 前端在 Windows 上的最好选择**：L
 | 架构边界 | `npm run check:boundaries` |
 | 生产构建 | `npm run build` |
 | 安装包 | `npm run build:app` |
-| 安装包体积 | `npm run build && npm run check:size` |
+| 安装包体积 | `npm run build:app && npm run check:size` |
 | E2E | `npm run e2e` |
 | 性能测量 | `npm run measure:startup` / `measure:memory` / `measure:navigation` / `measure:scroll` |
 | 发布校验 | `npm run verify:release` |

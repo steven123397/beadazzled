@@ -1,12 +1,15 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 
-import { evaluateBridgeCoverage } from '../../scripts/lib/bridge-coverage.mjs';
+import {
+  evaluateBridgeCoverage,
+  listBridgeSourceFiles,
+} from '../../scripts/lib/bridge-coverage.mjs';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const scriptPath = path.join(repoRoot, 'scripts/check-bridge-coverage.mjs');
@@ -68,6 +71,27 @@ test('a bridge module file at the crate root is counted', () => {
   const result = evaluateBridgeCoverage(report([['src-tauri/src/bridge.rs', 10, 10]]), 80);
 
   assert.equal(result.status, 'pass');
+});
+
+test('a single-file bridge module is discovered as a bridge source', () => {
+  const root = mkdtempSync(path.join(os.tmpdir(), 'beadazzled-bridge-cov-'));
+  tempRoots.push(root);
+  mkdirSync(path.join(root, 'src-tauri', 'src'), { recursive: true });
+  writeFileSync(path.join(root, 'src-tauri', 'src', 'bridge.rs'), 'pub fn run() {}\n');
+
+  const files = listBridgeSourceFiles(root);
+
+  assert.equal(files.length, 1);
+  assert.match(files[0], /bridge\.rs$/);
+});
+
+test('non-bridge Rust files are not discovered', () => {
+  const root = mkdtempSync(path.join(os.tmpdir(), 'beadazzled-bridge-cov-'));
+  tempRoots.push(root);
+  mkdirSync(path.join(root, 'src-tauri', 'src', 'sync'), { recursive: true });
+  writeFileSync(path.join(root, 'src-tauri', 'src', 'sync', 'follow.rs'), 'pub fn poll() {}\n');
+
+  assert.deepEqual(listBridgeSourceFiles(root), []);
 });
 
 test('no bridge sources is not applicable', () => {

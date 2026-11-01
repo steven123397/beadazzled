@@ -102,6 +102,10 @@ try {
           : `osv-scanner exited with status ${result.status}`
       );
     }
+    // Fail closed: findings without a JSON payload must not be read as clean.
+    if (result.status === 1 && (result.stdout ?? '').trim() === '') {
+      throw new Error('osv-scanner reported findings but produced no JSON');
+    }
 
     const audit = summarizeDependencyAudit(JSON.parse(result.stdout || '{"results":[]}'));
     const { critical, high, medium, low, unknown } = audit.counts;

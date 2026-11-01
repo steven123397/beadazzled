@@ -27,8 +27,10 @@ export default defineConfig({
   },
   envPrefix: ['VITE_', 'TAURI_ENV_*'],
   build: {
-    // WebView2 on Windows is the only target we ship in v0.1.0.
-    target: process.env.TAURI_ENV_PLATFORM === 'windows' ? 'chrome105' : 'safari13',
+    // WebView2 on Windows is the only target we ship in v0.1.0. Keep this the
+    // default so a standalone `npm run build` produces the same bundle as the
+    // Tauri-driven build.
+    target: 'chrome105',
     sourcemap: Boolean(process.env.TAURI_ENV_DEBUG),
   },
 });

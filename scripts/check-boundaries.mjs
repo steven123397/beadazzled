@@ -2,8 +2,12 @@
 // Enforces the architectural boundaries from spec/capability-map.md:
 // - only src-tauri/src/bridge may spawn processes
 // - the frontend must not spawn processes or reach the bd command layer
-// - nothing may read the embedded Dolt store directly
+// - no code may read the embedded Dolt store directly
 // - reference code from AGPL/EPL/ELv2/CC-BY-NC projects must not enter the repo
+//
+// This is a text scan, not a compiler: string concatenation, macro expansion or
+// wrapper crates (duct, xshell, ...) can still slip through. It catches the
+// conventional forms so review only has to cover the unusual ones.
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -11,25 +15,43 @@ import { fileURLToPath } from 'node:url';
 const scriptPath = fileURLToPath(import.meta.url);
 const defaultRoot = path.resolve(path.dirname(scriptPath), '..');
 
-const SCANNED_DIRECTORIES = ['src', 'src-tauri/src', 'scripts'];
 const SKIPPED_DIRECTORIES = new Set([
   'node_modules',
   'dist',
   'target',
   'gen',
   'coverage',
+  'playwright-report',
+  'test-results',
   '.git',
   '.beads',
   '.upstream',
+  '.agents',
+  '.claude',
 ]);
-const CODE_EXTENSIONS = new Set(['.ts', '.tsx', '.js', '.mjs', '.cjs', '.rs']);
+const CODE_EXTENSIONS = new Set([
+  '.ts',
+  '.tsx',
+  '.js',
+  '.jsx',
+  '.mjs',
+  '.cjs',
+  '.mts',
+  '.cts',
+  '.rs',
+]);
 
 const BANNED_LICENSE =
   /\b(?:AGPL-3\.0|AGPLv3|EPL-2\.0|EPLv2|Elastic-2\.0|ELv2)\b|CC[- ]BY[- ]NC|GNU AFFERO GENERAL PUBLIC LICENSE|Eclipse Public License|Elastic License/i;
-const FORBIDDEN_IMPORT =
-  /(?:from\s*['"](?:next(?:\/[^'"]*)?|nuqs|(?:[^'"]*\/)?mock-data(?:\/[^'"]*)?)['"]|import\s*\(\s*['"](?:next(?:\/[^'"]*)?|nuqs|(?:[^'"]*\/)?mock-data(?:\/[^'"]*)?)['"]\s*\))/;
+const REFERENCE_SPECIFIER = String.raw`(?:next(?:\/[^'"]*)?|nuqs|(?:[^'"]*\/)?mock-data(?:\/[^'"]*)?)`;
+const FORBIDDEN_IMPORT = new RegExp(
+  String.raw`(?:\bfrom\s*['"]${REFERENCE_SPECIFIER}['"]` +
+    String.raw`|\brequire\s*\(\s*['"]${REFERENCE_SPECIFIER}['"]\s*\)` +
+    String.raw`|\bimport\s*\(\s*['"]${REFERENCE_SPECIFIER}['"]\s*\)` +
+    String.raw`|\bimport\s*['"]${REFERENCE_SPECIFIER}['"])`
+);
 const CHILD_PROCESS_IMPORT =
-  /(?:from\s*['"](?:node:)?child_process['"]|require\s*\(\s*['"](?:node:)?child_process['"]\s*\))/;
+  /(?:\bfrom\s*['"](?:node:)?child_process['"]|\brequire\s*\(\s*['"](?:node:)?child_process['"]\s*\)|\bimport\s*\(\s*['"](?:node:)?child_process['"]\s*\)|\bimport\s*['"](?:node:)?child_process['"])/;
 
 function toPosix(relativePath) {
   return relativePath.split(path.sep).join('/');
@@ -44,14 +66,25 @@ function isBridgeSource(relPath) {
 }
 
 function isFrontendSource(relPath) {
-  return relPath.startsWith('src/') && !relPath.endsWith('.d.ts');
+  return relPath.startsWith('src/');
+}
+
+// `std :: process :: Command` is valid Rust; normalize before matching.
+function normalizeRustLine(line) {
+  return line.replace(/\s*::\s*/g, '::');
 }
 
 const RULES = [
   {
     id: 'rust-process-spawn',
     applies: (relPath) => isRustSource(relPath) && !isBridgeSource(relPath),
-    matches: (line) => /\b(?:std|tokio|async_std)::process::Command\b/.test(line),
+    matches: (line) => {
+      const normalized = normalizeRustLine(line);
+      return (
+        /\bprocess::Command\b/.test(normalized) ||
+        /\buse\s+(?:std|tokio|async_std)::process::\{[^}]*\bCommand\b/.test(normalized)
+      );
+    },
     message: 'process spawning is only allowed in src-tauri/src/bridge',
   },
   {
@@ -80,30 +113,29 @@ const RULES = [
   },
 ];
 
-function collectFiles(root, relativeDirectory) {
-  const absoluteDirectory = path.join(root, relativeDirectory);
-  let entries;
-  try {
-    entries = readdirSync(absoluteDirectory, { withFileTypes: true });
-  } catch {
-    return [];
-  }
-
+function collectFiles(root) {
   const files = [];
-  for (const entry of entries) {
-    const absolutePath = path.join(absoluteDirectory, entry.name);
-    const relativePath = toPosix(path.relative(root, absolutePath));
-    if (entry.isDirectory()) {
-      if (!SKIPPED_DIRECTORIES.has(entry.name)) {
-        files.push(...collectFiles(root, relativePath));
+  const visit = (absoluteDirectory) => {
+    let entries;
+    try {
+      entries = readdirSync(absoluteDirectory, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
+      const absolutePath = path.join(absoluteDirectory, entry.name);
+      if (entry.isDirectory()) {
+        if (!SKIPPED_DIRECTORIES.has(entry.name)) {
+          visit(absolutePath);
+        }
+        continue;
       }
-      continue;
+      if (entry.isFile() && CODE_EXTENSIONS.has(path.extname(entry.name))) {
+        files.push(absolutePath);
+      }
     }
-    if (!entry.isFile() || !CODE_EXTENSIONS.has(path.extname(entry.name))) {
-      continue;
-    }
-    files.push(absolutePath);
-  }
+  };
+  visit(root);
   return files;
 }
 
@@ -111,26 +143,24 @@ function scan(root) {
   const violations = [];
   let scannedFiles = 0;
 
-  for (const directory of SCANNED_DIRECTORIES) {
-    for (const absolutePath of collectFiles(root, directory)) {
-      if (path.resolve(absolutePath) === path.resolve(scriptPath)) {
-        continue;
-      }
-      const relPath = toPosix(path.relative(root, absolutePath));
-      scannedFiles += 1;
-      const lines = readFileSync(absolutePath, 'utf8').split(/\r?\n/);
-      lines.forEach((line, index) => {
-        for (const rule of RULES) {
-          if (rule.applies(relPath) && rule.matches(line)) {
-            violations.push({
-              location: `${relPath}:${index + 1}`,
-              rule: rule.id,
-              message: rule.message,
-            });
-          }
-        }
-      });
+  for (const absolutePath of collectFiles(root)) {
+    if (path.resolve(absolutePath) === path.resolve(scriptPath)) {
+      continue;
     }
+    const relPath = toPosix(path.relative(root, absolutePath));
+    scannedFiles += 1;
+    const lines = readFileSync(absolutePath, 'utf8').split(/\r?\n/);
+    lines.forEach((line, index) => {
+      for (const rule of RULES) {
+        if (rule.applies(relPath) && rule.matches(line)) {
+          violations.push({
+            location: `${relPath}:${index + 1}`,
+            rule: rule.id,
+            message: rule.message,
+          });
+        }
+      }
+    });
   }
 
   return { violations, scannedFiles };

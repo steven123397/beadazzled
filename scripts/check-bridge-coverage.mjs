@@ -3,25 +3,14 @@
 // cargo-llvm-cov. Vitest coverage cannot see the Rust bridge module, so the
 // frontend and bridge thresholds are measured separately (ADR-0003).
 import { spawnSync } from 'node:child_process';
-import { existsSync, readdirSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { evaluateBridgeCoverage } from './lib/bridge-coverage.mjs';
+import { evaluateBridgeCoverage, listBridgeSourceFiles } from './lib/bridge-coverage.mjs';
 
 const scriptPath = fileURLToPath(import.meta.url);
 const defaultRoot = path.resolve(path.dirname(scriptPath), '..');
 const MAX_BUFFER_BYTES = 512 * 1024 * 1024;
-
-function hasBridgeSources(root) {
-  const bridgeDirectory = path.join(root, 'src-tauri', 'src', 'bridge');
-  if (!existsSync(bridgeDirectory)) {
-    return false;
-  }
-  return readdirSync(bridgeDirectory, { recursive: true, withFileTypes: true }).some(
-    (entry) => entry.isFile() && entry.name.endsWith('.rs')
-  );
-}
 
 function parseRoot(argv) {
   const flagIndex = argv.indexOf('--root');
@@ -38,7 +27,7 @@ function parseRoot(argv) {
 try {
   const root = parseRoot(process.argv.slice(2));
 
-  if (!hasBridgeSources(root)) {
+  if (listBridgeSourceFiles(root).length === 0) {
     console.log(
       'check-bridge-coverage: no bridge sources yet; the 80% threshold applies once ' +
         'the bridge module lands (bza-3ej).'

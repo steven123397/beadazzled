@@ -12,4 +12,5 @@ src-tauri/app-icon.svg
 .upstream
 .agents
 .claude
+tests/fixtures
 LICENSE

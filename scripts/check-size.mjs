@@ -25,7 +25,7 @@ function collectInstallers(root) {
       continue;
     }
     for (const entry of entries) {
-      if (!entry.isFile() || !INSTALLER_EXTENSIONS.has(path.extname(entry.name))) {
+      if (!entry.isFile() || !INSTALLER_EXTENSIONS.has(path.extname(entry.name).toLowerCase())) {
         continue;
       }
       const absolutePath = path.join(absoluteDirectory, entry.name);
