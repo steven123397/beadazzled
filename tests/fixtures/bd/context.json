@@ -1,0 +1,14 @@
+{
+  "backend": "dolt",
+  "bd_version": "1.3.2",
+  "beads_dir": "<workspace>.beads",
+  "cwd_repo_root": "<workspace>",
+  "database": "fx",
+  "dolt_mode": "embedded",
+  "is_redirected": false,
+  "is_worktree": false,
+  "project_id": "00000000-0000-4000-8000-000000000000",
+  "repo_root": "<workspace>",
+  "role": "maintainer",
+  "schema_version": 1
+}

@@ -16,7 +16,7 @@
     "test:rust": "cargo test --manifest-path src-tauri/Cargo.toml",
     "test:rust:coverage": "node scripts/check-bridge-coverage.mjs",
     "test:quality": "node --test \"tests/**/*.node-test.mjs\"",
-    "gen:bindings": "cargo test --manifest-path src-tauri/Cargo.toml export_bindings",
+    "gen:bindings": "node scripts/gen-bindings.mjs",
     "check:boundaries": "node scripts/check-boundaries.mjs",
     "check:secrets": "node scripts/check-secrets.mjs",
     "check:deps": "node scripts/check-deps.mjs",
