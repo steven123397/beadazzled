@@ -63,13 +63,18 @@ fn main() {
                 }
                 "export" => print_fixture("export-relations.json"),
                 "events" => {
-                    let workspace = workspace.to_lowercase();
-                    if workspace.contains("journal-disabled") {
+                    let lowercase = workspace.to_lowercase();
+                    if lowercase.contains("journal-disabled") {
                         eprintln!("note: the events journal is disabled for this workspace");
-                    } else if workspace.contains("journal-truncated") {
+                    } else if lowercase.contains("journal-truncated") {
                         println!(
                             "{{\"code\":\"events_journal_truncated\",\"since\":1,\"floor\":5,\"head\":9}}"
                         );
+                    } else if let Some(contents) = journal_file(workspace) {
+                        io::stdout()
+                            .write_all(&contents)
+                            .expect("write journal file");
+                        io::stdout().flush().expect("flush journal file");
                     } else {
                         print_fixture("events-writes.jsonl");
                     }
@@ -264,6 +269,12 @@ fn print_fixture(name: &str) {
 
 /// Prints a fixture with every `<workspace>` placeholder replaced by the
 /// `-C` argument, so `context` reports the workspace the caller asked about.
+/// A workspace-local `journal.jsonl` stands in for bd's journal in the data
+/// plane integration test; appending a line simulates the record a write emits.
+fn journal_file(workspace: &str) -> Option<Vec<u8>> {
+    fs::read(std::path::Path::new(workspace).join("journal.jsonl")).ok()
+}
+
 fn print_fixture_with_workspace(name: &str, workspace: &str) {
     let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../tests/fixtures/bd")

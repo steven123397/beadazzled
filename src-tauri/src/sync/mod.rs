@@ -27,6 +27,16 @@ impl SyncSource for BdBridge {
     }
 }
 
+impl<T: SyncSource + ?Sized> SyncSource for std::sync::Arc<T> {
+    fn export(&self) -> Result<Vec<Issue>, BridgeError> {
+        (**self).export()
+    }
+
+    fn journal(&self, since: i64, follow: bool) -> Result<Box<dyn FollowStream>, BridgeError> {
+        (**self).journal(since, follow)
+    }
+}
+
 impl FollowStream for JournalReader {
     fn next_batch(&mut self) -> Result<Vec<JournalRecord>, BridgeError> {
         JournalReader::next_batch(self)
