@@ -121,14 +121,18 @@ fn journal_fixture_parses_every_operation_kind() {
     assert_eq!(records.len(), 13);
     assert_eq!(records.first().expect("records exist").seq, 1);
 
-    let ops: Vec<JournalOp> = records.iter().map(|record| record.op).collect();
+    let ops: Vec<&str> = records.iter().map(|record| record.op.as_str()).collect();
     for op in JournalOp::ALL {
-        assert!(ops.contains(&op), "missing journal op {op:?}");
+        assert!(
+            ops.contains(&op.as_wire()),
+            "missing journal op {:?}",
+            op.as_wire()
+        );
     }
 
     let deleted = records
         .iter()
-        .find(|record| record.op == JournalOp::Delete)
+        .find(|record| record.op_kind() == Some(JournalOp::Delete))
         .expect("the fixture has a delete record");
     assert!(deleted.issue.is_none());
     assert!(deleted.actor.as_deref() == Some("fixture-user"));
@@ -138,7 +142,7 @@ fn journal_fixture_parses_every_operation_kind() {
 
     let dep_add = records
         .iter()
-        .find(|record| record.op == JournalOp::DepAdd)
+        .find(|record| record.op_kind() == Some(JournalOp::DepAdd))
         .and_then(|record| record.dep.as_ref())
         .expect("the fixture has a dep_add record");
     assert_eq!(dep_add.kind, "blocks");
@@ -147,11 +151,24 @@ fn journal_fixture_parses_every_operation_kind() {
 
     let comment = records
         .iter()
-        .find(|record| record.op == JournalOp::Comment)
+        .find(|record| record.op_kind() == Some(JournalOp::Comment))
         .and_then(|record| record.comment.as_ref())
         .expect("the fixture has a comment record");
     assert_eq!(comment.author, "fixture-user");
     assert_eq!(comment.source.as_deref(), Some("structured"));
+}
+
+#[test]
+fn journal_op_accessors_match_the_wire_strings() {
+    for op in JournalOp::ALL {
+        assert_eq!(
+            serde_json::to_value(op).expect("a known op serializes"),
+            json!(op.as_wire())
+        );
+        assert_eq!(JournalOp::from_wire(op.as_wire()), Some(op));
+    }
+
+    assert_eq!(JournalOp::from_wire("reopen"), None);
 }
 
 #[test]
@@ -160,7 +177,7 @@ fn journal_issue_payloads_default_fields_bd_omits() {
     let created = records
         .iter()
         .find(|record| {
-            record.op == JournalOp::Create
+            record.op_kind() == Some(JournalOp::Create)
                 && record
                     .issue
                     .as_ref()
@@ -178,7 +195,7 @@ fn journal_issue_payloads_default_fields_bd_omits() {
 
     let blocked = records
         .iter()
-        .find(|record| record.op == JournalOp::DepAdd)
+        .find(|record| record.op_kind() == Some(JournalOp::DepAdd))
         .and_then(|record| record.issue.as_ref())
         .expect("the dep_add record carries the issue");
     assert_eq!(

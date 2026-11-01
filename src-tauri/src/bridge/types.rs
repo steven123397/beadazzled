@@ -122,7 +122,8 @@ pub struct Dependency {
     pub extra: ExtraFields,
 }
 
-/// The seven record kinds emitted by `bd events tail --json`.
+/// The journal record kinds this build understands. bd may add more; the raw
+/// `op` string on [`JournalRecord`] keeps those values instead of failing.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "snake_case")]
 pub enum JournalOp {
@@ -145,6 +146,25 @@ impl JournalOp {
         Self::DepRemove,
         Self::Comment,
     ];
+
+    /// The `op` string emitted by `bd events tail --json`.
+    pub const fn as_wire(self) -> &'static str {
+        match self {
+            Self::Create => "create",
+            Self::Update => "update",
+            Self::Close => "close",
+            Self::Delete => "delete",
+            Self::DepAdd => "dep_add",
+            Self::DepRemove => "dep_remove",
+            Self::Comment => "comment",
+        }
+    }
+
+    /// Classifies a wire `op`; `None` for an operation this build does not
+    /// know yet.
+    pub fn from_wire(op: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|known| known.as_wire() == op)
+    }
 }
 
 /// The dependency payload carried by `dep_add` / `dep_remove` journal rows.
@@ -181,7 +201,10 @@ pub struct JournalRecord {
     #[ts(type = "number")]
     pub seq: i64,
     pub ts: String,
-    pub op: JournalOp,
+    /// The raw operation string. Unknown values from a newer bd are kept
+    /// verbatim; consumers treat them as no-ops while still advancing their
+    /// sequence cursor.
+    pub op: String,
     pub issue_id: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
@@ -196,6 +219,15 @@ pub struct JournalRecord {
     pub comment: Option<JournalComment>,
     #[serde(flatten)]
     pub extra: ExtraFields,
+}
+
+impl JournalRecord {
+    /// The typed view of [`JournalRecord::op`]; `None` for an operation this
+    /// build does not know yet. bd can add journal operations between
+    /// releases, and one unknown op must not fail the rest of the stream.
+    pub fn op_kind(&self) -> Option<JournalOp> {
+        JournalOp::from_wire(&self.op)
+    }
 }
 
 /// The subset of `bd context --json` the app relies on.

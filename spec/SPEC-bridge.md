@@ -64,7 +64,7 @@ export type Dependency = {
 export type JournalRecord = {
   seq: number;
   ts: string;
-  op: 'create' | 'update' | 'close' | 'delete' | 'dep_add' | 'dep_remove' | 'comment';
+  op: string;                    // 原始字符串；已知值见导出的 JournalOp，未知 op 原样保留
   issue_id: string;
   actor?: string;
   issue: Issue | null;          // delete 时为 null
@@ -147,6 +147,7 @@ pub enum WriteCommand {
 
 - **export**：JSONL，逐行解析；空行跳过；某行 JSON 失败 → 整次失败并报告行号（不返回部分数据）。末行无换行视为截断 → `BD_PARSE_FAILED`。
 - **journal**：逐行流式解析；chunk 边界处的不完整行必须缓冲到下一块；单行上限 16 MiB，超限 → `BD_OUTPUT_TOO_LARGE`；`follow` 模式下进程正常退出时，残留半行丢弃但记录一次警告；非零退出 → `BD_EXIT_NONZERO`。
+- **journal 未知 op**：`op` 以原始字符串保留，bd 新增操作不会让该行或后续行失败；`op_kind()` 只在七种已知值上返回类型，未知 op 的记录由 sync 忽略但仍推进 seq。
 - **journal 关闭**：实测 `bd events tail --json` 在 journal 关闭时退出码 0、stdout 为空、stderr 打一行 `note: the events journal is disabled...` → 映射 `JOURNAL_DISABLED`。识别依据为 stderr 包含 `events journal is disabled`；未知 stderr 不得猜测。
 - **journal 裁剪**：stderr 或 stdout 中的 JSON 含 `{"code":"events_journal_truncated","since":N,"floor":F,"head":H}` → `JOURNAL_TRUNCATED`，detail 带 `since/floor/head`。
 - **版本**：`bd --version`（不带 `-C`）形如 `bd version 1.3.2 (9b65b9e19)`；解析 semver，< 1.3.2 → `BD_VERSION_UNSUPPORTED`。
@@ -189,6 +190,7 @@ pub enum WriteCommand {
 12. **短调用串行**：同一工作区同时触发 refresh export 与 write 时，fake_bd 记录到的调用不重叠；follow 进程不在信号量内（可在其运行时完成 export）。
 13. **迁移错误**：注入 `pending schema migration` 的 stderr → `BD_SCHEMA_MISMATCH`，错误 detail 保留原文提示。
 14. **门面**：sync/writes/workspace 只经 `BdBridge` 的 `version/context/export/journal/write/config_get` 访问 bd；`BdBridge::version` 不带 `-C`；`journal(follow=true)` 返回可增量读取的 `JournalReader`。
+15. **未知 op 前向兼容**：注入 `op: "reopen"` 的 journal 行，解析成功且后续行继续解析；`op` 原样保留，`op_kind()` 为 `None`。
 
 ## Module Commands
 

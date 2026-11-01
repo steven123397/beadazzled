@@ -6,7 +6,7 @@
 use beadazzled_lib::bridge::{
     map_exit,
     parse::{journal_disabled, journal_truncated, parse_export, JournalStream},
-    BridgeError, BridgeErrorCode,
+    BridgeError, BridgeErrorCode, JournalOp,
 };
 use serde_json::Value;
 
@@ -133,6 +133,28 @@ fn journal_stream_returns_complete_records_and_keeps_the_tail() {
     let tail = stream.take_partial().expect("the partial line is kept");
     assert_eq!(tail.as_slice(), &second.as_bytes()[..half]);
     assert!(!stream.has_partial());
+}
+
+#[test]
+fn journal_stream_keeps_unknown_ops_verbatim_and_keeps_reading() {
+    let chunk = concat!(
+        r#"{"seq":1,"ts":"2026-11-01T00:00:00Z","op":"reopen","issue_id":"bza-1","issue":null}"#,
+        "\n",
+        r#"{"seq":2,"ts":"2026-11-01T00:00:01Z","op":"create","issue_id":"bza-2","issue":null}"#,
+        "\n"
+    );
+
+    let mut stream = JournalStream::new();
+    let records = stream
+        .push(chunk.as_bytes())
+        .expect("an operation this build does not know must not fail the stream");
+
+    assert_eq!(records.len(), 2);
+    assert_eq!(records[0].op, "reopen");
+    assert_eq!(records[0].op_kind(), None);
+    assert_eq!(records[0].seq, 1);
+    assert_eq!(records[1].op, "create");
+    assert_eq!(records[1].op_kind(), Some(JournalOp::Create));
 }
 
 #[test]

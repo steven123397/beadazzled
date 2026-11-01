@@ -29,7 +29,13 @@ export type JournalRecord = {
  * bd assigns int64 sequence numbers; JS numbers are exact well past any
  * realistic journal head, and the frontend contract uses `number`.
  */
-seq: number, ts: string, op: JournalOp, issue_id: string, actor?: string, 
+seq: number, ts: string, 
+/**
+ * The raw operation string. Unknown values from a newer bd are kept
+ * verbatim; consumers treat them as no-ops while still advancing their
+ * sequence cursor.
+ */
+op: string, issue_id: string, actor?: string, 
 /**
  * Full issue state after the mutation; `null` on delete.
  */
