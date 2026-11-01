@@ -7,6 +7,8 @@ import type { Shortcut, ShortcutContext } from '@/app/keyboard/types';
 import { useShortcuts } from '@/app/keyboard/useShortcuts';
 import { CommandPalette } from '@/app/palette/CommandPalette';
 import { buildCommands } from '@/app/palette/commands';
+import { useI18n } from '@/lib/i18n/I18nProvider';
+import { useTheme } from '@/lib/theme/ThemeProvider';
 
 import { Sidebar } from './Sidebar';
 import { StatusBar } from './StatusBar';
@@ -14,6 +16,8 @@ import { TopBar } from './TopBar';
 import { activeWorkspace, useWorkspaceContext } from './WorkspaceProvider';
 
 export function Shell({ issues = [] }: { issues?: readonly Issue[] }) {
+  const { t, language, setLanguage } = useI18n();
+  const { preference, setPreference } = useTheme();
   const { snapshot, bd, reload } = useWorkspaceContext();
   const navigate = useNavigate();
   const project = activeWorkspace(snapshot);
@@ -29,14 +33,15 @@ export function Shell({ issues = [] }: { issues?: readonly Issue[] }) {
   const toggleSidebar = useCallback(() => setSidebarCollapsed((collapsed) => !collapsed), []);
 
   const copyDiagnostics = useCallback(() => {
+    const version = bd?.kind === 'ready' ? bd.version : (bd?.kind ?? 'unknown');
     const lines = [
-      `bd: ${bd?.kind === 'ready' ? bd.version : (bd?.kind ?? 'unknown')}`,
-      `workspace: ${project?.path ?? 'none'}`,
-      `projectId: ${project?.projectId ?? 'none'}`,
-      `view: ${window.location.hash}`,
+      t('diagnostics.bd', { version }),
+      t('diagnostics.workspace', { path: project?.path ?? '-' }),
+      t('diagnostics.project', { id: project?.projectId ?? '-' }),
+      t('diagnostics.view', { view: window.location.hash || '#/' }),
     ];
     void navigator.clipboard?.writeText(lines.join('\n'));
-  }, [bd, project]);
+  }, [bd, project, t]);
 
   const context: ShortcutContext = {
     navigate,
@@ -52,14 +57,14 @@ export function Shell({ issues = [] }: { issues?: readonly Issue[] }) {
       {
         id: 'palette',
         keys: 'mod+k',
-        label: 'Command palette',
+        labelKey: 'shortcut.palette',
         group: 'General',
         run: (ctx) => ctx.openPalette(),
       },
       {
         id: 'close-overlay',
         keys: 'escape',
-        label: 'Close overlay',
+        labelKey: 'shortcut.closeOverlay',
         group: 'General',
         when: () => overlayOpen,
         run: (ctx) => ctx.closeOverlay(),
@@ -67,7 +72,7 @@ export function Shell({ issues = [] }: { issues?: readonly Issue[] }) {
       {
         id: 'toggle-sidebar',
         keys: 'mod+b',
-        label: 'Toggle sidebar',
+        labelKey: 'shortcut.toggleSidebar',
         group: 'Views',
         when: () => !overlayOpen,
         run: (ctx) => ctx.toggleSidebar(),
@@ -75,7 +80,7 @@ export function Shell({ issues = [] }: { issues?: readonly Issue[] }) {
       {
         id: 'refresh',
         keys: 'mod+r',
-        label: 'Refresh data',
+        labelKey: 'shortcut.refresh',
         group: 'Data',
         when: () => !overlayOpen,
         run: (ctx) => ctx.refresh(),
@@ -83,7 +88,7 @@ export function Shell({ issues = [] }: { issues?: readonly Issue[] }) {
       {
         id: 'help',
         keys: '?',
-        label: 'Keyboard shortcuts',
+        labelKey: 'shortcut.help',
         group: 'Help',
         when: () => !overlayOpen,
         run: () => setHelpOpen(true),
@@ -96,7 +101,7 @@ export function Shell({ issues = [] }: { issues?: readonly Issue[] }) {
         {
           id: 'go-list',
           keys: ['g', 'l'],
-          label: 'Go to List',
+          labelKey: 'shortcut.list',
           group: 'Navigation',
           when: () => !overlayOpen,
           run: (ctx) => ctx.navigate(`/w/${projectId}/list`),
@@ -104,7 +109,7 @@ export function Shell({ issues = [] }: { issues?: readonly Issue[] }) {
         {
           id: 'go-board',
           keys: ['g', 'b'],
-          label: 'Go to Board',
+          labelKey: 'shortcut.board',
           group: 'Navigation',
           when: () => !overlayOpen,
           run: (ctx) => ctx.navigate(`/w/${projectId}/board`),
@@ -112,7 +117,7 @@ export function Shell({ issues = [] }: { issues?: readonly Issue[] }) {
         {
           id: 'list',
           keys: 'mod+1',
-          label: 'Go to List',
+          labelKey: 'shortcut.list',
           group: 'Navigation',
           when: () => !overlayOpen,
           run: (ctx) => ctx.navigate(`/w/${projectId}/list`),
@@ -120,7 +125,7 @@ export function Shell({ issues = [] }: { issues?: readonly Issue[] }) {
         {
           id: 'board',
           keys: 'mod+2',
-          label: 'Go to Board',
+          labelKey: 'shortcut.board',
           group: 'Navigation',
           when: () => !overlayOpen,
           run: (ctx) => ctx.navigate(`/w/${projectId}/board`),
@@ -131,7 +136,7 @@ export function Shell({ issues = [] }: { issues?: readonly Issue[] }) {
     list.push({
       id: 'go-settings',
       keys: ['g', 's'],
-      label: 'Go to Settings',
+      labelKey: 'shortcut.settings',
       group: 'Navigation',
       when: () => !overlayOpen,
       run: (ctx) => ctx.navigate('/settings'),
@@ -149,12 +154,28 @@ export function Shell({ issues = [] }: { issues?: readonly Issue[] }) {
         refresh: () => void reload(),
         copyDiagnostics,
         project,
+        t,
+        theme: preference,
+        setTheme: setPreference,
+        language,
+        setLanguage,
       }),
-    [issues, navigate, reload, copyDiagnostics, project]
+    [
+      issues,
+      navigate,
+      reload,
+      copyDiagnostics,
+      project,
+      t,
+      preference,
+      setPreference,
+      language,
+      setLanguage,
+    ]
   );
 
   return (
-    <div className="flex h-screen flex-col bg-neutral-950 text-neutral-100">
+    <div className="flex h-screen flex-col bg-background text-foreground">
       <TopBar project={project} />
       <div className="flex min-h-0 flex-1">
         <Sidebar project={project} collapsed={sidebarCollapsed} />

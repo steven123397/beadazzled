@@ -23,7 +23,7 @@ test('runs a registered shortcut on keydown', () => {
   const run = vi.fn();
   render(
     <Harness
-      shortcuts={[{ id: 'help', keys: '?', label: 'Help', group: 'Help', run }]}
+      shortcuts={[{ id: 'help', keys: '?', labelKey: 'shortcut.help', group: 'Help', run }]}
       ctx={context()}
     />
   );
@@ -37,7 +37,7 @@ test('does not run a single-key shortcut while an input has focus', () => {
   const run = vi.fn();
   render(
     <Harness
-      shortcuts={[{ id: 'help', keys: '?', label: 'Help', group: 'Help', run }]}
+      shortcuts={[{ id: 'help', keys: '?', labelKey: 'shortcut.help', group: 'Help', run }]}
       ctx={context()}
     />
   );
@@ -53,7 +53,9 @@ test('still runs modifier shortcuts inside an input', () => {
   const run = vi.fn();
   render(
     <Harness
-      shortcuts={[{ id: 'palette', keys: 'mod+k', label: 'Palette', group: 'General', run }]}
+      shortcuts={[
+        { id: 'palette', keys: 'mod+k', labelKey: 'shortcut.palette', group: 'General', run },
+      ]}
       ctx={context()}
     />
   );
@@ -74,7 +76,7 @@ test('runs a chord across two key presses and gives it the context', () => {
         {
           id: 'go-list',
           keys: ['g', 'l'],
-          label: 'Go to List',
+          labelKey: 'shortcut.list',
           group: 'Navigation',
           run: (context) => context.navigate('/list'),
         },

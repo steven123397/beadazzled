@@ -1,0 +1,57 @@
+:root {
+  color-scheme: light;
+
+  --background: #f9f8f9;
+  --foreground: #282a30;
+  --card: #ffffff;
+  --muted: #f1f0f2;
+  --muted-foreground: #6f6e77;
+  --border: #e9e8ea;
+  --input: #dcdbdd;
+  --primary: #5e6ad2;
+  --primary-foreground: #ffffff;
+  --ring: #7170ff;
+  --destructive: #c4362f;
+  --warning: #9a6400;
+  --success: #1d7a4a;
+
+  --radius: 8px;
+  --row-height: 36px;
+  --ui-font: 13px;
+  --doc-font: 15px;
+  --doc-leading: 1.65;
+  --doc-measure: 72ch;
+}
+
+.dark {
+  color-scheme: dark;
+
+  --background: #08090a;
+  --foreground: #f7f8f8;
+  --card: #0f1011;
+  --muted: #1c1c1f;
+  --muted-foreground: #8a8f98;
+  --border: #23252a;
+  --input: #34343a;
+  --primary: #5e6ad2;
+  --ring: #7170ff;
+  /* #c4362f only reaches 3.7:1 on the dark background; error text is 12px. */
+  --destructive: #f87171;
+}
+
+/* Tailwind v4 reads these to expose bg-background, text-muted-foreground, ... */
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-ring: var(--ring);
+  --color-destructive: var(--destructive);
+  --color-warning: var(--warning);
+  --color-success: var(--success);
+}

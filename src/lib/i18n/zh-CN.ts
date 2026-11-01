@@ -1,0 +1,82 @@
+import type { en } from './en';
+
+/** Simplified Chinese catalog. The type keeps it in sync with `en`. */
+export const zhCN: Record<keyof typeof en, string> = {
+  'app.name': 'beadazzled',
+
+  'shell.refresh': '刷新',
+  'shell.workspace.none': '未打开工作区',
+  'shell.workspace.noneOpen': '未打开工作区',
+  'shell.sidebar': '侧栏',
+  'shell.views': '视图',
+  'shell.app': '应用',
+  'shell.statusBar': '状态栏',
+
+  'nav.list': '列表',
+  'nav.board': '看板',
+  'nav.settings': '设置',
+
+  'welcome.title': '欢迎使用 beadazzled',
+  'welcome.retry': '重试',
+  'welcome.checking': '正在检查 bd…',
+  'welcome.noWorkspace': '添加一个 beads 工作区即可开始。',
+  'welcome.loading': '工作区仍在加载。',
+  'welcome.bdMissing': '未找到 bd。请安装 bd，或在设置中指定路径。',
+  'welcome.bdUnsupported': 'bd {found} 低于要求的 {min}。请升级 bd 后继续。',
+
+  'status.loadingWorkspace': '正在加载工作区',
+  'status.bdUnknown': 'bd 未知',
+  'status.bdVersion': 'bd {version}',
+  'status.loadingIssues': '正在加载票',
+  'status.loadingJournal': '正在加载日志',
+  'status.live': '实时',
+  'status.journalOff': '日志已关闭',
+  'status.caughtUp': '已追平',
+  'status.rebuilding': '正在重建',
+  'status.reconnecting': '正在重连（第 {attempt} 次）',
+  'status.bdUnavailable': 'bd 不可用',
+
+  'placeholder.later': '该视图将在后续阶段提供。',
+  'placeholder.issue': '票 {id}',
+
+  'error.title': '出错了',
+  'error.copy': '复制诊断信息',
+
+  'keyboard.title': '键盘快捷键',
+  'keyboard.close': '关闭',
+  'keyboard.group.General': '通用',
+  'keyboard.group.Navigation': '导航',
+  'keyboard.group.Views': '视图',
+  'keyboard.group.Data': '数据',
+  'keyboard.group.Help': '帮助',
+
+  'shortcut.palette': '命令面板',
+  'shortcut.closeOverlay': '关闭覆盖层',
+  'shortcut.toggleSidebar': '折叠/展开侧栏',
+  'shortcut.refresh': '刷新数据',
+  'shortcut.help': '键盘快捷键',
+  'shortcut.list': '前往列表',
+  'shortcut.board': '前往看板',
+  'shortcut.settings': '前往设置',
+
+  'palette.title': '命令面板',
+  'palette.placeholder': '搜索命令与票',
+  'palette.empty': '没有匹配的命令',
+  'palette.group.Navigation': '导航',
+  'palette.group.Actions': '动作',
+  'palette.group.Issues': '票',
+  'palette.diagnostics': '复制诊断信息',
+  'palette.theme': '主题：{theme}',
+  'palette.language': '语言：{language}',
+
+  'theme.light': '浅色',
+  'theme.dark': '深色',
+  'theme.system': '跟随系统',
+  'language.en': 'English',
+  'language.zh-CN': '中文',
+
+  'diagnostics.bd': 'bd：{version}',
+  'diagnostics.workspace': '工作区：{path}',
+  'diagnostics.project': 'projectId：{id}',
+  'diagnostics.view': '视图：{view}',
+};

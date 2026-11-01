@@ -1,10 +1,12 @@
+import type { MessageKey } from '@/lib/i18n';
+
 export type ShortcutGroup = 'General' | 'Navigation' | 'Views' | 'Data' | 'Help';
 
 export type Shortcut = {
   id: string;
   /** `'mod+k'` or a chord like `['g', 'l']`; `mod` means Ctrl on Windows. */
   keys: string | readonly string[];
-  label: string;
+  labelKey: MessageKey;
   group: ShortcutGroup;
   /** Single-key shortcuts are suppressed in text fields unless this is true. */
   allowInInput?: boolean;

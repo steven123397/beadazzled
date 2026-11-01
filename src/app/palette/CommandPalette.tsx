@@ -1,6 +1,9 @@
 import { Command } from 'cmdk';
 import { useState } from 'react';
 
+import { useI18n } from '@/lib/i18n/I18nProvider';
+import type { MessageKey } from '@/lib/i18n';
+
 import { GROUP_ORDER, rankCommands, type CommandItem } from './commands';
 
 const RESULT_LIMIT = 50;
@@ -12,6 +15,7 @@ export function CommandPalette({
   commands: readonly CommandItem[];
   onClose: () => void;
 }) {
+  const { t } = useI18n();
   const [query, setQuery] = useState('');
   const results = rankCommands(commands, query, RESULT_LIMIT);
 
@@ -19,7 +23,7 @@ export function CommandPalette({
     <div
       role="dialog"
       aria-modal="true"
-      aria-label="Command palette"
+      aria-label={t('palette.title')}
       className="fixed inset-0 z-30 flex items-start justify-center bg-black/60 p-6"
       onKeyDown={(event) => {
         if (event.key === 'Escape') {
@@ -36,18 +40,18 @@ export function CommandPalette({
       <Command
         shouldFilter={false}
         loop
-        className="w-full max-w-md overflow-hidden rounded-lg border border-neutral-800 bg-neutral-950 text-neutral-100"
+        className="w-full max-w-md overflow-hidden rounded-lg border border-border bg-card text-foreground"
       >
         <Command.Input
           autoFocus
           value={query}
           onValueChange={setQuery}
-          placeholder="Search commands and tickets"
-          className="w-full border-b border-neutral-800 bg-transparent px-3 py-2 text-sm outline-none"
+          placeholder={t('palette.placeholder')}
+          className="w-full border-b border-border bg-transparent px-3 py-2 text-sm outline-none"
         />
         <Command.List className="max-h-80 overflow-auto p-1">
-          <Command.Empty className="px-3 py-2 text-sm text-neutral-500">
-            No matching commands
+          <Command.Empty className="px-3 py-2 text-sm text-muted-foreground">
+            {t('palette.empty')}
           </Command.Empty>
           {GROUP_ORDER.map((group) => {
             const items = results.filter((command) => command.group === group);
@@ -57,8 +61,8 @@ export function CommandPalette({
             return (
               <Command.Group
                 key={group}
-                heading={group}
-                className="px-1 py-1 text-xs text-neutral-500"
+                heading={t(`palette.group.${group}` as MessageKey)}
+                className="px-1 py-1 text-xs text-muted-foreground"
               >
                 {items.map((command) => (
                   <Command.Item
@@ -68,11 +72,13 @@ export function CommandPalette({
                       command.run();
                       onClose();
                     }}
-                    className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-sm text-neutral-200 data-[selected=true]:bg-neutral-800"
+                    className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-sm text-foreground data-[selected=true]:bg-muted"
                   >
                     <span className="min-w-0 flex-1 truncate">{command.title}</span>
                     {command.subtitle === undefined ? null : (
-                      <span className="font-mono text-xs text-neutral-500">{command.subtitle}</span>
+                      <span className="font-mono text-xs text-muted-foreground">
+                        {command.subtitle}
+                      </span>
                     )}
                   </Command.Item>
                 ))}

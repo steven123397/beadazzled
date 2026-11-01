@@ -7,11 +7,13 @@ function Boom(): never {
   throw new Error('render exploded');
 }
 
+const labels = { title: 'Something went wrong', copyLabel: 'Copy diagnostics' };
+
 test('catches a render error and shows the message instead of a blank window', () => {
   vi.spyOn(console, 'error').mockImplementation(() => undefined);
 
   render(
-    <ErrorBoundary>
+    <ErrorBoundary {...labels}>
       <Boom />
     </ErrorBoundary>
   );
@@ -22,7 +24,7 @@ test('catches a render error and shows the message instead of a blank window', (
 
 test('renders children when nothing throws', () => {
   render(
-    <ErrorBoundary>
+    <ErrorBoundary {...labels}>
       <p>all good</p>
     </ErrorBoundary>
   );

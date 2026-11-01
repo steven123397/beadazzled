@@ -1,4 +1,6 @@
 import type { Issue } from '@/bindings/bd';
+import { LANGUAGES, type Language, type MessageKey } from '@/lib/i18n';
+import { nextTheme, type Theme } from '@/lib/theme/theme';
 
 export type CommandGroup = 'Navigation' | 'Actions' | 'Issues';
 
@@ -12,17 +14,25 @@ export type CommandItem = {
   run: () => void;
 };
 
+export type Translate = (key: MessageKey, vars?: Record<string, string | number>) => string;
+
 export type PaletteContext = {
   navigate: (path: string) => void;
   refresh: () => void;
   copyDiagnostics: () => void;
   project: { projectId: string } | null;
+  t: Translate;
+  theme: Theme;
+  setTheme: (theme: Theme) => void;
+  language: Language;
+  setLanguage: (language: Language) => void;
 };
 
 export const GROUP_ORDER: CommandGroup[] = ['Navigation', 'Actions', 'Issues'];
 
 /** Builds the palette's static commands plus one entry per known ticket. */
 export function buildCommands(issues: readonly Issue[], context: PaletteContext): CommandItem[] {
+  const { t } = context;
   const commands: CommandItem[] = [];
 
   if (context.project !== null) {
@@ -30,14 +40,14 @@ export function buildCommands(issues: readonly Issue[], context: PaletteContext)
     commands.push(
       {
         id: 'nav:list',
-        title: 'Go to List',
+        title: t('shortcut.list'),
         group: 'Navigation',
         keywords: 'issues tickets list',
         run: () => context.navigate(`/w/${projectId}/list`),
       },
       {
         id: 'nav:board',
-        title: 'Go to Board',
+        title: t('shortcut.board'),
         group: 'Navigation',
         keywords: 'columns kanban board',
         run: () => context.navigate(`/w/${projectId}/board`),
@@ -48,24 +58,43 @@ export function buildCommands(issues: readonly Issue[], context: PaletteContext)
   commands.push(
     {
       id: 'nav:settings',
-      title: 'Go to Settings',
+      title: t('shortcut.settings'),
       group: 'Navigation',
       keywords: 'preferences config',
       run: () => context.navigate('/settings'),
     },
     {
       id: 'action:refresh',
-      title: 'Refresh data',
+      title: t('shortcut.refresh'),
       group: 'Actions',
       keywords: 'reload sync journal workspace',
       run: context.refresh,
     },
     {
       id: 'action:diagnostics',
-      title: 'Copy diagnostics',
+      title: t('palette.diagnostics'),
       group: 'Actions',
       keywords: 'copy debug status bd workspace',
       run: context.copyDiagnostics,
+    },
+    {
+      id: 'action:theme',
+      title: t('palette.theme', { theme: t(`theme.${context.theme}` as MessageKey) }),
+      group: 'Actions',
+      keywords: 'theme dark light system appearance',
+      run: () => context.setTheme(nextTheme(context.theme)),
+    },
+    {
+      id: 'action:language',
+      title: t('palette.language', {
+        language: t(`language.${context.language}` as MessageKey),
+      }),
+      group: 'Actions',
+      keywords: 'language english chinese i18n locale',
+      run: () =>
+        context.setLanguage(
+          LANGUAGES[(LANGUAGES.indexOf(context.language) + 1) % LANGUAGES.length]
+        ),
     }
   );
 

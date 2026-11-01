@@ -1,6 +1,7 @@
-import { expect, test } from 'vitest';
+import { expect, test, vi } from 'vitest';
 
 import type { Issue } from '@/bindings/bd';
+import { translate } from '@/lib/i18n';
 
 import { buildCommands, rankCommands, type PaletteContext } from './commands';
 
@@ -28,6 +29,11 @@ function context(overrides: Partial<PaletteContext> = {}): PaletteContext {
     refresh: () => undefined,
     copyDiagnostics: () => undefined,
     project: { projectId: 'p1' },
+    t: (key, vars) => translate('en', key, vars),
+    theme: 'system',
+    setTheme: () => undefined,
+    language: 'en',
+    setLanguage: () => undefined,
     ...overrides,
   };
 }
@@ -69,13 +75,37 @@ test('an empty query returns the list unchanged', () => {
   expect(rankCommands(commands, '  ')).toHaveLength(commands.length);
 });
 
+test('the theme action cycles to the next preference', () => {
+  const setTheme = vi.fn();
+  const commands = buildCommands([], context({ setTheme }));
+
+  commands.find((command) => command.id === 'action:theme')?.run();
+
+  expect(setTheme).toHaveBeenCalledWith('light');
+});
+
+test('the language action switches to the other catalog', () => {
+  const setLanguage = vi.fn();
+  const commands = buildCommands([], context({ setLanguage }));
+
+  commands.find((command) => command.id === 'action:language')?.run();
+
+  expect(setLanguage).toHaveBeenCalledWith('zh-CN');
+});
+
+test('command titles follow the active language', () => {
+  const commands = buildCommands([], context({ t: (key, vars) => translate('zh-CN', key, vars) }));
+
+  expect(commands.find((command) => command.id === 'nav:settings')?.title).toBe('前往设置');
+});
+
 test('ranks 1200 candidates in under 50ms', () => {
   const issues = Array.from({ length: 1000 }, (_, index) =>
     issue(`bza-${index}`, `Issue number ${index} about routers and keyboards`)
   );
   const commands = buildCommands(issues, context());
   // Pad the action group to 200 entries, the size the palette is budgeted for.
-  for (let index = 0; index < 195; index += 1) {
+  for (let index = 0; commands.length < 1200; index += 1) {
     commands.push({
       id: `action:extra-${index}`,
       title: `Extra action ${index}`,

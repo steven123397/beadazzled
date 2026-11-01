@@ -1,21 +1,25 @@
 import type { WorkspaceEntry } from '@/bindings/bd';
+import { useI18n } from '@/lib/i18n/I18nProvider';
 
 import { useWorkspaceContext } from './WorkspaceProvider';
 
 export function TopBar({ project }: { project: WorkspaceEntry | null }) {
+  const { t } = useI18n();
   const { reload } = useWorkspaceContext();
 
   return (
-    <header className="flex items-center gap-3 border-b border-neutral-800 px-3 py-2">
-      <h1 className="text-sm font-semibold tracking-tight">beadazzled</h1>
-      <span className="text-sm text-neutral-400">{project?.name ?? 'No workspace'}</span>
+    <header className="flex items-center gap-3 border-b border-border px-3 py-2">
+      <h1 className="text-sm font-semibold tracking-tight">{t('app.name')}</h1>
+      <span className="text-sm text-muted-foreground">
+        {project?.name ?? t('shell.workspace.none')}
+      </span>
       <div className="flex-1" />
       <button
         type="button"
         onClick={() => void reload()}
-        className="rounded border border-neutral-700 px-2 py-1 text-xs text-neutral-300"
+        className="rounded border border-border px-2 py-1 text-xs text-muted-foreground"
       >
-        Refresh
+        {t('shell.refresh')}
       </button>
     </header>
   );

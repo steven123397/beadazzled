@@ -1,9 +1,14 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react';
 
+type Props = {
+  title: string;
+  copyLabel: string;
+  children: ReactNode;
+};
 type State = { error: Error | null };
 
 /** Keeps a render failure from turning the window white. */
-export class ErrorBoundary extends Component<{ children: ReactNode }, State> {
+export class ErrorBoundary extends Component<Props, State> {
   state: State = { error: null };
 
   static getDerivedStateFromError(error: Error): State {
@@ -31,18 +36,18 @@ export class ErrorBoundary extends Component<{ children: ReactNode }, State> {
     return (
       <div
         role="alert"
-        className="flex min-h-screen flex-col items-center justify-center gap-3 p-8 text-neutral-100"
+        className="flex min-h-screen flex-col items-center justify-center gap-3 bg-background p-8 text-foreground"
       >
-        <h1 className="text-lg font-semibold">Something went wrong</h1>
-        <p className="font-mono text-sm text-red-400">
+        <h1 className="text-lg font-semibold">{this.props.title}</h1>
+        <p className="font-mono text-sm text-destructive">
           {error.name}: {error.message}
         </p>
         <button
           type="button"
           onClick={this.copyDiagnostics}
-          className="rounded border border-neutral-700 px-3 py-1 text-sm"
+          className="rounded border border-border px-3 py-1 text-sm"
         >
-          Copy diagnostics
+          {this.props.copyLabel}
         </button>
       </div>
     );

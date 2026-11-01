@@ -72,6 +72,8 @@ const healthy: SyncState = { kind: 'healthy', lastSeq: 42, lastEventAt: null };
 
 beforeEach(() => {
   window.location.hash = '';
+  localStorage.clear();
+  document.documentElement.classList.remove('dark');
 });
 
 test('shows the welcome screen when no workspace is registered', async () => {
@@ -184,4 +186,32 @@ test('the help panel is generated from the shortcut registry', async () => {
   const dialog = screen.getByRole('dialog', { name: 'Keyboard shortcuts' });
   expect(dialog).toHaveTextContent('Command palette');
   expect(dialog).toHaveTextContent('Ctrl+K');
+});
+
+test('switching language from the palette updates the shell instantly', async () => {
+  window.location.hash = '#/settings';
+
+  render(<App workspaceApi={fakeApi()} />);
+  await screen.findByRole('heading', { name: 'Settings' });
+
+  fireEvent.keyDown(window, { key: 'k', ctrlKey: true });
+  fireEvent.click(screen.getByText('Language: English'));
+
+  expect(screen.getByRole('heading', { name: '设置' })).toBeInTheDocument();
+  expect(screen.getByRole('link', { name: '设置' })).toBeInTheDocument();
+  expect(localStorage.getItem('beadazzled.language')).toBe('zh-CN');
+});
+
+test('the theme action applies the new theme immediately', async () => {
+  window.location.hash = '#/settings';
+
+  render(<App workspaceApi={fakeApi()} initialTheme="light" />);
+  await screen.findByRole('heading', { name: 'Settings' });
+  expect(document.documentElement.classList.contains('dark')).toBe(false);
+
+  fireEvent.keyDown(window, { key: 'k', ctrlKey: true });
+  fireEvent.click(screen.getByText('Theme: Light'));
+
+  expect(document.documentElement.classList.contains('dark')).toBe(true);
+  expect(localStorage.getItem('beadazzled.theme')).toBe('dark');
 });

@@ -1,6 +1,8 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { expect, test, vi } from 'vitest';
 
+import { I18nProvider } from '@/lib/i18n/I18nProvider';
+
 import type { CommandItem } from './commands';
 import { CommandPalette } from './CommandPalette';
 
@@ -31,8 +33,17 @@ function commands(run: () => void): CommandItem[] {
   ];
 }
 
+function open(items: CommandItem[], onClose = vi.fn()) {
+  render(
+    <I18nProvider initialLanguage="en">
+      <CommandPalette commands={items} onClose={onClose} />
+    </I18nProvider>
+  );
+  return onClose;
+}
+
 test('opens as a dialog with every command', () => {
-  render(<CommandPalette commands={commands(vi.fn())} onClose={vi.fn()} />);
+  open(commands(vi.fn()));
 
   expect(screen.getByRole('dialog', { name: /command palette/i })).toBeInTheDocument();
   expect(screen.getByText('Go to List')).toBeInTheDocument();
@@ -41,7 +52,7 @@ test('opens as a dialog with every command', () => {
 });
 
 test('filters actions and tickets by the typed query', () => {
-  render(<CommandPalette commands={commands(vi.fn())} onClose={vi.fn()} />);
+  open(commands(vi.fn()));
 
   fireEvent.change(screen.getByRole('combobox'), { target: { value: 'bza-9xy' } });
 
@@ -51,8 +62,7 @@ test('filters actions and tickets by the typed query', () => {
 
 test('runs the selected command and closes', () => {
   const run = vi.fn();
-  const onClose = vi.fn();
-  render(<CommandPalette commands={commands(run)} onClose={onClose} />);
+  const onClose = open(commands(run));
 
   screen.getByText('Refresh data').click();
 
@@ -61,10 +71,20 @@ test('runs the selected command and closes', () => {
 });
 
 test('escape closes the palette', () => {
-  const onClose = vi.fn();
-  render(<CommandPalette commands={commands(vi.fn())} onClose={onClose} />);
+  const onClose = open(commands(vi.fn()));
 
   fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape' });
 
   expect(onClose).toHaveBeenCalled();
+});
+
+test('follows the active language', () => {
+  render(
+    <I18nProvider initialLanguage="zh-CN">
+      <CommandPalette commands={commands(vi.fn())} onClose={vi.fn()} />
+    </I18nProvider>
+  );
+
+  expect(screen.getByRole('dialog', { name: '命令面板' })).toBeInTheDocument();
+  expect(screen.getByPlaceholderText('搜索命令与票')).toBeInTheDocument();
 });

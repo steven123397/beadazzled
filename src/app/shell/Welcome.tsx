@@ -1,10 +1,12 @@
-import type { WorkspaceSnapshot } from '@/bindings/bd';
+import type { BdStatus, WorkspaceSnapshot } from '@/bindings/bd';
+import { useI18n } from '@/lib/i18n/I18nProvider';
 
 import { SkeletonScreen } from './SkeletonScreen';
 import { activeWorkspace, useWorkspaceContext } from './WorkspaceProvider';
 
 /** Explains why the app cannot open a workspace, instead of showing a blank screen. */
 export function Welcome() {
+  const { t } = useI18n();
   const { snapshot, bd, loading, error, reload, refreshBd } = useWorkspaceContext();
 
   if (loading) {
@@ -14,43 +16,44 @@ export function Welcome() {
   return (
     <section aria-labelledby="welcome-title" className="mx-auto max-w-xl space-y-3 p-8">
       <h1 id="welcome-title" className="text-xl font-semibold">
-        Welcome to beadazzled
+        {t('welcome.title')}
       </h1>
-      <p className="text-sm text-neutral-400">{blockerReason(snapshot, bd, error)}</p>
+      <p className="text-sm text-muted-foreground">{blockerReason(t, snapshot, bd, error)}</p>
       <button
         type="button"
         onClick={() => {
           void reload();
           void refreshBd();
         }}
-        className="rounded border border-neutral-700 px-3 py-1 text-sm"
+        className="rounded border border-border px-3 py-1 text-sm text-foreground"
       >
-        Try again
+        {t('welcome.retry')}
       </button>
     </section>
   );
 }
 
+type T = ReturnType<typeof useI18n>['t'];
+
 function blockerReason(
+  t: T,
   snapshot: WorkspaceSnapshot | null,
-  bd: ReturnType<typeof useWorkspaceContext>['bd'],
+  bd: BdStatus | null,
   error: string | null
 ): string {
   if (error !== null) {
     return error;
   }
   if (bd === null) {
-    return 'Checking for bd…';
+    return t('welcome.checking');
   }
   switch (bd.kind) {
     case 'ready':
-      return activeWorkspace(snapshot) === null
-        ? 'Add a beads workspace to get started.'
-        : 'The workspace is still loading.';
+      return activeWorkspace(snapshot) === null ? t('welcome.noWorkspace') : t('welcome.loading');
     case 'not-found':
-      return 'bd was not found. Install bd or set its path in Settings.';
+      return t('welcome.bdMissing');
     case 'unsupported':
-      return `bd ${bd.found} is older than ${bd.min}. Upgrade bd to continue.`;
+      return t('welcome.bdUnsupported', { found: bd.found, min: bd.min });
     case 'broken':
       return bd.error.message;
   }

@@ -1,10 +1,11 @@
 import { NavLink } from 'react-router-dom';
 
 import type { WorkspaceEntry } from '@/bindings/bd';
+import { useI18n } from '@/lib/i18n/I18nProvider';
 
 const LINK_CLASS = 'block rounded px-2 py-1.5 text-sm';
-const ACTIVE_CLASS = 'bg-neutral-800 text-neutral-100';
-const IDLE_CLASS = 'text-neutral-400';
+const ACTIVE_CLASS = 'bg-muted text-foreground';
+const IDLE_CLASS = 'text-muted-foreground';
 
 export function Sidebar({
   project,
@@ -13,43 +14,47 @@ export function Sidebar({
   project: WorkspaceEntry | null;
   collapsed?: boolean;
 }) {
+  const { t } = useI18n();
   const labelClass = collapsed ? 'sr-only' : '';
 
   return (
     <aside
-      aria-label="Sidebar"
+      aria-label={t('shell.sidebar')}
       data-collapsed={collapsed}
-      className={`${collapsed ? 'w-10' : 'w-44'} shrink-0 border-r border-neutral-800 p-2`}
+      className={`${collapsed ? 'w-10' : 'w-44'} shrink-0 border-r border-border p-2`}
     >
       {project === null ? (
-        <p className="px-2 py-1.5 text-xs text-neutral-500" title="No workspace open">
-          <span className={collapsed ? 'sr-only' : ''}>No workspace open</span>
+        <p
+          className="px-2 py-1.5 text-xs text-muted-foreground"
+          title={t('shell.workspace.noneOpen')}
+        >
+          <span className={collapsed ? 'sr-only' : ''}>{t('shell.workspace.noneOpen')}</span>
         </p>
       ) : (
-        <nav aria-label="Views" className="space-y-0.5">
+        <nav aria-label={t('shell.views')} className="space-y-0.5">
           <NavLink
             to={`/w/${project.projectId}/list`}
             className={({ isActive }) => `${LINK_CLASS} ${isActive ? ACTIVE_CLASS : IDLE_CLASS}`}
-            title="List"
+            title={t('nav.list')}
           >
-            <span className={labelClass}>List</span>
+            <span className={labelClass}>{t('nav.list')}</span>
           </NavLink>
           <NavLink
             to={`/w/${project.projectId}/board`}
             className={({ isActive }) => `${LINK_CLASS} ${isActive ? ACTIVE_CLASS : IDLE_CLASS}`}
-            title="Board"
+            title={t('nav.board')}
           >
-            <span className={labelClass}>Board</span>
+            <span className={labelClass}>{t('nav.board')}</span>
           </NavLink>
         </nav>
       )}
-      <nav aria-label="App" className="mt-2 space-y-0.5 border-t border-neutral-800 pt-2">
+      <nav aria-label={t('shell.app')} className="mt-2 space-y-0.5 border-t border-border pt-2">
         <NavLink
           to="/settings"
           className={({ isActive }) => `${LINK_CLASS} ${isActive ? ACTIVE_CLASS : IDLE_CLASS}`}
-          title="Settings"
+          title={t('nav.settings')}
         >
-          <span className={labelClass}>Settings</span>
+          <span className={labelClass}>{t('nav.settings')}</span>
         </NavLink>
       </nav>
     </aside>
