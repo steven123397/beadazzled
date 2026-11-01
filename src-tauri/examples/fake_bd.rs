@@ -8,6 +8,9 @@
 //! - `ok`: print `ok` and exit 0 (optionally sleep `FAKE_BD_SLEEP_MS`)
 //! - `dump-argv`: print the received argv as JSON
 //! - `dump-argv-and-stdin`: print argv plus the number of stdin bytes
+//! - `record`: capture argv/stdin to `FAKE_BD_CAPTURE_FILE`, then write
+//!   `FAKE_BD_STDOUT` (or `FAKE_BD_STDOUT_FILE`) and exit `FAKE_BD_EXIT`
+//! - `cat-file`: write `FAKE_BD_STDOUT_FILE` to stdout
 //! - `exit`: print `FAKE_BD_STDERR` and exit with `FAKE_BD_EXIT`
 //! - `pid-and-sleep`: write the pid to `FAKE_BD_PID_FILE`, then sleep
 //! - `hang-with-grandchild`: spawn a grandchild that inherits stdout, then sleep
@@ -42,6 +45,51 @@ fn main() {
                 "{}",
                 serde_json::json!({ "args": args, "stdin_len": input.len() })
             );
+        }
+        "record" => {
+            let mut input = Vec::new();
+            io::stdin().read_to_end(&mut input).expect("read stdin");
+
+            if let Some(path) = env::var_os("FAKE_BD_CAPTURE_FILE") {
+                let capture = serde_json::json!({
+                    "args": args,
+                    "stdin": String::from_utf8_lossy(&input),
+                    "stdin_len": input.len(),
+                });
+                fs::write(path, capture.to_string()).expect("write capture file");
+            }
+
+            if let Some(path) = env::var_os("FAKE_BD_STDOUT_FILE") {
+                let bytes = fs::read(path).expect("read stdout fixture");
+                io::stdout().write_all(&bytes).expect("write stdout");
+            } else if let Ok(stdout) = env::var("FAKE_BD_STDOUT") {
+                print!("{stdout}");
+            }
+
+            if let Ok(stderr) = env::var("FAKE_BD_STDERR") {
+                eprint!("{stderr}");
+            }
+            io::stdout().flush().expect("flush stdout");
+
+            let code = env_u64("FAKE_BD_EXIT", 0) as i32;
+            if code != 0 {
+                process::exit(code);
+            }
+        }
+        "cat-file" => {
+            let path = env::var_os("FAKE_BD_STDOUT_FILE").expect("FAKE_BD_STDOUT_FILE is set");
+            let bytes = fs::read(path).expect("read stdout fixture");
+            io::stdout().write_all(&bytes).expect("write stdout");
+            io::stdout().flush().expect("flush stdout");
+
+            if let Ok(stderr) = env::var("FAKE_BD_STDERR") {
+                eprint!("{stderr}");
+            }
+
+            let code = env_u64("FAKE_BD_EXIT", 0) as i32;
+            if code != 0 {
+                process::exit(code);
+            }
         }
         "exit" => {
             eprint!(

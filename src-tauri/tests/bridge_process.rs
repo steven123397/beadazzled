@@ -3,9 +3,10 @@
 //! These exercise timeouts, job-object tree kill, pipe grace, output limits and
 //! per-workspace serialization. A real `bd` is never spawned.
 
-use std::ffi::OsString;
+mod common;
+
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -17,82 +18,12 @@ use windows_sys::Win32::System::Threading::{
     GetExitCodeProcess, OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION,
 };
 
-fn fake_bd_path() -> PathBuf {
-    let path = std::env::var_os("FAKE_BD_PATH")
-        .map(PathBuf::from)
-        .unwrap_or_else(locate_fake_bd);
-
-    assert!(
-        path.is_file(),
-        "the fake_bd binary is missing at {}; run `cargo build --example fake_bd`",
-        path.display()
-    );
-
-    let source = Path::new(env!("CARGO_MANIFEST_DIR")).join("examples/fake_bd.rs");
-    let built_at = fs::metadata(&path).and_then(|metadata| metadata.modified());
-    let source_at = fs::metadata(&source).and_then(|metadata| metadata.modified());
-    if let (Ok(built_at), Ok(source_at)) = (built_at, source_at) {
-        assert!(
-            built_at >= source_at,
-            "the fake_bd binary at {} is older than examples/fake_bd.rs; run \
-             `cargo build --example fake_bd`",
-            path.display()
-        );
-    }
-
-    path
-}
-
-fn locate_fake_bd() -> PathBuf {
-    let current = std::env::current_exe().expect("current test executable");
-    let profile_dir = current
-        .parent()
-        .expect("deps directory")
-        .parent()
-        .expect("target profile directory");
-    let plain = if cfg!(windows) {
-        "fake_bd.exe"
-    } else {
-        "fake_bd"
-    };
-    let path = profile_dir.join("examples").join(plain);
-
-    assert!(
-        path.is_file(),
-        "the fake_bd example was not built at {}; run `cargo build \
-         --example fake_bd` or set FAKE_BD_PATH",
-        path.display()
-    );
-
-    path
-}
-
-fn temp_dir(name: &str) -> PathBuf {
-    let dir =
-        std::env::temp_dir().join(format!("beadazzled-process-{}-{name}", std::process::id()));
-    let _ = fs::remove_dir_all(&dir);
-    fs::create_dir_all(&dir).expect("create temp dir");
-    dir
-}
-
-fn workspace(dir: &Path) -> PathBuf {
-    let workspace = dir.join("workspace");
-    fs::create_dir_all(&workspace).expect("create workspace");
-    workspace
-}
-
-fn env(key: &str, value: impl Into<OsString>) -> (OsString, OsString) {
-    (key.into(), value.into())
-}
+use common::{env, runner, temp_dir, workspace};
 
 fn request(workspace: &Path, mode: &str) -> ProcessRequest {
     let mut request = ProcessRequest::new("test", workspace, Vec::new());
     request.env.push(env("FAKE_BD_MODE", mode));
     request
-}
-
-fn runner() -> ProcessRunner {
-    ProcessRunner::new(fake_bd_path())
 }
 
 fn detail<'a>(error: &'a BridgeError, key: &str) -> Option<&'a Value> {
