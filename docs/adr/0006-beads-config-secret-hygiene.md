@@ -57,3 +57,16 @@ gitleaks 对未知/token 形状的漏报；不是 bd 的默认写入路径。
 - **只写文档、不加检查**：依赖人/agent 自觉，gitleaks 对未知 token 形状可能漏报。
 - **为此引入完整 YAML 解析依赖**：当前只需覆盖 bd 的固定 block 形状；一旦有
   真实需求再升级，避免为假设的输入增加依赖。
+## 附注：2026-11-01 扩展（bza-ryr.22）
+
+实现后复核发现解析器有三处漏报，已在 `findSecretConfigKeys` 中补齐，并由
+quality test 覆盖：
+
+- **YAML 列表项**（`- token: ...`）：先剥离 `- ` 再按缩进挂到父键，得到
+  `github.keys.token`，不再因为 `- ` 前缀而漏过。
+- **复合后缀**（`client_secret` / `oauth_token` / `db_password`）：末段允许
+  `_` / `-` 前缀，同时不会把 `team_id` 之类的普通键误判为 secret。
+- **开头 UTF-8 BOM**：显式剥离；此前只是碰巧被 JS `trim` 丢弃，语义不可见。
+
+仍然保留的边界与上文一致：inline flow map（`github: {token: x}`）和带引号的
+键不解析；出现真实需求时再引入完整 YAML 解析器。

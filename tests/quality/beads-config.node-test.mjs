@@ -54,3 +54,29 @@ test('the tracked .beads/config.yaml is secret-free', () => {
 
   assert.deepEqual(findSecretConfigKeys(text), []);
 });
+
+test('list-item secret keys are detected', () => {
+  assert.deepEqual(findSecretConfigKeys('github:\n    keys:\n        - token: abc\n'), [
+    'github.keys.token',
+  ]);
+  assert.deepEqual(findSecretConfigKeys('integrations:\n    - client_secret: abc\n'), [
+    'integrations.client_secret',
+  ]);
+});
+
+test('composite suffixes are detected', () => {
+  assert.deepEqual(findSecretConfigKeys('auth:\n    client_secret: x\n'), ['auth.client_secret']);
+  assert.deepEqual(findSecretConfigKeys('auth:\n    oauth_token: x\n'), ['auth.oauth_token']);
+  assert.deepEqual(findSecretConfigKeys('db:\n    db_password: x\n'), ['db.db_password']);
+});
+
+test('a UTF-8 BOM does not hide the first key', () => {
+  assert.deepEqual(findSecretConfigKeys('\uFEFFtoken: abc\n'), ['token']);
+  assert.deepEqual(findSecretConfigKeys('\uFEFFgithub:\n    token: abc\n'), ['github.token']);
+});
+
+test('non-secret list items do not trigger', () => {
+  const text = ['labels:', '    - ui', '    - name: gpt', '    - model: gpt'].join('\n');
+
+  assert.deepEqual(findSecretConfigKeys(text), []);
+});
