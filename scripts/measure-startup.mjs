@@ -17,7 +17,8 @@
  * Usage: npm run measure:startup -- [--runs=10] [--warm-runs=10] [--json]
  */
 import { spawn, spawnSync } from 'node:child_process';
-import { existsSync, statSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { mkdtemp, readFile, rm, unlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -29,25 +30,34 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const defaultExe = path.join(root, 'src-tauri/target/release/beadazzled.exe');
 const budgets = { coldP95: 2000, warmP95: 800 };
 const TRACE_PREFIX = 'page-load-finished';
+// Inputs whose change makes an existing binary unrepresentative. `dist` is
+// included because `tauri build` copies it into the exe.
+const SOURCE_DIRECTORIES = ['src', 'src-tauri/src', 'dist'];
+const SOURCE_FILES = ['index.html', 'vite.config.ts', 'src-tauri/tauri.conf.json'];
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 function usage() {
   return [
     'Usage: node scripts/measure-startup.mjs [options]',
     '',
-    '  --runs <n>        cold launches to measure (default 10)',
-    '  --warm-runs <n>   warm launches to measure (default 10)',
+    '  --runs <n>        cold launches to measure (default 20)',
+    '  --warm-runs <n>   warm launches to measure (default 20)',
     '  --exe <path>      application binary (default src-tauri/target/release/beadazzled.exe)',
     '  --timeout <ms>    per-launch timeout (default 20000)',
     '  --no-build        fail instead of building a missing release binary',
     '  --json            print the machine-readable result instead of a report',
+    '',
+    'P95 uses nearest-rank: the sample at position ceil(0.95 * n). Below n=20',
+    'that position is the maximum, so smaller runs are a smoke test, not a budget',
+    'measurement. The app shares its config directory with the installed app, so',
+    'the active workspace is recorded (not isolated) and reported as a warning.',
   ].join('\n');
 }
 
 function parseArgs(argv) {
   const options = {
-    runs: 10,
-    warmRuns: 10,
+    runs: 20,
+    warmRuns: 20,
     exe: defaultExe,
     timeout: 20_000,
     build: true,
@@ -115,7 +125,11 @@ function parseArgs(argv) {
   return options;
 }
 
-function buildRelease() {
+/**
+ * Builds the release binary. In `--json` mode the child inherits stderr, never
+ * stdout, so cargo/tauri logs cannot corrupt the machine-readable result.
+ */
+function buildRelease(quiet) {
   const cli = path.join(root, 'node_modules/@tauri-apps/cli/tauri.js');
   if (!existsSync(cli)) {
     throw new Error('cannot build: @tauri-apps/cli is not installed (run npm install)');
@@ -123,11 +137,130 @@ function buildRelease() {
 
   const result = spawnSync(process.execPath, [cli, 'build', '--no-bundle'], {
     cwd: root,
-    stdio: 'inherit',
+    stdio: quiet ? ['ignore', 2, 2] : 'inherit',
     env: process.env,
   });
   if (result.status !== 0) {
     throw new Error('tauri build --no-bundle failed');
+  }
+}
+
+function gitValue(args) {
+  const result = spawnSync('git', args, { cwd: root, encoding: 'utf8' });
+  return result.status === 0 ? result.stdout.trim() : null;
+}
+
+/** Newest file among the build inputs, so a stale binary can name what changed. */
+function newestSource() {
+  let newest = { path: null, mtimeMs: 0 };
+
+  const consider = (absolutePath) => {
+    try {
+      const stats = statSync(absolutePath);
+      if (stats.mtimeMs > newest.mtimeMs) {
+        newest = {
+          path: path.relative(root, absolutePath).split(path.sep).join('/'),
+          mtimeMs: stats.mtimeMs,
+        };
+      }
+    } catch {
+      // A missing optional input is not a staleness signal.
+    }
+  };
+
+  const walk = (absoluteDirectory) => {
+    let entries;
+    try {
+      entries = readdirSync(absoluteDirectory, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
+      const absolutePath = path.join(absoluteDirectory, entry.name);
+      if (entry.isDirectory()) {
+        walk(absolutePath);
+      } else if (entry.isFile() && !/\.test\.[jt]sx?$/.test(entry.name)) {
+        // Tests never reach the bundle, so they cannot make a binary stale.
+        consider(absolutePath);
+      }
+    }
+  };
+
+  for (const directory of SOURCE_DIRECTORIES) {
+    walk(path.join(root, directory));
+  }
+  for (const file of SOURCE_FILES) {
+    consider(path.join(root, file));
+  }
+
+  return newest;
+}
+
+/**
+ * Which commit and binary this run measured, and whether the binary predates
+ * its inputs. Reporting a stale binary is the difference between a budget
+ * number and a number for code that no longer exists.
+ */
+async function describeFreshness(exe, exeStat) {
+  const head = gitValue(['rev-parse', 'HEAD']);
+  const committedAtMs = Number(gitValue(['log', '-1', '--format=%ct'])) * 1000 || null;
+  const newest = newestSource();
+  const reasons = [];
+
+  if (newest.path !== null && newest.mtimeMs > exeStat.mtimeMs) {
+    reasons.push(`binary is older than ${newest.path}`);
+  }
+  if (committedAtMs !== null && committedAtMs > exeStat.mtimeMs) {
+    reasons.push('binary is older than HEAD');
+  }
+
+  return {
+    gitHead: head,
+    gitDirty: gitValue(['status', '--porcelain']) !== '',
+    binaryModifiedAt: new Date(exeStat.mtimeMs).toISOString(),
+    binarySha256: createHash('sha256').update(await readFile(exe)).digest('hex'),
+    stale: reasons.length > 0,
+    reasons,
+  };
+}
+
+/**
+ * The app reads its workspace registry from its own config directory, which is
+ * shared with the installed app. Isolating it would need a relocation command
+ * the app does not have yet, so the state is recorded instead and reported as a
+ * warning: an active workspace adds export work to every sample.
+ */
+function describeAppConfig() {
+  let identifier = 'com.steven123397.beadazzled';
+  try {
+    const config = JSON.parse(readFileSync(path.join(root, 'src-tauri/tauri.conf.json'), 'utf8'));
+    if (typeof config.identifier === 'string') {
+      identifier = config.identifier;
+    }
+  } catch {
+    // Fall back to the current identifier.
+  }
+
+  const directory =
+    process.platform === 'win32'
+      ? path.join(process.env.APPDATA ?? path.join(tmpdir(), 'appdata'), identifier)
+      : path.join(process.env.XDG_CONFIG_HOME ?? path.join(tmpdir(), '.config'), identifier);
+  const configPath = path.join(directory, 'config.json');
+
+  try {
+    const stats = statSync(configPath);
+    const config = JSON.parse(readFileSync(configPath, 'utf8'));
+    return {
+      path: configPath,
+      isolated: false,
+      exists: true,
+      bytes: stats.size,
+      modifiedAt: new Date(stats.mtimeMs).toISOString(),
+      workspaceCount: Array.isArray(config.workspaces) ? config.workspaces.length : 0,
+      activeWorkspace: config.lastWorkspacePath ?? null,
+    };
+  } catch {
+    return { path: configPath, isolated: false, exists: false };
   }
 }
 
@@ -283,18 +416,27 @@ async function main() {
     if (!options.json) {
       console.log('release binary missing; building with "tauri build --no-bundle"');
     }
-    buildRelease();
+    buildRelease(options.json);
   }
   if (!existsSync(options.exe)) {
     throw new Error(`build finished without producing ${options.exe}`);
   }
 
   const exeStat = statSync(options.exe);
+  // Judge freshness before spending minutes on launches: measuring a binary
+  // that predates its sources produces a number for code nobody ships.
+  const freshness = await describeFreshness(options.exe, exeStat);
+  const appConfig = describeAppConfig();
   const traceDir = await freshProfile();
 
   try {
     if (!options.json) {
       console.log(`binary: ${options.exe} (${(exeStat.size / 1024 / 1024).toFixed(1)} MB)`);
+      console.log(`git: ${freshness.gitHead ?? 'unknown'}${freshness.gitDirty ? ' (dirty)' : ''}`);
+      console.log(`config: ${appConfig.path}${appConfig.exists ? '' : ' (missing)'}`);
+      if (freshness.stale) {
+        console.warn(`warning: the binary may be stale — ${freshness.reasons.join('; ')}`);
+      }
     }
 
     const cold =
@@ -320,17 +462,23 @@ async function main() {
         warm = await runBatch('warm', options.warmRuns, options, async () => warmProfile, traceDir);
       }
 
+      const coldSummary = cold === null ? null : summarize(cold);
+      const warmSummary = warm === null ? null : summarize(warm);
       const result = {
         measuredAt: new Date().toISOString(),
         binary: options.exe,
         binaryBytes: exeStat.size,
         platform: process.platform,
         probe: 'WebView2 NavigationCompleted (page load finished)',
+        p95Method: 'nearest-rank: ceil(0.95 * n)',
         budgets,
-        cold: cold === null ? null : summarize(cold),
-        warm: warm === null ? null : summarize(warm),
+        cold: coldSummary,
+        warm: warmSummary,
         coldSamples: cold === null ? [] : cold.map(round),
         warmSamples: warm === null ? [] : warm.map(round),
+        freshness,
+        appConfig,
+        warnings: collectWarnings(freshness, appConfig, coldSummary, warmSummary),
       };
 
       if (options.json) {
@@ -355,15 +503,59 @@ function round(value) {
   return Math.round(value * 10) / 10;
 }
 
+/**
+ * Everything a reader must know before treating the numbers as a budget
+ * measurement. Warnings are informational: startup budgets are warn-level.
+ */
+function collectWarnings(freshness, appConfig, cold, warm) {
+  const warnings = [];
+
+  if (freshness.stale) {
+    warnings.push(`the binary may be stale: ${freshness.reasons.join('; ')}`);
+  }
+  if (freshness.gitDirty) {
+    warnings.push('the working tree has uncommitted changes');
+  }
+  if (appConfig.activeWorkspace !== null && appConfig.activeWorkspace !== undefined) {
+    warnings.push(
+      `the app config is shared, not isolated: active workspace ${appConfig.activeWorkspace} is loaded for every sample`
+    );
+  }
+  for (const [label, summary] of [
+    ['cold', cold],
+    ['warm', warm],
+  ]) {
+    if (summary !== null && summary.count < 20) {
+      warnings.push(
+        `${label} n=${summary.count} < 20, so the nearest-rank P95 is the maximum sample`
+      );
+    }
+  }
+
+  return warnings;
+}
+
 function printReport(result) {
   console.log('');
   console.log('startup measurement (WebView2, release binary)');
   console.log(`probe: ${result.probe}`);
+  console.log(`p95: ${result.p95Method}`);
   if (result.cold !== null) {
     console.log(describe('cold', result.cold, budgets.coldP95));
   }
   if (result.warm !== null) {
     console.log(describe('warm', result.warm, budgets.warmP95));
+  }
+  console.log('');
+  console.log(`git: ${result.freshness.gitHead ?? 'unknown'}`);
+  console.log(`binary: ${result.freshness.binaryModifiedAt} sha256=${result.freshness.binarySha256}`);
+  console.log(
+    `config: ${result.appConfig.path} (${
+      result.appConfig.exists ? `active ${result.appConfig.activeWorkspace ?? 'none'}` : 'missing'
+    }, not isolated)`
+  );
+  for (const warning of result.warnings) {
+    console.log(`warning: ${warning}`);
   }
   console.log('');
   if (result.cold !== null) {
