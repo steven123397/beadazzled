@@ -298,3 +298,92 @@ fn reopen_has_no_extra_flags() {
     assert_args(&argv.args, &["reopen", "bza-5"]);
     assert!(argv.stdin.is_none());
 }
+
+/// Behaviors verified against real bd 1.3.2 on 2026-11-01 (bza-ryr.20): an
+/// empty body on stdin is rejected without `--allow-empty-description`,
+/// `--if-assignee ""` guards on "unassigned" (bd exits 13 on mismatch), and a
+/// long close reason travels through `--reason-file -` and is stored as
+/// `close_reason`.
+#[test]
+fn bd_1_3_2_verified_write_behaviors() {
+    struct Case {
+        name: &'static str,
+        command: WriteCommand,
+        expected_args: Vec<&'static str>,
+        expected_stdin: Option<Vec<u8>>,
+    }
+
+    let long_reason = "x".repeat(LONG_TEXT_THRESHOLD);
+
+    let mut require_unassigned = UpdateSpec::new("bza-6");
+    require_unassigned.title = Some("Rename only while unassigned".to_owned());
+    require_unassigned.if_assignee = Some(String::new());
+
+    let cases = vec![
+        Case {
+            name: "empty update body requires --allow-empty-description",
+            command: WriteCommand::Update(UpdateSpec {
+                description: Some(String::new()),
+                ..UpdateSpec::new("bza-6")
+            }),
+            expected_args: vec![
+                "update",
+                "bza-6",
+                "--body-file",
+                "-",
+                "--allow-empty-description",
+            ],
+            expected_stdin: Some(Vec::new()),
+        },
+        Case {
+            name: "create with an empty body asks for --allow-empty-description too",
+            command: WriteCommand::Create(create_spec("Empty body", "")),
+            expected_args: vec![
+                "create",
+                "--title",
+                "Empty body",
+                "--type",
+                "task",
+                "--priority",
+                "2",
+                "--allow-empty-description",
+                "--silent",
+                "--stdin",
+            ],
+            expected_stdin: Some(Vec::new()),
+        },
+        Case {
+            name: "an empty --if-assignee guard requires the issue to be unassigned",
+            command: WriteCommand::Update(require_unassigned),
+            expected_args: vec![
+                "update",
+                "bza-6",
+                "--title",
+                "Rename only while unassigned",
+                "--if-assignee",
+                "",
+            ],
+            expected_stdin: None,
+        },
+        Case {
+            name: "a long close reason travels through --reason-file -",
+            command: WriteCommand::Close {
+                id: "bza-6".to_owned(),
+                reason: Some(long_reason.clone()),
+            },
+            expected_args: vec!["close", "bza-6", "--reason-file", "-"],
+            expected_stdin: Some(long_reason.into_bytes()),
+        },
+    ];
+
+    for case in cases {
+        let argv = argv_for(&case.command);
+        assert_eq!(
+            strings(&argv.args),
+            case.expected_args,
+            "case: {}",
+            case.name
+        );
+        assert_eq!(argv.stdin, case.expected_stdin, "case: {}", case.name);
+    }
+}

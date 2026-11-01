@@ -23,7 +23,7 @@ v0.1.0 支持：新建、改状态/优先级/指派/标题/正文/验收、标�
 | 新建 | `bd create --title <t> --type <type> --priority <p> [--assignee <a>] [--acceptance <s>] [--labels a,b] --silent --stdin` | description 走 stdin；空描述时加 `--allow-empty-description`；`--silent` 只回 id |
 | 改状态 | `bd update <id> -s <status> [--if-status <expected>]` | 看板拖动必须带 expected；列表/详情可不带 |
 | 改优先级 | `bd update <id> -p <0-4>` | |
-| 改指派 | `bd update <id> -a <name>`；取消指派用 `-a ""` | 已实测：空字符串清除 assignee，exit 0；`--if-assignee ""` 作为“要求未指派”的 guard 也已实测可用 |
+| 改指派 | `bd update <id> -a <name>`；取消指派用 `-a ""` | 已实测：空字符串清除 assignee，exit 0；`--if-assignee ""` 作为“要求未指派”的 guard 在未指派票上 exit 0，已指派票上不匹配时 bd **exit 13** → `WRITE_CONFLICT` |
 | 改标题 | `bd update <id> --title <t>` | |
 | 改正文 | `bd update <id> --body-file -` | 正文走 stdin；空正文需同时加 `--allow-empty-description`（已实测，否则 bd 拒绝） |
 | 改验收 | `bd update <id> --acceptance <s>` | 长度上限见 Open Questions |
