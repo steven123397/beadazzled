@@ -21,8 +21,8 @@
 - **Workflow**: Create beads issue BEFORE writing code, mark in_progress when starting
 - **Memory**: Engineering knowledge belongs in OpenViking — do NOT use `bd remember` or MEMORY.md files. beads is the task graph only.
 - Persistence you don't need beats lost context
-- Git authority: no git operations in this context
-- Git workflow: stealth mode (no git ops)
+- Profile: team-maintainer active (agent.profile=team-maintainer) - commit, sync, and push are routine; explicit no-commit/no-push instructions still override.
+- Git workflow: team-maintainer active - commit/push are routine unless explicitly restricted
 - Session management: check `bd ready` for available work
 
 ## Essential Commands
