@@ -125,8 +125,16 @@ impl WorkspaceService {
         let entry = validated.into_entry(now.clone());
 
         let mut state = lock(&self.state);
+        let identity = (entry.project_id.clone(), entry.is_worktree);
         let index = match state.config.add_workspace(entry) {
-            AddOutcome::Added(index) | AddOutcome::Existing(index) => index,
+            AddOutcome::Added(index) => index,
+            AddOutcome::Existing(index) => {
+                // The directory may have been recreated since it was first
+                // registered: refresh its identity so a stale project id and
+                // checkpoint cannot be reused.
+                state.config.workspaces[index].apply_identity(&identity.0, identity.1);
+                index
+            }
         };
         let canonical = state.config.workspaces[index].path.clone();
         state.config.switch_workspace(&canonical, now);
@@ -137,15 +145,26 @@ impl WorkspaceService {
     }
 
     pub fn switch_workspace(&self, path: &str) -> Result<WorkspaceEntry, BridgeError> {
-        let mut state = lock(&self.state);
-        let index = state
-            .config
-            .workspace_index(path)
-            .ok_or_else(|| not_registered(path))?;
-        let canonical = state.config.workspaces[index].path.clone();
+        let canonical = {
+            let state = lock(&self.state);
+            let index = state
+                .config
+                .workspace_index(path)
+                .ok_or_else(|| not_registered(path))?;
+            state.config.workspaces[index].path.clone()
+        };
         if !Path::new(&canonical).is_dir() {
             return Err(ws_inaccessible(&canonical));
         }
+        let bd_path = self.ready_bd_path()?;
+        let validated = validate_workspace(Path::new(&bd_path), Path::new(&canonical))?;
+
+        let mut state = lock(&self.state);
+        let index = state
+            .config
+            .workspace_index(&canonical)
+            .ok_or_else(|| not_registered(&canonical))?;
+        state.config.workspaces[index].apply_identity(&validated.project_id, validated.is_worktree);
         state.config.switch_workspace(&canonical, now_iso());
         let saved = state.config.clone();
         let result = state.config.workspaces[index].clone();

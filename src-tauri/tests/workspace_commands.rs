@@ -376,6 +376,64 @@ fn the_bd_path_is_persisted_for_the_next_run() {
 }
 
 #[test]
+fn re_adding_a_recreated_workspace_refreshes_its_identity() {
+    let dir = common::temp_dir("cmd-readd-identity");
+    let workspace = common::workspace(&dir);
+    fs::write(workspace.join("project-id"), "project-one").expect("write identity");
+    let service = service(&dir.join("config.json"));
+    let path = path_string(&workspace);
+    service.add_workspace(&path).expect("add");
+    service.set_checkpoint(&path, 42);
+    assert_eq!(
+        service.checkpoint(&path, "project-one").map(|c| c.seq),
+        Some(42)
+    );
+
+    fs::write(workspace.join("project-id"), "project-two").expect("replace identity");
+    let entry = service.add_workspace(&path).expect("re-add");
+
+    assert_eq!(entry.project_id, "project-two");
+    assert_eq!(
+        service.checkpoint(&path, "project-two"),
+        None,
+        "a new project must not inherit the old journal position"
+    );
+    assert_eq!(service.checkpoint(&path, "project-one"), None);
+    assert_eq!(
+        service.snapshot().config.workspaces[0].project_id,
+        "project-two"
+    );
+}
+
+#[test]
+fn switching_to_a_recreated_workspace_refreshes_its_identity() {
+    let dir = common::temp_dir("cmd-switch-identity");
+    let first = common::workspace(&dir);
+    let second = workspace_named(&dir, "second");
+    fs::write(first.join("project-id"), "project-one").expect("write identity");
+    fs::write(second.join("project-id"), "project-other").expect("write identity");
+    let service = service(&dir.join("config.json"));
+    service
+        .add_workspace(&path_string(&first))
+        .expect("add first");
+    service
+        .add_workspace(&path_string(&second))
+        .expect("add second");
+    service.set_checkpoint(&path_string(&first), 42);
+
+    fs::write(first.join("project-id"), "project-two").expect("replace identity");
+    let entry = service
+        .switch_workspace(&path_string(&first))
+        .expect("switch");
+
+    assert_eq!(entry.project_id, "project-two");
+    assert_eq!(
+        service.checkpoint(&path_string(&first), "project-two"),
+        None
+    );
+}
+
+#[test]
 fn writes_run_against_the_submitted_workspace() {
     let dir = common::temp_dir("cmd-write");
     let first = common::workspace(&dir);
