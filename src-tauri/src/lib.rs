@@ -24,6 +24,7 @@ pub fn run() {
             commands::workspace::workspace_relocate,
             commands::workspace::workspace_set_checkpoint,
             commands::workspace::workspace_checkpoint,
+            commands::workspace::execute_write,
             commands::workspace::workspace_flush,
         ])
         .build(tauri::generate_context!())

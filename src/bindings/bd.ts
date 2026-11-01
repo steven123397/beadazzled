@@ -103,6 +103,8 @@ description: string | null, acceptance: string | null, add_labels: Array<string>
 
 export type AssigneeChange = { "Set": string } | "Clear";
 
+export type WriteOutcome = { exit_code: number, created_id: string | null, stderr_excerpt: string | null, };
+
 export type WorkspaceSnapshot = { config: AppConfig, 
 /**
  * Registered workspaces whose directory no longer exists.

@@ -1,9 +1,9 @@
 import { invoke } from '@tauri-apps/api/core';
 
 import type { BdStatus, Checkpoint, WorkspaceEntry, WorkspaceSnapshot } from '@/bindings/bd';
+import type { Invoke } from '@/lib/invoke';
 
-/** The injected IPC boundary; tests pass a recording fake. */
-export type Invoke = <T>(command: string, args?: Record<string, unknown>) => Promise<T>;
+export type { Invoke } from '@/lib/invoke';
 
 export type WorkspaceApi = {
   snapshot(): Promise<WorkspaceSnapshot>;

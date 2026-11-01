@@ -1,8 +1,9 @@
-import { expect, test } from 'vitest';
+import { afterEach, expect, test, vi } from 'vitest';
 
 import type { BridgeError, WriteCommand } from '@/bindings/bd';
 
-import { submitWrite, type WriteFlow } from './flow';
+import { createTicketStore } from '../sync/store';
+import { createWriteFlow, submitWrite, type WriteFlow } from './flow';
 
 function reopen(id: string): WriteCommand {
   return { Reopen: { id } };
@@ -145,4 +146,42 @@ test('a create waits for the echo of the id bd returned', async () => {
   await submitWrite(deps, { key: 'k', issueId: null, build: () => reopen('x') });
 
   expect(deps.echoes).toEqual([['bza-new', 41, 3000]]);
+});
+afterEach(() => {
+  vi.useRealTimers();
+});
+
+test('createWriteFlow wires afterSeq, echo and refresh from the store', async () => {
+  vi.useFakeTimers();
+  const store = createTicketStore();
+  store.applySnapshot([], 4);
+  const sent: WriteCommand[] = [];
+  let refreshes = 0;
+  const flow = createWriteFlow({
+    store,
+    execute: async (command) => {
+      sent.push(command);
+      return { ok: true, createdId: null };
+    },
+    refresh: () => {
+      refreshes += 1;
+    },
+    isJournalDisabled: () => false,
+  });
+
+  const pending = submitWrite(flow, {
+    key: 'k',
+    issueId: 'bza-1',
+    build: () => reopen('bza-1'),
+  });
+  await vi.advanceTimersByTimeAsync(0);
+  store.applyRecords([
+    { seq: 5, ts: '2026-11-01T00:00:05Z', op: 'update', issue_id: 'bza-1', issue: null },
+  ]);
+  const result = await pending;
+
+  expect(result).toEqual({ status: 'ok' });
+  expect(sent).toHaveLength(1);
+  expect(refreshes).toBe(0);
+  expect(store.getState().lastSeq).toBe(5);
 });

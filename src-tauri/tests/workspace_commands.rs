@@ -8,7 +8,7 @@ mod common;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use beadazzled_lib::bridge::BridgeErrorCode;
+use beadazzled_lib::bridge::{BridgeErrorCode, UpdateSpec, WriteCommand};
 use beadazzled_lib::commands::WorkspaceService;
 use beadazzled_lib::workspace::discovery::BdStatus;
 use beadazzled_lib::workspace::registry;
@@ -269,4 +269,66 @@ fn the_bd_path_is_persisted_for_the_next_run() {
         reloaded.bd_path.as_deref(),
         Some(common::fake_bd_path().display().to_string().as_str())
     );
+}
+
+#[test]
+fn writes_run_against_the_active_workspace() {
+    let dir = common::temp_dir("cmd-write");
+    let workspace = common::workspace(&dir);
+    let service = service(&dir.join("config.json"));
+    service
+        .add_workspace(&path_string(&workspace))
+        .expect("add");
+
+    let outcome = service
+        .write(&WriteCommand::Update(UpdateSpec::new("fx-1")))
+        .expect("write succeeds");
+
+    assert_eq!(outcome.exit_code, 0);
+    assert!(outcome.created_id.is_none());
+}
+
+#[test]
+fn exit_13_maps_to_a_write_conflict() {
+    let dir = common::temp_dir("cmd-write-conflict");
+    let workspace = common::workspace(&dir);
+    let service = service(&dir.join("config.json"));
+    service
+        .add_workspace(&path_string(&workspace))
+        .expect("add");
+
+    let error = service
+        .write(&WriteCommand::Update(UpdateSpec::new("stale")))
+        .expect_err("exit 13 is a conflict");
+
+    assert_eq!(error.code, BridgeErrorCode::WriteConflict);
+}
+
+#[test]
+fn writing_without_an_active_workspace_is_refused() {
+    let dir = common::temp_dir("cmd-write-no-workspace");
+    let service = service(&dir.join("config.json"));
+
+    let error = service
+        .write(&WriteCommand::Update(UpdateSpec::new("fx-1")))
+        .expect_err("no workspace means no write");
+
+    assert_eq!(error.code, BridgeErrorCode::WsNotBeads);
+}
+
+#[test]
+fn writing_to_a_vanished_workspace_is_refused() {
+    let dir = common::temp_dir("cmd-write-missing");
+    let workspace = common::workspace(&dir);
+    let service = service(&dir.join("config.json"));
+    service
+        .add_workspace(&path_string(&workspace))
+        .expect("add");
+    fs::remove_dir_all(&workspace).expect("remove workspace");
+
+    let error = service
+        .write(&WriteCommand::Update(UpdateSpec::new("fx-1")))
+        .expect_err("a missing workspace is refused");
+
+    assert_eq!(error.code, BridgeErrorCode::WsInaccessible);
 }

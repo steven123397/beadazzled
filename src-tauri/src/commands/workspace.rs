@@ -15,7 +15,7 @@ use serde_json::{Map, Value};
 use ts_rs::TS;
 
 use super::config_writer::ConfigWriter;
-use crate::bridge::{BdBridge, BridgeError, BridgeErrorCode};
+use crate::bridge::{BdBridge, BridgeError, BridgeErrorCode, WriteCommand, WriteOutcome};
 use crate::workspace::discovery::{BdDiscovery, BdStatus, MIN_BD_VERSION};
 use crate::workspace::registry::{load, AddOutcome, AppConfig, Checkpoint, WorkspaceEntry};
 use crate::workspace::validate::validate_workspace;
@@ -196,6 +196,24 @@ impl WorkspaceService {
         lock(&self.state).config.checkpoint_for(path, project_id)
     }
 
+    /// Runs one write against the active workspace.
+    pub fn write(&self, command: &WriteCommand) -> Result<WriteOutcome, BridgeError> {
+        let bd_path = self.ready_bd_path()?;
+        let workspace = {
+            let state = lock(&self.state);
+            state.config.last_workspace_path.clone().ok_or_else(|| {
+                BridgeError::new(
+                    BridgeErrorCode::WsNotBeads,
+                    "no workspace is open; add one before editing",
+                )
+            })?
+        };
+        if !Path::new(&workspace).is_dir() {
+            return Err(ws_inaccessible(&workspace));
+        }
+        BdBridge::new(bd_path, workspace).write(command)
+    }
+
     pub fn flush(&self) -> std::io::Result<()> {
         self.writer.flush()
     }
@@ -366,6 +384,14 @@ pub fn workspace_checkpoint(
     project_id: String,
 ) -> Option<Checkpoint> {
     service.checkpoint(&path, &project_id)
+}
+
+#[tauri::command]
+pub fn execute_write(
+    service: tauri::State<'_, WorkspaceService>,
+    command: WriteCommand,
+) -> Result<WriteOutcome, BridgeError> {
+    service.write(&command)
 }
 
 #[tauri::command]

@@ -1,9 +1,8 @@
 import type { WriteCommand } from '@/bindings/bd';
 
-import type { WriteQueue, WriteResult } from './queue';
-
-/** What `sync.waitForEcho` reports for one issue. */
-export type EchoOutcome = 'echoed' | 'timeout' | 'disabled';
+import { createEchoWaiter, type EchoOutcome } from '../sync/echo';
+import type { TicketStore } from '../sync/store';
+import { createWriteQueue, type WriteOutcome, type WriteQueue, type WriteResult } from './queue';
 
 /** Everything the write flow needs from sync and the store. */
 export type WriteFlow = {
@@ -56,4 +55,24 @@ export async function submitWrite(
     flow.refresh();
   }
   return result;
+}
+
+export type WriteFlowOptions = {
+  store: TicketStore;
+  /** The IPC call; `writesApi.execute` in the app. */
+  execute: (command: WriteCommand) => Promise<WriteOutcome>;
+  /** Re-runs the baseline after a conflict, echo timeout or disabled journal. */
+  refresh: () => void;
+  /** `sync` state: a disabled journal makes the echo wait short-circuit. */
+  isJournalDisabled: () => boolean;
+};
+
+/** Builds the production flow from the ticket store and the writes API. */
+export function createWriteFlow(options: WriteFlowOptions): WriteFlow {
+  return {
+    queue: createWriteQueue(options.execute),
+    currentSeq: () => options.store.getState().lastSeq,
+    waitForEcho: createEchoWaiter(options.store, options.isJournalDisabled),
+    refresh: options.refresh,
+  };
 }

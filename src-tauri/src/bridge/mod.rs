@@ -18,7 +18,9 @@ use std::path::PathBuf;
 use std::process::ChildStdout;
 use std::time::Duration;
 
+use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
+use ts_rs::TS;
 
 use self::parse::{journal_disabled, journal_truncated, parse_export, JournalStream};
 use self::process::{
@@ -202,7 +204,7 @@ pub struct BdVersion {
     pub raw: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 pub struct WriteOutcome {
     pub exit_code: i32,
     pub created_id: Option<String>,
@@ -439,6 +441,7 @@ mod tests {
             CreateSpec::decl(),
             UpdateSpec::decl(),
             AssigneeChange::decl(),
+            WriteOutcome::decl(),
             WorkspaceSnapshot::decl(),
         ];
 
@@ -476,6 +479,7 @@ mod tests {
             "LoadingStep",
             "WriteCommand",
             "AssigneeChange",
+            "WriteOutcome",
             "WorkspaceSnapshot",
         ] {
             assert!(
