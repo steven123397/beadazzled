@@ -54,3 +54,23 @@ test('a storage that throws on read or write degrades instead of crashing', () =
   };
   expect(() => saveSidebarCollapsed(true, throwingWrite)).not.toThrow();
 });
+test('a throwing window.localStorage getter degrades instead of crashing', () => {
+  const descriptor = Object.getOwnPropertyDescriptor(window, 'localStorage');
+  Object.defineProperty(window, 'localStorage', {
+    configurable: true,
+    get() {
+      throw new Error('SecurityError');
+    },
+  });
+
+  try {
+    expect(loadSidebarCollapsed()).toBe(false);
+    expect(() => saveSidebarCollapsed(true)).not.toThrow();
+  } finally {
+    if (descriptor === undefined) {
+      Reflect.deleteProperty(window, 'localStorage');
+    } else {
+      Object.defineProperty(window, 'localStorage', descriptor);
+    }
+  }
+});

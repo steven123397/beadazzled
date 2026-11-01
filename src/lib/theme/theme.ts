@@ -36,9 +36,12 @@ export function systemPrefersDark(): boolean {
 }
 
 /** Reads the saved preference; an unreadable storage means "follow the system". */
-export function loadTheme(storage: Storage = localStorage): Theme {
+export function loadTheme(storage?: Storage): Theme {
   try {
-    const stored = storage.getItem(THEME_STORAGE_KEY);
+    // Resolved inside the try: reading `window.localStorage` itself throws when
+    // storage is disabled, and a default parameter would evaluate first.
+    const store = storage ?? window.localStorage;
+    const stored = store.getItem(THEME_STORAGE_KEY);
     return isTheme(stored) ? stored : 'system';
   } catch {
     return 'system';
@@ -46,9 +49,9 @@ export function loadTheme(storage: Storage = localStorage): Theme {
 }
 
 /** Best-effort write: a restricted profile keeps the choice for this session only. */
-export function saveTheme(preference: Theme, storage: Storage = localStorage): void {
+export function saveTheme(preference: Theme, storage?: Storage): void {
   try {
-    storage.setItem(THEME_STORAGE_KEY, preference);
+    (storage ?? window.localStorage).setItem(THEME_STORAGE_KEY, preference);
   } catch {
     // Nothing to do: the theme is already applied in memory.
   }

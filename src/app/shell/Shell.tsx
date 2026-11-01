@@ -49,10 +49,7 @@ export function Shell({
   const [lastRefreshAt, setLastRefreshAt] = useState(() => Date.now());
   const [copyNotice, setCopyNotice] = useState<CopyResult | null>(null);
 
-  const refreshData = useMemo(
-    () => onRefresh ?? (() => void reload()),
-    [onRefresh, reload]
-  );
+  const refreshData = useMemo(() => onRefresh ?? (() => void reload()), [onRefresh, reload]);
   const refresh = useCallback(() => {
     refreshData();
     setLastRefreshAt(Date.now());
@@ -129,6 +126,9 @@ export function Shell({
         keys: 'mod+k',
         labelKey: 'shortcut.palette',
         group: 'General',
+        // One modal at a time: opening the palette under diagnostics would mount
+        // two focus traps and leave the newer backdrop covering the palette.
+        when: () => !overlayOpen,
         run: (ctx) => ctx.openPalette(),
       },
       {

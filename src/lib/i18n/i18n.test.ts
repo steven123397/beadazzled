@@ -85,3 +85,24 @@ test('a storage that throws on read or write degrades to the default language', 
   } as unknown as Storage;
   expect(() => saveLanguage('zh-CN', unwritable)).not.toThrow();
 });
+
+test('a throwing window.localStorage getter degrades instead of crashing', () => {
+  const descriptor = Object.getOwnPropertyDescriptor(window, 'localStorage');
+  Object.defineProperty(window, 'localStorage', {
+    configurable: true,
+    get() {
+      throw new Error('SecurityError');
+    },
+  });
+
+  try {
+    expect(loadLanguage()).toBe('en');
+    expect(() => saveLanguage('zh-CN')).not.toThrow();
+  } finally {
+    if (descriptor === undefined) {
+      Reflect.deleteProperty(window, 'localStorage');
+    } else {
+      Object.defineProperty(window, 'localStorage', descriptor);
+    }
+  }
+});

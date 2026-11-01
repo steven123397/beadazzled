@@ -80,3 +80,24 @@ test('a storage that throws on read or write degrades to the default theme', () 
   } as unknown as Storage;
   expect(() => saveTheme('dark', unwritable)).not.toThrow();
 });
+
+test('a throwing window.localStorage getter degrades instead of crashing', () => {
+  const descriptor = Object.getOwnPropertyDescriptor(window, 'localStorage');
+  Object.defineProperty(window, 'localStorage', {
+    configurable: true,
+    get() {
+      throw new Error('SecurityError');
+    },
+  });
+
+  try {
+    expect(loadTheme()).toBe('system');
+    expect(() => saveTheme('dark')).not.toThrow();
+  } finally {
+    if (descriptor === undefined) {
+      Reflect.deleteProperty(window, 'localStorage');
+    } else {
+      Object.defineProperty(window, 'localStorage', descriptor);
+    }
+  }
+});

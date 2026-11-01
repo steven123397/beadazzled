@@ -149,3 +149,26 @@ test('disabled sync never touches the Tauri API', () => {
   expect(fake.start).not.toHaveBeenCalled();
   expect(fake.stop).not.toHaveBeenCalled();
 });
+test('a refresh rejection from a previous workspace does not replace the state', async () => {
+  const fake = fakeApi();
+  let fail: ((error: unknown) => void) | null = null;
+  fake.refresh.mockImplementation(
+    () =>
+      new Promise<undefined>((_resolve, reject) => {
+        fail = reject;
+      })
+  );
+
+  const { result, rerender } = renderHook(
+    ({ workspace }: { workspace: string }) => useSync({ workspace, ready: true, api: fake.api }),
+    { initialProps: { workspace: '/repo/p1' } }
+  );
+  await waitFor(() => expect(fake.start).toHaveBeenCalled());
+
+  act(() => result.current.refresh());
+  rerender({ workspace: '/repo/p2' });
+  act(() => fail?.({ code: 'BD_TIMEOUT', message: 'slow' }));
+
+  await waitFor(() => expect(result.current.state.kind).toBe('loading'));
+  expect(result.current.state.kind).not.toBe('bd-unavailable');
+});

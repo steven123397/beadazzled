@@ -53,3 +53,15 @@ test('reports failure when the fallback is refused', async () => {
 
   await expect(copyText('bd: 1.3.2')).resolves.toBe('failed');
 });
+test('the fallback returns focus to the control that triggered the copy', async () => {
+  setClipboard(undefined);
+  Object.defineProperty(document, 'execCommand', { value: () => true, configurable: true });
+  const button = document.createElement('button');
+  document.body.appendChild(button);
+  button.focus();
+
+  await expect(copyText('bd: 1.3.2')).resolves.toBe('copied');
+
+  expect(document.activeElement).toBe(button);
+  button.remove();
+});

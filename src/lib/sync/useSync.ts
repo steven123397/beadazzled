@@ -1,10 +1,4 @@
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useState,
-  useSyncExternalStore,
-} from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 
 import type { BridgeError, Issue, JournalRecord, SyncState } from '@/bindings/bd';
 
@@ -44,8 +38,15 @@ export function useSync({
 }: UseSyncOptions): SyncControl {
   const [store] = useState(createTicketStore);
   const [state, setState] = useState<SyncState>(LOADING);
+  // Read at rejection time: a request from the previous workspace must not
+  // paint its error over the current one.
+  const activeWorkspace = useRef<string | null>(workspace);
   const ticketState = useSyncExternalStore(store.subscribe, store.getState, store.getState);
   const issues = useMemo(() => Object.values(ticketState.issues), [ticketState]);
+
+  useEffect(() => {
+    activeWorkspace.current = workspace;
+  }, [workspace]);
 
   useEffect(() => {
     if (!enabled) {
@@ -76,7 +77,11 @@ export function useSync({
           }
           const report = store.applyRecords(records);
           if (report.needsBaseline) {
-            void api.refresh(workspace).catch((error) => setState(unavailable(error)));
+            void api.refresh(workspace).catch((error) => {
+              if (!cancelled) {
+                setState(unavailable(error));
+              }
+            });
           }
         }),
         api.listen<SyncState>('state', (next) => {
@@ -116,7 +121,11 @@ export function useSync({
     if (!enabled || workspace === null || !ready) {
       return;
     }
-    void api.refresh(workspace).catch((error) => setState(unavailable(error)));
+    void api.refresh(workspace).catch((error) => {
+      if (activeWorkspace.current === workspace) {
+        setState(unavailable(error));
+      }
+    });
   }, [api, enabled, ready, workspace]);
 
   return { issues, state, lastSeq: ticketState.lastSeq, refresh };

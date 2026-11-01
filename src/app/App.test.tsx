@@ -707,3 +707,63 @@ test('a failed copy tells the user instead of doing nothing', async () => {
   expect(await screen.findByText(/Copy failed/)).toBeInTheDocument();
   Reflect.deleteProperty(document, 'execCommand');
 });
+
+test('a refresh keeps the routed view mounted instead of flashing the skeleton', async () => {
+  window.location.hash = '#/w/p1/list';
+  let snapshots = 0;
+  const api = fakeApi({
+    snapshot: async () => {
+      snapshots += 1;
+      if (snapshots === 1) {
+        return snapshot([entry('p1', 'alpha')], '/repo/p1');
+      }
+      return new Promise<WorkspaceSnapshot>(() => undefined);
+    },
+  });
+  render(<App workspaceApi={api} />);
+  await screen.findByRole('heading', { name: 'List' });
+
+  fireEvent.keyDown(window, { key: 'r', ctrlKey: true });
+  await waitFor(() => expect(snapshots).toBe(2));
+
+  expect(screen.getByRole('heading', { name: 'List' })).toBeInTheDocument();
+  expect(screen.queryByRole('status', { name: 'Loading workspace' })).not.toBeInTheDocument();
+});
+
+test('opening a workspace from the welcome blocker leaves the screen', async () => {
+  window.location.hash = '#/';
+  let data = snapshot([entry('p1', 'alpha'), entry('p2', 'beta')], '/repo/p1', {
+    missing: ['/repo/p1'],
+  });
+  const switchTo = vi.fn(async (path: string) => {
+    data = snapshot(data.config.workspaces, path);
+    return entry('p2', 'beta');
+  });
+
+  render(<App workspaceApi={fakeApi({ snapshot: async () => data, switchTo })} />);
+
+  expect(await screen.findByRole('heading', { name: /welcome/i })).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: /beta/ }));
+
+  expect(await screen.findByRole('heading', { name: 'List' })).toBeInTheDocument();
+  expect(window.location.hash).toBe('#/w/p2/list');
+});
+
+test('the palette shortcut does not stack on top of diagnostics', async () => {
+  window.location.hash = '#/w/p1/list';
+
+  render(
+    <App
+      workspaceApi={fakeApi({
+        snapshot: async () => snapshot([entry('p1', 'alpha')], '/repo/p1'),
+      })}
+    />
+  );
+  await screen.findByRole('heading', { name: 'List' });
+
+  await openDiagnostics();
+  fireEvent.keyDown(window, { key: 'k', ctrlKey: true });
+
+  expect(screen.queryByRole('dialog', { name: 'Command palette' })).not.toBeInTheDocument();
+  expect(screen.getByRole('dialog', { name: 'Diagnostics' })).toBeInTheDocument();
+});

@@ -21,9 +21,12 @@ export function isLanguage(value: unknown): value is Language {
 }
 
 /** Reads the saved language; an unreadable storage falls back to English. */
-export function loadLanguage(storage: Storage = localStorage): Language {
+export function loadLanguage(storage?: Storage): Language {
   try {
-    const stored = storage.getItem(LANGUAGE_STORAGE_KEY);
+    // Resolved inside the try: reading `window.localStorage` itself throws when
+    // storage is disabled, and a default parameter would evaluate first.
+    const store = storage ?? window.localStorage;
+    const stored = store.getItem(LANGUAGE_STORAGE_KEY);
     return isLanguage(stored) ? stored : 'en';
   } catch {
     return 'en';
@@ -31,9 +34,9 @@ export function loadLanguage(storage: Storage = localStorage): Language {
 }
 
 /** Best-effort write: a restricted profile keeps the choice for this session only. */
-export function saveLanguage(language: Language, storage: Storage = localStorage): void {
+export function saveLanguage(language: Language, storage?: Storage): void {
   try {
-    storage.setItem(LANGUAGE_STORAGE_KEY, language);
+    (storage ?? window.localStorage).setItem(LANGUAGE_STORAGE_KEY, language);
   } catch {
     // Nothing to do: the catalog switch already happened in memory.
   }

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Navigate, useLocation } from 'react-router-dom';
+import { Navigate, useLocation, useNavigate } from 'react-router-dom';
 
 import type { BdStatus, WorkspaceSnapshot } from '@/bindings/bd';
 import { useI18n } from '@/lib/i18n/I18nProvider';
@@ -13,12 +13,13 @@ type WelcomeReason = 'workspace-missing' | 'switch-failed';
 export function Welcome() {
   const { t } = useI18n();
   const location = useLocation();
+  const navigate = useNavigate();
   const reason = welcomeReason(location.state);
   const { snapshot, bd, loading, error, reload, refreshBd, add, switchTo } = useWorkspaceContext();
   const [path, setPath] = useState('');
   const [busy, setBusy] = useState(false);
 
-  if (loading) {
+  if (loading && snapshot === null) {
     return <SkeletonScreen />;
   }
 
@@ -64,7 +65,10 @@ export function Welcome() {
         {t('welcome.retry')}
       </button>
 
-      <section aria-labelledby="welcome-workspace" className="space-y-2 border-t border-border pt-3">
+      <section
+        aria-labelledby="welcome-workspace"
+        className="space-y-2 border-t border-border pt-3"
+      >
         <h2 id="welcome-workspace" className="text-sm font-medium">
           {t('welcome.choose')}
         </h2>
@@ -80,7 +84,15 @@ export function Welcome() {
               return;
             }
             setBusy(true);
-            void add(candidate).then(() => setBusy(false));
+            // The route still carries the reason that blocked the previous
+            // attempt, so the automatic redirect below will not fire; leave
+            // this screen explicitly once the workspace is open.
+            void add(candidate).then((ok) => {
+              setBusy(false);
+              if (ok) {
+                navigate('/', { replace: true });
+              }
+            });
           }}
         >
           <label htmlFor="workspace-path" className="sr-only">
@@ -116,7 +128,12 @@ export function Welcome() {
                       type="button"
                       onClick={() => {
                         setBusy(true);
-                        void switchTo(workspace.path).then(() => setBusy(false));
+                        void switchTo(workspace.path).then((ok) => {
+                          setBusy(false);
+                          if (ok) {
+                            navigate('/', { replace: true });
+                          }
+                        });
                       }}
                       disabled={busy || gone}
                       className="flex w-full items-baseline justify-between gap-3 rounded border border-border px-2 py-1 text-left text-sm text-foreground disabled:opacity-50"

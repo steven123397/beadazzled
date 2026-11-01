@@ -111,7 +111,9 @@ function AppFrame({
         <WorkspaceProvider workspace={workspace}>
           <HashRouter>
             <Routes>
-              <Route element={<Shell issues={shellIssues} onRefresh={refresh} lastSeq={shellLastSeq} />}>
+              <Route
+                element={<Shell issues={shellIssues} onRefresh={refresh} lastSeq={shellLastSeq} />}
+              >
                 <Route index element={<RootRedirect />} />
                 <Route path="welcome" element={<Welcome />} />
                 <Route path="w/:projectId" element={<ProjectGate />}>
@@ -135,7 +137,9 @@ function AppFrame({
 function RootRedirect() {
   const { snapshot, loading } = useWorkspaceContext();
 
-  if (loading) {
+  // Only the first load has no snapshot to render; a refresh keeps the current
+  // view mounted instead of tearing it down and losing scroll and selection.
+  if (loading && snapshot === null) {
     return <SkeletonScreen />;
   }
 
@@ -190,7 +194,7 @@ function ProjectGate() {
     });
   }, [isActive, loading, project, switchTo, switching]);
 
-  if (loading) {
+  if (loading && snapshot === null) {
     return <SkeletonScreen />;
   }
 

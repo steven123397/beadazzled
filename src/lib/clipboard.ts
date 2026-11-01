@@ -22,6 +22,9 @@ export async function copyText(text: string): Promise<CopyResult> {
 }
 
 function fallbackCopy(text: string): boolean {
+  // `area.select()` moves focus; whoever pressed the button must get it back.
+  const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+
   try {
     if (typeof document.execCommand !== 'function') {
       return false;
@@ -40,5 +43,9 @@ function fallbackCopy(text: string): boolean {
     }
   } catch {
     return false;
+  } finally {
+    if (previous !== null && previous.isConnected) {
+      previous.focus();
+    }
   }
 }
