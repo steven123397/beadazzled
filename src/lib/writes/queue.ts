@@ -10,20 +10,21 @@ export type WriteResult =
   | { status: 'conflict'; error: BridgeError }
   | { status: 'failed'; error: BridgeError };
 
-export type WriteExecutor = (command: WriteCommand) => Promise<WriteOutcome>;
+export type WriteExecutor = (workspace: string, command: WriteCommand) => Promise<WriteOutcome>;
 
 export interface WriteQueue {
   /**
-   * Enqueues one write. Identical `key`s submitted before dispatch share one
-   * promise and produce one bd call.
+   * Enqueues one write for `workspace`. Identical keys submitted for the same
+   * workspace before dispatch share one promise and produce one bd call.
    */
-  submit(key: string, build: () => WriteCommand): Promise<WriteResult>;
+  submit(key: string, workspace: string, build: () => WriteCommand): Promise<WriteResult>;
   /** Writes still waiting behind the in-flight one. */
   pendingCount(): number;
 }
 
 type Task = {
-  key: string;
+  dedupeKey: string;
+  workspace: string;
   build: () => WriteCommand;
   resolve: (result: WriteResult) => void;
 };
@@ -57,7 +58,7 @@ export function createWriteQueue(execute: WriteExecutor): WriteQueue {
     try {
       while (waiting.length > 0) {
         const task = waiting.shift()!;
-        undispatched.delete(task.key);
+        undispatched.delete(task.dedupeKey);
         task.resolve(await run(task));
       }
     } finally {
@@ -68,7 +69,7 @@ export function createWriteQueue(execute: WriteExecutor): WriteQueue {
   async function run(task: Task): Promise<WriteResult> {
     let outcome: WriteOutcome;
     try {
-      outcome = await execute(task.build());
+      outcome = await execute(task.workspace, task.build());
     } catch (error) {
       return { status: 'failed', error: internalError(error) };
     }
@@ -83,8 +84,11 @@ export function createWriteQueue(execute: WriteExecutor): WriteQueue {
   }
 
   return {
-    submit(key, build) {
-      const existing = undispatched.get(key);
+    submit(key, workspace, build) {
+      // The workspace is part of the identity: the same issue key can exist in
+      // two workspaces, and those writes must not be deduplicated together.
+      const dedupeKey = `${workspace}\u0000${key}`;
+      const existing = undispatched.get(dedupeKey);
       if (existing) {
         return existing;
       }
@@ -92,9 +96,9 @@ export function createWriteQueue(execute: WriteExecutor): WriteQueue {
       const promise = new Promise<WriteResult>((settle) => {
         resolve = settle;
       });
-      const task: Task = { key, build, resolve };
+      const task: Task = { dedupeKey, workspace, build, resolve };
       waiting.push(task);
-      undispatched.set(key, promise);
+      undispatched.set(dedupeKey, promise);
       schedulePump();
       return promise;
     },

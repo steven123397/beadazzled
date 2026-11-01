@@ -26,6 +26,7 @@ function fakeFlow(outcome: WriteResult): {
       },
       pendingCount: () => 0,
     },
+    workspace: () => 'C:/ws',
     currentSeq: () => 0,
     waitForEcho: async () => 'echoed',
     refresh: () => {
@@ -69,6 +70,7 @@ test('the issue stays pending until the write and its echo settle', async () => 
   });
   const flow: WriteFlow = {
     queue: { submit: () => gate, pendingCount: () => 0 },
+    workspace: () => 'C:/ws',
     currentSeq: () => 0,
     waitForEcho: async () => 'echoed',
     refresh: () => {},
@@ -86,6 +88,50 @@ test('the issue stays pending until the write and its echo settle', async () => 
     await submission;
   });
   expect(result.current.isPending('bza-1')).toBe(false);
+});
+
+test('overlapping writes keep the issue pending until the last one settles', async () => {
+  let settleFirst!: (result: WriteResult) => void;
+  let settleSecond!: (result: WriteResult) => void;
+  const gates = [
+    new Promise<WriteResult>((resolve) => {
+      settleFirst = resolve;
+    }),
+    new Promise<WriteResult>((resolve) => {
+      settleSecond = resolve;
+    }),
+  ];
+  let call = 0;
+  const flow: WriteFlow = {
+    queue: { submit: () => gates[call++], pendingCount: () => 0 },
+    workspace: () => 'C:/ws',
+    currentSeq: () => 0,
+    waitForEcho: async () => 'echoed',
+    refresh: () => {},
+  };
+  const { result } = renderHook(() => useWrite(flow, READY));
+
+  let first = Promise.resolve({} as WriteResult);
+  let second = Promise.resolve({} as WriteResult);
+  act(() => {
+    first = result.current.submit({ key: 'a', issueId: 'bza-1', build: () => COMMAND });
+    second = result.current.submit({ key: 'b', issueId: 'bza-1', build: () => COMMAND });
+  });
+  expect(result.current.isPending('bza-1')).toBe(true);
+  expect(result.current.pending).toEqual(['bza-1']);
+
+  await act(async () => {
+    settleFirst({ status: 'ok' });
+    await first;
+  });
+  expect(result.current.isPending('bza-1')).toBe(true);
+
+  await act(async () => {
+    settleSecond({ status: 'ok' });
+    await second;
+  });
+  expect(result.current.isPending('bza-1')).toBe(false);
+  expect(result.current.pending).toEqual([]);
 });
 
 test('a failure is visible and keeps the result', async () => {

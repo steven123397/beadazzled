@@ -92,6 +92,37 @@ function fakeApi(): { api: WorkspaceApi; calls: string[]; setFound: (bd: BdStatu
   };
 }
 
+test('an older reload cannot overwrite a newer one', async () => {
+  const pending: Array<(value: WorkspaceSnapshot) => void> = [];
+  const api: WorkspaceApi = {
+    snapshot: () => new Promise((resolve) => pending.push(resolve)),
+    bdStatus: async () => READY,
+    setBdPath: async () => READY,
+    add: async (path) => entry(path),
+    switchTo: async (path) => entry(path),
+    remove: async () => true,
+    relocate: async (_oldPath, path) => entry(path),
+    setCheckpoint: async () => true,
+    checkpoint: async () => null,
+    flush: async () => {},
+  };
+  const { result } = renderHook(() => useWorkspace(api));
+
+  await act(async () => {
+    void result.current.reload();
+  });
+  expect(pending).toHaveLength(2);
+
+  await act(async () => {
+    pending[1](snapshot('new'));
+  });
+  await act(async () => {
+    pending[0](snapshot('old'));
+  });
+
+  expect(result.current.snapshot?.active).toBe('new');
+});
+
 test('loads the snapshot and bd status on mount', async () => {
   const { api } = fakeApi();
 

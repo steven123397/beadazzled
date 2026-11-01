@@ -33,6 +33,10 @@ pub struct WorkspaceSnapshot {
     pub corrupt_backup: Option<String>,
 }
 
+/// Persistence invariant: every mutation queues its snapshot while the
+/// state lock is still held. The writer numbers snapshots in queue order, so
+/// queueing after dropping the lock would let a concurrent command store an
+/// older snapshot last.
 pub struct WorkspaceService {
     writer: std::sync::Arc<ConfigWriter>,
     state: Mutex<State>,
@@ -47,11 +51,22 @@ struct State {
 impl WorkspaceService {
     pub fn open(config_path: impl Into<PathBuf>) -> std::io::Result<Self> {
         let config_path = config_path.into();
+        let writer = ConfigWriter::new(config_path.clone());
+        Self::open_with_writer(config_path, writer)
+    }
+
+    /// Test seam: supply the writer so a test can pause its queue.
+    #[doc(hidden)]
+    pub fn open_with_writer(
+        config_path: impl Into<PathBuf>,
+        writer: std::sync::Arc<ConfigWriter>,
+    ) -> std::io::Result<Self> {
+        let config_path = config_path.into();
         let loaded = load(&config_path)?;
         let discovery =
             std::sync::Arc::new(BdDiscovery::from_env(loaded.config.bd_path.as_deref()));
         Ok(Self {
-            writer: ConfigWriter::new(config_path),
+            writer,
             state: Mutex::new(State {
                 config: loaded.config,
                 discovery,
@@ -110,32 +125,49 @@ impl WorkspaceService {
         let entry = validated.into_entry(now.clone());
 
         let mut state = lock(&self.state);
+        let identity = (entry.project_id.clone(), entry.is_worktree);
         let index = match state.config.add_workspace(entry) {
-            AddOutcome::Added(index) | AddOutcome::Existing(index) => index,
+            AddOutcome::Added(index) => index,
+            AddOutcome::Existing(index) => {
+                // The directory may have been recreated since it was first
+                // registered: refresh its identity so a stale project id and
+                // checkpoint cannot be reused.
+                state.config.workspaces[index].apply_identity(&identity.0, identity.1);
+                index
+            }
         };
         let canonical = state.config.workspaces[index].path.clone();
         state.config.switch_workspace(&canonical, now);
         let saved = state.config.clone();
         let result = state.config.workspaces[index].clone();
-        drop(state);
         self.writer.queue(saved);
         Ok(result)
     }
 
     pub fn switch_workspace(&self, path: &str) -> Result<WorkspaceEntry, BridgeError> {
-        let mut state = lock(&self.state);
-        let index = state
-            .config
-            .workspace_index(path)
-            .ok_or_else(|| not_registered(path))?;
-        let canonical = state.config.workspaces[index].path.clone();
+        let canonical = {
+            let state = lock(&self.state);
+            let index = state
+                .config
+                .workspace_index(path)
+                .ok_or_else(|| not_registered(path))?;
+            state.config.workspaces[index].path.clone()
+        };
         if !Path::new(&canonical).is_dir() {
             return Err(ws_inaccessible(&canonical));
         }
+        let bd_path = self.ready_bd_path()?;
+        let validated = validate_workspace(Path::new(&bd_path), Path::new(&canonical))?;
+
+        let mut state = lock(&self.state);
+        let index = state
+            .config
+            .workspace_index(&canonical)
+            .ok_or_else(|| not_registered(&canonical))?;
+        state.config.workspaces[index].apply_identity(&validated.project_id, validated.is_worktree);
         state.config.switch_workspace(&canonical, now_iso());
         let saved = state.config.clone();
         let result = state.config.workspaces[index].clone();
-        drop(state);
         self.writer.queue(saved);
         Ok(result)
     }
@@ -146,7 +178,6 @@ impl WorkspaceService {
             return false;
         }
         let saved = state.config.clone();
-        drop(state);
         self.writer.queue(saved);
         true
     }
@@ -170,7 +201,6 @@ impl WorkspaceService {
             .ok_or_else(|| not_registered(old_path))?;
         let result = state.config.workspaces[index].clone();
         let saved = state.config.clone();
-        drop(state);
         self.writer.queue(saved);
         Ok(result)
     }
@@ -186,7 +216,6 @@ impl WorkspaceService {
             return false;
         }
         let saved = state.config.clone();
-        drop(state);
         self.writer.queue(saved);
         true
     }
@@ -196,20 +225,26 @@ impl WorkspaceService {
         lock(&self.state).config.checkpoint_for(path, project_id)
     }
 
-    /// Runs one write against the active workspace.
-    pub fn write(&self, command: &WriteCommand) -> Result<WriteOutcome, BridgeError> {
+    /// Runs one write against the workspace the submission belongs to.
+    ///
+    /// The caller carries the workspace it was editing. Resolving the active
+    /// workspace here instead would let a queued write land in a workspace the
+    /// user switched to in the meantime.
+    pub fn write(
+        &self,
+        workspace: &str,
+        command: &WriteCommand,
+    ) -> Result<WriteOutcome, BridgeError> {
         let bd_path = self.ready_bd_path()?;
-        let workspace = {
-            let state = lock(&self.state);
-            state.config.last_workspace_path.clone().ok_or_else(|| {
-                BridgeError::new(
-                    BridgeErrorCode::WsNotBeads,
-                    "no workspace is open; add one before editing",
-                )
-            })?
-        };
-        if !Path::new(&workspace).is_dir() {
-            return Err(ws_inaccessible(&workspace));
+        let registered = lock(&self.state)
+            .config
+            .workspace_index(workspace)
+            .is_some();
+        if !registered {
+            return Err(not_registered(workspace));
+        }
+        if !Path::new(workspace).is_dir() {
+            return Err(ws_inaccessible(workspace));
         }
         BdBridge::new(bd_path, workspace).write(command)
     }
@@ -393,9 +428,10 @@ pub fn workspace_checkpoint(
 #[tauri::command(async)]
 pub fn execute_write(
     service: tauri::State<'_, WorkspaceService>,
+    workspace: String,
     command: WriteCommand,
 ) -> Result<WriteOutcome, BridgeError> {
-    service.write(&command)
+    service.write(&workspace, &command)
 }
 
 #[tauri::command(async)]

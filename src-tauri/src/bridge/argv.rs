@@ -87,14 +87,19 @@ pub fn argv_for(command: &WriteCommand) -> Argv {
         WriteCommand::Update(spec) => update_argv(spec),
         WriteCommand::Close { id, reason } => close_argv(id, reason.as_deref()),
         WriteCommand::Reopen { id } => Argv {
-            args: vec![OsString::from("reopen"), OsString::from(id.as_str())],
+            args: vec![
+                OsString::from("reopen"),
+                OsString::from("--"),
+                OsString::from(id.as_str()),
+            ],
             stdin: None,
         },
         WriteCommand::Comment { id, text } => Argv {
             args: vec![
                 OsString::from("comment"),
-                OsString::from(id.as_str()),
                 OsString::from("--stdin"),
+                OsString::from("--"),
+                OsString::from(id.as_str()),
             ],
             stdin: Some(text.clone().into_bytes()),
         },
@@ -130,7 +135,7 @@ fn create_argv(spec: &CreateSpec) -> Argv {
 }
 
 fn update_argv(spec: &UpdateSpec) -> Argv {
-    let mut args = vec![OsString::from("update"), OsString::from(spec.id.as_str())];
+    let mut args = vec![OsString::from("update")];
 
     if let Some(status) = &spec.status {
         push_flag(&mut args, "-s", status.clone());
@@ -178,12 +183,13 @@ fn update_argv(spec: &UpdateSpec) -> Argv {
     if let Some(if_assignee) = &spec.if_assignee {
         push_flag(&mut args, "--if-assignee", if_assignee.clone());
     }
+    push_id(&mut args, &spec.id);
 
     Argv { args, stdin }
 }
 
 fn close_argv(id: &str, reason: Option<&str>) -> Argv {
-    let mut args = vec![OsString::from("close"), OsString::from(id)];
+    let mut args = vec![OsString::from("close")];
     let mut stdin = None;
 
     if let Some(reason) = reason.filter(|reason| !reason.is_empty()) {
@@ -195,8 +201,16 @@ fn close_argv(id: &str, reason: Option<&str>) -> Argv {
             push_flag(&mut args, "-r", reason.to_owned());
         }
     }
+    push_id(&mut args, id);
 
     Argv { args, stdin }
+}
+
+/// The issue id is the only positional argument; `--` stops an id that looks
+/// like a flag from being parsed as one.
+fn push_id(args: &mut Vec<OsString>, id: &str) {
+    args.push(OsString::from("--"));
+    args.push(OsString::from(id));
 }
 
 fn push_flag(args: &mut Vec<OsString>, flag: &str, value: impl Into<OsString>) {

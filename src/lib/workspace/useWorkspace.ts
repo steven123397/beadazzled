@@ -36,6 +36,8 @@ export function useWorkspace(api: WorkspaceApi = workspaceApi): UseWorkspace {
     error: null,
   });
   const alive = useRef(true);
+  // Only the newest reload may commit: an earlier request can resolve last.
+  const reloads = useRef(0);
 
   useEffect(() => {
     alive.current = true;
@@ -45,14 +47,15 @@ export function useWorkspace(api: WorkspaceApi = workspaceApi): UseWorkspace {
   }, []);
 
   const reload = useCallback(async () => {
+    const generation = ++reloads.current;
     setState((previous) => ({ ...previous, loading: true, error: null }));
     try {
       const [snapshot, bd] = await Promise.all([api.snapshot(), api.bdStatus(false)]);
-      if (alive.current) {
+      if (alive.current && generation === reloads.current) {
         setState({ snapshot, bd, loading: false, error: null });
       }
     } catch (error) {
-      if (alive.current) {
+      if (alive.current && generation === reloads.current) {
         setState((previous) => ({ ...previous, loading: false, error: messageOf(error) }));
       }
     }

@@ -114,7 +114,6 @@ fn update_merges_every_field_into_one_command() {
         &argv.args,
         &[
             "update",
-            "bza-1",
             "-s",
             "closed",
             "-p",
@@ -137,6 +136,8 @@ fn update_merges_every_field_into_one_command() {
             "in_progress",
             "--if-assignee",
             "bob",
+            "--",
+            "bza-1",
         ],
     );
     assert_eq!(argv.stdin.as_deref(), Some(b"new body\n".as_slice()));
@@ -161,11 +162,12 @@ fn update_status_carries_the_expected_status_guard() {
         &argv.args,
         &[
             "update",
-            "bza-1",
             "-s",
             "in_progress",
             "--if-status",
             "open",
+            "--",
+            "bza-1",
         ],
     );
     assert!(argv.stdin.is_none());
@@ -178,7 +180,7 @@ fn clearing_the_assignee_uses_an_empty_argument() {
 
     let argv = argv_for(&WriteCommand::Update(spec));
 
-    assert_args(&argv.args, &["update", "bza-2", "-a", ""]);
+    assert_args(&argv.args, &["update", "-a", "", "--", "bza-2"]);
 }
 
 #[test]
@@ -192,10 +194,11 @@ fn clearing_the_description_adds_allow_empty_description() {
         &argv.args,
         &[
             "update",
-            "bza-2",
             "--body-file",
             "-",
             "--allow-empty-description",
+            "--",
+            "bza-2",
         ],
     );
     assert_eq!(argv.stdin.as_deref(), Some(b"".as_slice()));
@@ -260,7 +263,7 @@ fn comment_text_goes_to_stdin() {
         text: text.to_owned(),
     });
 
-    assert_args(&argv.args, &["comment", "bza-3", "--stdin"]);
+    assert_args(&argv.args, &["comment", "--stdin", "--", "bza-3"]);
     assert_eq!(argv.stdin.as_deref(), Some(text.as_bytes()));
 }
 
@@ -270,7 +273,10 @@ fn close_uses_argv_for_a_short_reason_and_stdin_for_a_long_one() {
         id: "bza-4".to_owned(),
         reason: Some("duplicate of bza-2".to_owned()),
     });
-    assert_args(&short.args, &["close", "bza-4", "-r", "duplicate of bza-2"]);
+    assert_args(
+        &short.args,
+        &["close", "-r", "duplicate of bza-2", "--", "bza-4"],
+    );
     assert!(short.stdin.is_none());
 
     let reason = "x".repeat(LONG_TEXT_THRESHOLD);
@@ -278,14 +284,14 @@ fn close_uses_argv_for_a_short_reason_and_stdin_for_a_long_one() {
         id: "bza-4".to_owned(),
         reason: Some(reason.clone()),
     });
-    assert_args(&long.args, &["close", "bza-4", "--reason-file", "-"]);
+    assert_args(&long.args, &["close", "--reason-file", "-", "--", "bza-4"]);
     assert_eq!(long.stdin.as_deref(), Some(reason.as_bytes()));
 
     let no_reason = argv_for(&WriteCommand::Close {
         id: "bza-4".to_owned(),
         reason: None,
     });
-    assert_args(&no_reason.args, &["close", "bza-4"]);
+    assert_args(&no_reason.args, &["close", "--", "bza-4"]);
     assert!(no_reason.stdin.is_none());
 }
 
@@ -295,8 +301,17 @@ fn reopen_has_no_extra_flags() {
         id: "bza-5".to_owned(),
     });
 
-    assert_args(&argv.args, &["reopen", "bza-5"]);
+    assert_args(&argv.args, &["reopen", "--", "bza-5"]);
     assert!(argv.stdin.is_none());
+}
+
+#[test]
+fn an_id_that_looks_like_a_flag_stays_positional() {
+    let argv = argv_for(&WriteCommand::Reopen {
+        id: "--help".to_owned(),
+    });
+
+    assert_args(&argv.args, &["reopen", "--", "--help"]);
 }
 
 /// Behaviors verified against real bd 1.3.2 on 2026-11-01 (bza-ryr.20): an
@@ -328,10 +343,11 @@ fn bd_1_3_2_verified_write_behaviors() {
             }),
             expected_args: vec![
                 "update",
-                "bza-6",
                 "--body-file",
                 "-",
                 "--allow-empty-description",
+                "--",
+                "bza-6",
             ],
             expected_stdin: Some(Vec::new()),
         },
@@ -357,11 +373,12 @@ fn bd_1_3_2_verified_write_behaviors() {
             command: WriteCommand::Update(require_unassigned),
             expected_args: vec![
                 "update",
-                "bza-6",
                 "--title",
                 "Rename only while unassigned",
                 "--if-assignee",
                 "",
+                "--",
+                "bza-6",
             ],
             expected_stdin: None,
         },
@@ -371,7 +388,7 @@ fn bd_1_3_2_verified_write_behaviors() {
                 id: "bza-6".to_owned(),
                 reason: Some(long_reason.clone()),
             },
-            expected_args: vec!["close", "bza-6", "--reason-file", "-"],
+            expected_args: vec!["close", "--reason-file", "-", "--", "bza-6"],
             expected_stdin: Some(long_reason.into_bytes()),
         },
     ];

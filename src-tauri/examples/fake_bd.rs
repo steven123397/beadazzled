@@ -98,7 +98,11 @@ fn main() {
                 "config" => println!("true"),
                 "create" => println!("bza-new"),
                 "update" => {
-                    if args.iter().any(|arg| arg == "stale") {
+                    if args.iter().any(|arg| arg == "stale")
+                        || std::path::Path::new(workspace)
+                            .join("reject-write")
+                            .exists()
+                    {
                         eprintln!("Error: precondition no longer held");
                         process::exit(13);
                     }
@@ -370,12 +374,21 @@ fn journal_file(workspace: &str) -> Option<Vec<u8>> {
 }
 
 fn print_fixture_with_workspace(name: &str, workspace: &str) {
+    const DEFAULT_PROJECT_ID: &str = "00000000-0000-4000-8000-000000000000";
     let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../tests/fixtures/bd")
         .join(name);
     let fixture = fs::read_to_string(&path).expect("read fixture");
     let escaped = serde_json::to_string(workspace).expect("escape workspace");
-    let rendered = fixture.replace("<workspace>", escaped.trim_matches('"'));
+    let mut rendered = fixture.replace("<workspace>", escaped.trim_matches('"'));
+    // A workspace-local `project-id` file lets a test simulate a recreated
+    // repository whose identity changed.
+    if let Ok(project_id) = fs::read_to_string(std::path::Path::new(workspace).join("project-id")) {
+        let project_id = project_id.trim();
+        if !project_id.is_empty() {
+            rendered = rendered.replace(DEFAULT_PROJECT_ID, project_id);
+        }
+    }
     io::stdout()
         .write_all(rendered.as_bytes())
         .expect("write fixture");
