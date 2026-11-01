@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 
 import type { BdStatus, BridgeError } from '@/bindings/bd';
 import { describeError } from '@/lib/errors';
@@ -25,9 +25,12 @@ export type UseWrite = {
  * leaves a visible message and keeps the store untouched.
  */
 export function useWrite(flow: WriteFlow, bd: BdStatus | null): UseWrite {
-  const [pending, setPending] = useState<string[]>([]);
+  // One entry per overlapping submission: the id must stay pending until the
+  // last one settles, not until the first one does.
+  const [inFlight, setInFlight] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<WriteResult | null>(null);
+  const pending = useMemo(() => Array.from(new Set(inFlight)), [inFlight]);
 
   const canWrite = bd?.kind === 'ready';
   const disabledReason = canWrite ? null : reasonFor(bd);
@@ -43,9 +46,7 @@ export function useWrite(flow: WriteFlow, bd: BdStatus | null): UseWrite {
 
       const issueId = submission.issueId;
       if (issueId) {
-        setPending((previous) =>
-          previous.includes(issueId) ? previous : [...previous, issueId]
-        );
+        setInFlight((previous) => [...previous, issueId]);
       }
       setError(null);
 
@@ -58,7 +59,13 @@ export function useWrite(flow: WriteFlow, bd: BdStatus | null): UseWrite {
         return outcome;
       } finally {
         if (issueId) {
-          setPending((previous) => previous.filter((id) => id !== issueId));
+          setInFlight((previous) => {
+            const index = previous.indexOf(issueId);
+            if (index === -1) {
+              return previous;
+            }
+            return [...previous.slice(0, index), ...previous.slice(index + 1)];
+          });
         }
       }
     },
