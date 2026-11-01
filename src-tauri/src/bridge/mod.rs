@@ -6,9 +6,10 @@
 //! bindings in `src/bindings/bd.ts`.
 
 pub mod error;
+pub mod parse;
 pub mod types;
 
-pub use error::{BridgeError, BridgeErrorCode};
+pub use error::{map_exit, BridgeError, BridgeErrorCode};
 pub use types::{
     Comment, Dependency, Issue, JournalComment, JournalDep, JournalOp, JournalRecord,
     WorkspaceContext,
