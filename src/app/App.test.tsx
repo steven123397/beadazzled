@@ -1,7 +1,8 @@
-import { fireEvent, render, screen } from '@testing-library/react';
-import { beforeEach, expect, test } from 'vitest';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { beforeEach, expect, test, vi } from 'vitest';
 
 import type { BdStatus, Issue, SyncState, WorkspaceEntry, WorkspaceSnapshot } from '@/bindings/bd';
+import type { SyncApi, SyncEvent, SyncSnapshot } from '@/lib/sync/api';
 import type { WorkspaceApi } from '@/lib/workspace/api';
 
 import { App } from './App';
@@ -69,6 +70,30 @@ function fakeApi(overrides: Partial<WorkspaceApi> = {}): WorkspaceApi {
 }
 
 const healthy: SyncState = { kind: 'healthy', lastSeq: 42, lastEventAt: null };
+
+function fakeSyncApi() {
+  const handlers = new Map<SyncEvent, (payload: unknown) => void>();
+  const start = vi.fn(async () => undefined);
+  const refresh = vi.fn(async () => undefined);
+  const stop = vi.fn(async () => undefined);
+  const api: SyncApi = {
+    start,
+    refresh,
+    stop,
+    listen: async <T,>(event: SyncEvent, handler: (payload: T) => void) => {
+      handlers.set(event, handler as (payload: unknown) => void);
+      return () => {
+        handlers.delete(event);
+      };
+    },
+  };
+
+  return {
+    api,
+    start,
+    emit: (event: SyncEvent, payload: unknown) => handlers.get(event)?.(payload),
+  };
+}
 
 beforeEach(() => {
   window.location.hash = '';
@@ -232,4 +257,34 @@ test('the theme action applies the new theme immediately', async () => {
 
   expect(document.documentElement.classList.contains('dark')).toBe(true);
   expect(localStorage.getItem('beadazzled.theme')).toBe('dark');
+});
+
+test('production sync wiring feeds the status bar and ticket search', async () => {
+  window.location.hash = '#/w/p1/list';
+  const sync = fakeSyncApi();
+
+  render(
+    <App
+      workspaceApi={fakeApi({
+        snapshot: async () => snapshot([entry('p1', 'alpha')], '/repo/p1'),
+      })}
+      syncEnabled
+      syncApi={sync.api}
+    />
+  );
+  await waitFor(() => expect(sync.start).toHaveBeenCalledWith('/repo/p1'));
+
+  act(() => {
+    sync.emit('state', healthy);
+    sync.emit('snapshot', {
+      issues: [issue('bza-9xy', 'Detail reading')],
+      since: 0,
+    } satisfies SyncSnapshot);
+  });
+
+  expect(await screen.findByLabelText('Status bar')).toHaveTextContent('Live');
+
+  fireEvent.keyDown(window, { key: 'k', ctrlKey: true });
+  fireEvent.change(screen.getByRole('combobox'), { target: { value: 'detail' } });
+  expect(screen.getByText('Detail reading')).toBeInTheDocument();
 });

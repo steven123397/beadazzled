@@ -12,6 +12,10 @@ if (container === null) {
 
 // Dev-only hook for Playwright; production builds drop this branch.
 const e2e = import.meta.env.DEV ? readE2EState() : undefined;
+// The browser e2e/dev pages have no Tauri IPC; only the real shell may start
+// the sync worker. The fake bridge also sets `__BEADAZZLED_E2E__`, so it is
+// excluded by the first check.
+const syncEnabled = e2e === undefined && '__TAURI_INTERNALS__' in window;
 
 createRoot(container).render(
   <StrictMode>
@@ -20,6 +24,7 @@ createRoot(container).render(
       syncState={e2e?.syncState}
       initialLanguage={e2e?.language}
       initialTheme={e2e?.theme}
+      syncEnabled={syncEnabled}
     />
   </StrictMode>
 );

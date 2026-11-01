@@ -67,8 +67,10 @@ impl SyncState {
 /// every state transition. Implementations forward to Tauri events and the
 /// ticket store.
 pub trait SyncSink {
-    /// The full `bd export` snapshot; replaces the store contents.
-    fn snapshot(&mut self, issues: &[Issue]);
+    /// The full `bd export` snapshot; replaces the store contents. `since` is
+    /// the checkpoint the snapshot was taken at (0 for a first run or rebuild),
+    /// so the consumer can seed its journal cursor correctly.
+    fn snapshot(&mut self, issues: &[Issue], since: i64);
     /// Journal records in ascending seq order, already filtered for idempotency.
     fn records(&mut self, records: &[JournalRecord]);
     /// Every state transition, including the initial loading state.
@@ -86,7 +88,7 @@ pub struct RecordingSink {
 
 #[cfg(test)]
 impl SyncSink for RecordingSink {
-    fn snapshot(&mut self, issues: &[Issue]) {
+    fn snapshot(&mut self, issues: &[Issue], _since: i64) {
         self.snapshots.push(issues.to_vec());
     }
 

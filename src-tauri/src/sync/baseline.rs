@@ -202,7 +202,7 @@ impl<S: SyncSource> SyncEngine<S> {
             Ok(issues) => issues,
             Err(error) => return self.unavailable(sink, &error),
         };
-        sink.snapshot(&issues);
+        sink.snapshot(&issues, since);
 
         self.set_state(
             sink,
@@ -684,8 +684,8 @@ mod tests {
     }
 
     impl SyncSink for CountingSink {
-        fn snapshot(&mut self, issues: &[Issue]) {
-            self.inner.snapshot(issues);
+        fn snapshot(&mut self, issues: &[Issue], _since: i64) {
+            self.inner.snapshot(issues, _since);
         }
 
         fn records(&mut self, records: &[JournalRecord]) {

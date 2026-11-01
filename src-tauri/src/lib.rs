@@ -36,6 +36,8 @@ pub fn run() {
             let config_path = app.path().app_config_dir()?.join("config.json");
             let service = commands::WorkspaceService::open(config_path)?;
             app.manage(service);
+            let sync = commands::SyncController::new(app.handle().clone());
+            app.manage(sync);
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -50,6 +52,9 @@ pub fn run() {
             commands::workspace::workspace_checkpoint,
             commands::workspace::execute_write,
             commands::workspace::workspace_flush,
+            commands::sync::sync_start,
+            commands::sync::sync_refresh,
+            commands::sync::sync_stop,
         ])
         .build(tauri::generate_context!())
     {
@@ -62,6 +67,7 @@ pub fn run() {
 
     app.run(|app, event| {
         if let tauri::RunEvent::Exit = event {
+            app.state::<commands::SyncController>().stop();
             let service = app.state::<commands::WorkspaceService>();
             if let Err(error) = service.flush() {
                 eprintln!("failed to flush the workspace config on exit: {error}");

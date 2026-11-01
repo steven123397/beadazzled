@@ -16,7 +16,7 @@ struct CountingSink {
 }
 
 impl SyncSink for CountingSink {
-    fn snapshot(&mut self, _issues: &[Issue]) {}
+    fn snapshot(&mut self, _issues: &[Issue], _since: i64) {}
 
     fn records(&mut self, records: &[JournalRecord]) {
         self.received.fetch_add(records.len(), Ordering::SeqCst);

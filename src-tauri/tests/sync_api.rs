@@ -21,7 +21,7 @@ struct CollectingSink {
 }
 
 impl SyncSink for CollectingSink {
-    fn snapshot(&mut self, issues: &[Issue]) {
+    fn snapshot(&mut self, issues: &[Issue], _since: i64) {
         self.snapshots.push(issues.to_vec());
     }
 

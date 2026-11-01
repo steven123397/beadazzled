@@ -15,7 +15,13 @@ import { StatusBar } from './StatusBar';
 import { TopBar } from './TopBar';
 import { activeWorkspace, useWorkspaceContext } from './WorkspaceProvider';
 
-export function Shell({ issues = [] }: { issues?: readonly Issue[] }) {
+export function Shell({
+  issues = [],
+  onRefresh,
+}: {
+  issues?: readonly Issue[];
+  onRefresh?: () => void;
+}) {
   const { t, language, setLanguage } = useI18n();
   const { preference, setPreference } = useTheme();
   const { snapshot, bd, reload } = useWorkspaceContext();
@@ -26,6 +32,7 @@ export function Shell({ issues = [] }: { issues?: readonly Issue[] }) {
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const refresh = onRefresh ?? (() => void reload());
 
   const closeOverlay = useCallback(() => {
     setPaletteOpen(false);
@@ -49,7 +56,7 @@ export function Shell({ issues = [] }: { issues?: readonly Issue[] }) {
     navigate,
     openPalette,
     closeOverlay,
-    refresh: () => void reload(),
+    refresh,
     toggleSidebar,
   };
 
@@ -165,7 +172,7 @@ export function Shell({ issues = [] }: { issues?: readonly Issue[] }) {
     () =>
       buildCommands(issues, {
         navigate,
-        refresh: () => void reload(),
+        refresh,
         copyDiagnostics,
         project,
         t,
@@ -178,6 +185,7 @@ export function Shell({ issues = [] }: { issues?: readonly Issue[] }) {
       issues,
       navigate,
       reload,
+      refresh,
       copyDiagnostics,
       project,
       t,
@@ -190,7 +198,7 @@ export function Shell({ issues = [] }: { issues?: readonly Issue[] }) {
 
   return (
     <div className="flex h-screen flex-col bg-background text-foreground">
-      <TopBar project={project} />
+      <TopBar project={project} onRefresh={refresh} />
       <div className="flex min-h-0 flex-1">
         <Sidebar project={project} collapsed={sidebarCollapsed} />
         <main className="min-w-0 flex-1 overflow-auto">

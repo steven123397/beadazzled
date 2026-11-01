@@ -1,3 +1,4 @@
+import { useCallback } from 'react';
 import { HashRouter, Navigate, Outlet, Route, Routes, useParams } from 'react-router-dom';
 
 import type { Issue, SyncState } from '@/bindings/bd';
@@ -5,6 +6,8 @@ import { workspaceApi as defaultWorkspaceApi, type WorkspaceApi } from '@/lib/wo
 import { useWorkspace } from '@/lib/workspace/useWorkspace';
 import { I18nProvider, useI18n } from '@/lib/i18n/I18nProvider';
 import type { Language } from '@/lib/i18n';
+import type { SyncApi } from '@/lib/sync/api';
+import { useSync } from '@/lib/sync/useSync';
 import { ThemeProvider } from '@/lib/theme/ThemeProvider';
 import type { Theme } from '@/lib/theme/theme';
 
@@ -24,6 +27,12 @@ export type AppProps = {
   issues?: readonly Issue[];
   initialLanguage?: Language;
   initialTheme?: Theme;
+  /**
+   * Production enables the Tauri sync worker; unit tests and the browser e2e
+   * seam inject `issues`/`syncState` instead and leave this false.
+   */
+  syncEnabled?: boolean;
+  syncApi?: SyncApi;
 };
 
 export function App({
@@ -32,11 +41,19 @@ export function App({
   issues = [],
   initialLanguage,
   initialTheme,
+  syncEnabled = false,
+  syncApi,
 }: AppProps) {
   return (
     <I18nProvider initialLanguage={initialLanguage}>
       <ThemeProvider initialPreference={initialTheme}>
-        <AppFrame workspaceApi={workspaceApi} syncState={syncState} issues={issues} />
+        <AppFrame
+          workspaceApi={workspaceApi}
+          syncState={syncState}
+          issues={issues}
+          syncEnabled={syncEnabled}
+          syncApi={syncApi}
+        />
       </ThemeProvider>
     </I18nProvider>
   );
@@ -46,21 +63,39 @@ function AppFrame({
   workspaceApi,
   syncState,
   issues,
+  syncEnabled,
+  syncApi,
 }: {
   workspaceApi: WorkspaceApi;
   syncState: SyncState;
   issues: readonly Issue[];
+  syncEnabled: boolean;
+  syncApi?: SyncApi;
 }) {
   const { t } = useI18n();
   const workspace = useWorkspace(workspaceApi);
+  const { reload, snapshot, bd } = workspace;
+  const project = activeWorkspace(snapshot);
+  const sync = useSync({
+    workspace: project?.path ?? null,
+    ready: bd?.kind === 'ready',
+    enabled: syncEnabled,
+    api: syncApi,
+  });
+  const shellIssues = syncEnabled ? sync.issues : issues;
+  const shellSyncState = syncEnabled ? sync.state : syncState;
+  const refresh = useCallback(() => {
+    void reload();
+    sync.refresh();
+  }, [reload, sync.refresh]);
 
   return (
     <ErrorBoundary title={t('error.title')} copyLabel={t('error.copy')}>
-      <SyncStatusProvider state={syncState}>
+      <SyncStatusProvider state={shellSyncState}>
         <WorkspaceProvider workspace={workspace}>
           <HashRouter>
             <Routes>
-              <Route element={<Shell issues={issues} />}>
+              <Route element={<Shell issues={shellIssues} onRefresh={refresh} />}>
                 <Route index element={<RootRedirect />} />
                 <Route path="welcome" element={<Welcome />} />
                 <Route path="w/:projectId" element={<ProjectGate />}>
