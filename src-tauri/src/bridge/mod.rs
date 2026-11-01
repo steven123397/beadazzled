@@ -24,7 +24,8 @@ use ts_rs::TS;
 
 use self::parse::{journal_disabled, journal_truncated, parse_export, JournalStream};
 use self::process::{
-    FollowProcess, ProcessRequest, ProcessRunner, READ_TIMEOUT, VERSION_TIMEOUT, WRITE_TIMEOUT,
+    FollowProcess, ProcessRequest, ProcessRunner, ScanBounds, ScanStop, READ_TIMEOUT,
+    VERSION_TIMEOUT, WRITE_TIMEOUT,
 };
 
 pub use argv::{argv_for, Argv, AssigneeChange, CreateSpec, UpdateSpec, WriteCommand};
@@ -132,6 +133,52 @@ impl BdBridge {
         }
     }
 
+    /// Reads at most `max_records` journal records or `deadline`, whichever
+    /// comes first, and returns what was read. The remainder is picked up by a
+    /// follow stream from the last applied seq.
+    ///
+    /// Unlike [`BdBridge::journal`], hitting the record limit or the deadline is
+    /// not an error: a partial batch keeps the baseline inside its budget.
+    pub fn journal_backfill(
+        &self,
+        since: i64,
+        max_records: usize,
+        deadline: Duration,
+    ) -> Result<Backfill, BridgeError> {
+        let request = self.request("journal", journal_args(since), deadline);
+        let scanned = self.runner.run_scan(
+            &request,
+            ScanBounds {
+                max_lines: max_records.max(1),
+            },
+        )?;
+
+        let stderr = String::from_utf8_lossy(&scanned.stderr);
+        if let Some(error) = journal_truncated(&scanned.stdout, &stderr) {
+            return Err(error);
+        }
+        if let Some(error) =
+            journal_disabled(scanned.exit_code.unwrap_or(0), &scanned.stdout, &stderr)
+        {
+            return Err(error);
+        }
+        if let Some(code) = scanned.exit_code {
+            if code != 0 {
+                return Err(map_exit(code, &stderr));
+            }
+        }
+
+        let mut stream = JournalStream::new();
+        let mut records = stream.push(&scanned.stdout)?;
+        records.truncate(max_records);
+        // A scan can stop in the middle of a line; follow re-reads it.
+        let _ = stream.take_partial();
+        Ok(Backfill {
+            records,
+            stopped: scanned.stop != ScanStop::Eof,
+        })
+    }
+
     /// Runs one write command and maps a nonzero exit through [`map_exit`].
     pub fn write(&self, command: &WriteCommand) -> Result<WriteOutcome, BridgeError> {
         let argv = argv_for(command);
@@ -194,6 +241,14 @@ impl BdBridge {
         request.timeout = timeout;
         request
     }
+}
+
+/// A bounded journal backfill.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Backfill {
+    pub records: Vec<JournalRecord>,
+    /// True when the read stopped at the record limit or the deadline.
+    pub stopped: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

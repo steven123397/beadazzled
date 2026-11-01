@@ -25,6 +25,15 @@ impl SyncSource for BdBridge {
     fn journal(&self, since: i64, follow: bool) -> Result<Box<dyn FollowStream>, BridgeError> {
         Ok(Box::new(BdBridge::journal(self, since, follow)?))
     }
+
+    fn backfill(
+        &self,
+        since: i64,
+        max_records: usize,
+        deadline: std::time::Duration,
+    ) -> Result<Vec<JournalRecord>, BridgeError> {
+        Ok(BdBridge::journal_backfill(self, since, max_records, deadline)?.records)
+    }
 }
 
 impl<T: SyncSource + ?Sized> SyncSource for std::sync::Arc<T> {
@@ -34,6 +43,15 @@ impl<T: SyncSource + ?Sized> SyncSource for std::sync::Arc<T> {
 
     fn journal(&self, since: i64, follow: bool) -> Result<Box<dyn FollowStream>, BridgeError> {
         (**self).journal(since, follow)
+    }
+
+    fn backfill(
+        &self,
+        since: i64,
+        max_records: usize,
+        deadline: std::time::Duration,
+    ) -> Result<Vec<JournalRecord>, BridgeError> {
+        (**self).backfill(since, max_records, deadline)
     }
 }
 

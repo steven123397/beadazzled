@@ -12,22 +12,22 @@ use super::state::{LoadingStep, SyncSink, SyncState};
 use crate::bridge::{BridgeError, BridgeErrorCode, Issue, JournalRecord};
 
 /// One-shot backfill cap; the rest of a large backlog arrives through follow.
-///
-/// `SPEC-sync` also budgets 8s for the read, but the bridge's one-shot journal
-/// call is a single blocking read that cannot be interrupted; a time bound
-/// needs a streaming backfill (tracked separately).
 pub const MAX_BASELINE_RECORDS: usize = 50_000;
+/// Read budget for the backfill (`SPEC-sync`): records or time, first wins.
+pub const BACKFILL_DEADLINE: Duration = Duration::from_secs(8);
 
-/// Tunables; tests shrink the record cap instead of building 50k records.
+/// Tunables; tests shrink the caps instead of building 50k records.
 #[derive(Debug, Clone)]
 pub struct SyncConfig {
     pub max_baseline_records: usize,
+    pub backfill_deadline: Duration,
 }
 
 impl Default for SyncConfig {
     fn default() -> Self {
         Self {
             max_baseline_records: MAX_BASELINE_RECORDS,
+            backfill_deadline: BACKFILL_DEADLINE,
         }
     }
 }
@@ -42,6 +42,22 @@ pub trait FollowStream {
 pub trait SyncSource {
     fn export(&self) -> Result<Vec<Issue>, BridgeError>;
     fn journal(&self, since: i64, follow: bool) -> Result<Box<dyn FollowStream>, BridgeError>;
+
+    /// Reads the backfill within the record and time budgets. The default
+    /// reads the one-shot journal in full (fakes rely on it); [`BdBridge`]
+    /// overrides this with a bounded scan.
+    fn backfill(
+        &self,
+        since: i64,
+        max_records: usize,
+        deadline: Duration,
+    ) -> Result<Vec<JournalRecord>, BridgeError> {
+        let _ = deadline;
+        let mut stream = self.journal(since, false)?;
+        let mut records = stream.next_batch()?;
+        records.truncate(max_records);
+        Ok(records)
+    }
 }
 
 /// How a baseline ended.
@@ -177,7 +193,11 @@ impl<S: SyncSource> SyncEngine<S> {
         let mut truncation_retried = false;
 
         loop {
-            match self.read_once(journal_since) {
+            match self.source.backfill(
+                journal_since,
+                self.config.max_baseline_records,
+                self.config.backfill_deadline,
+            ) {
                 Ok(mut records) => {
                     if records.len() > self.config.max_baseline_records {
                         records.truncate(self.config.max_baseline_records);
@@ -216,11 +236,6 @@ impl<S: SyncSource> SyncEngine<S> {
                 },
             }
         }
-    }
-
-    fn read_once(&self, since: i64) -> Result<Vec<JournalRecord>, BridgeError> {
-        let mut stream = self.source.journal(since, false)?;
-        stream.next_batch()
     }
 
     fn baseline_failure<K: SyncSink>(
@@ -800,6 +815,7 @@ mod tests {
         let source = FakeSource::with_export(vec![issue("a")]).once(Ok(records));
         let config = SyncConfig {
             max_baseline_records: 3,
+            ..SyncConfig::default()
         };
         let mut engine = engine(source, config);
         let mut sink = RecordingSink::default();
@@ -819,6 +835,7 @@ mod tests {
             .follow_ok(vec![Ok(vec![record(4, "a"), record(5, "a")])]);
         let config = SyncConfig {
             max_baseline_records: 3,
+            ..SyncConfig::default()
         };
         let mut engine = engine(source, config);
         let (mut sink, seen) = CountingSink::new();
@@ -960,8 +977,67 @@ mod tests {
         assert_eq!(seqs(&sink.records), vec![1, 2]);
     }
 
+    struct BackfillSource {
+        seen: Mutex<Vec<(usize, Duration)>>,
+    }
+
+    impl Default for BackfillSource {
+        fn default() -> Self {
+            Self {
+                seen: Mutex::new(Vec::new()),
+            }
+        }
+    }
+
+    impl SyncSource for BackfillSource {
+        fn export(&self) -> Result<Vec<Issue>, BridgeError> {
+            Ok(Vec::new())
+        }
+
+        fn journal(
+            &self,
+            _since: i64,
+            _follow: bool,
+        ) -> Result<Box<dyn FollowStream>, BridgeError> {
+            panic!("the baseline must use backfill")
+        }
+
+        fn backfill(
+            &self,
+            _since: i64,
+            max_records: usize,
+            deadline: Duration,
+        ) -> Result<Vec<JournalRecord>, BridgeError> {
+            self.seen.lock().unwrap().push((max_records, deadline));
+            Ok(Vec::new())
+        }
+    }
+
     #[test]
-    fn the_default_config_caps_the_backfill_at_fifty_thousand_records() {
-        assert_eq!(SyncConfig::default().max_baseline_records, 50_000);
+    fn the_baseline_passes_the_record_and_time_budgets_to_the_source() {
+        let source = BackfillSource::default();
+        let config = SyncConfig {
+            max_baseline_records: 12,
+            backfill_deadline: Duration::from_millis(5),
+        };
+        let mut engine = SyncEngine::new(source, config);
+        let mut sink = RecordingSink::default();
+
+        assert_eq!(
+            engine.baseline(&mut sink, 0),
+            BaselineOutcome::Healthy { applied: 0 }
+        );
+        assert_eq!(
+            engine.source.seen.lock().unwrap().clone(),
+            vec![(12, Duration::from_millis(5))]
+        );
+    }
+
+    #[test]
+    fn the_default_config_caps_the_backfill_at_fifty_thousand_records_or_eight_seconds() {
+        let config = SyncConfig::default();
+
+        assert_eq!(config.max_baseline_records, 50_000);
+        assert_eq!(config.backfill_deadline, Duration::from_secs(8));
     }
 }

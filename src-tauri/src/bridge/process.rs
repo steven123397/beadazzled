@@ -177,6 +177,59 @@ impl ProcessRunner {
         }
     }
 
+    /// Runs a bounded journal read: stops at `bounds.max_lines` or at the
+    /// request timeout, returning the bytes captured so far instead of failing.
+    pub fn run_scan(
+        &self,
+        request: &ProcessRequest,
+        bounds: ScanBounds,
+    ) -> Result<ScannedOutput, BridgeError> {
+        let started = Instant::now();
+        let result = self.run_scan_locked(request, bounds, started);
+        match &result {
+            Ok(output) => self.record(request, started, output.exit_code, None),
+            Err(error) => self.record(request, started, None, Some(error.code)),
+        }
+        result
+    }
+
+    fn run_scan_locked(
+        &self,
+        request: &ProcessRequest,
+        bounds: ScanBounds,
+        started: Instant,
+    ) -> Result<ScannedOutput, BridgeError> {
+        let (mut child, job) = self.spawn_child(request)?;
+        let stdout = child
+            .stdout
+            .take()
+            .ok_or_else(|| internal_error("bd stdout pipe was not created"))?;
+        let stderr = child
+            .stderr
+            .take()
+            .ok_or_else(|| internal_error("bd stderr pipe was not created"))?;
+
+        let scanned = match capture(&mut child, stdout, stderr, request, started, Some(bounds)) {
+            Ok(CaptureResult::Scanned(output)) => output,
+            Ok(CaptureResult::Complete(output)) => ScannedOutput {
+                stdout: output.stdout.into_bytes(),
+                stderr: output.stderr.into_bytes(),
+                exit_code: Some(output.exit_code),
+                stop: ScanStop::Eof,
+            },
+            Err(error) => {
+                job.terminate();
+                let _ = child.wait();
+                return Err(error);
+            }
+        };
+
+        // A bounded scan can stop while the child is still writing.
+        job.terminate();
+        let _ = child.wait();
+        Ok(scanned)
+    }
+
     /// Starts a long-running journal follow process. It deliberately does not
     /// take the workspace lock: otherwise a follow would block every refresh
     /// and write until the process exits.
@@ -241,8 +294,11 @@ impl ProcessRunner {
             .take()
             .ok_or_else(|| internal_error("bd stderr pipe was not created"))?;
 
-        match capture(&mut child, stdout, stderr, request, started) {
-            Ok(output) => Ok(output),
+        match capture(&mut child, stdout, stderr, request, started, None) {
+            Ok(CaptureResult::Complete(output)) => Ok(output),
+            Ok(CaptureResult::Scanned(_)) => Err(internal_error(
+                "bd returned a scanned output for a normal call",
+            )),
             Err(error) => {
                 job.terminate();
                 let _ = child.wait();
@@ -437,13 +493,44 @@ impl Drop for FollowProcess {
     }
 }
 
+enum CaptureResult {
+    Complete(ProcessOutput),
+    Scanned(ScannedOutput),
+}
+
+/// Bounds for [`ProcessRunner::run_scan`]: stop after this many stdout lines.
+#[derive(Debug, Clone, Copy)]
+pub struct ScanBounds {
+    pub max_lines: usize,
+}
+
+/// Why a bounded scan stopped.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ScanStop {
+    Eof,
+    Deadline,
+    LineLimit,
+    OutputLimit,
+    Incomplete,
+}
+
+/// The bytes captured by a bounded scan, valid even when it stopped early.
+#[derive(Debug)]
+pub struct ScannedOutput {
+    pub stdout: Vec<u8>,
+    pub stderr: Vec<u8>,
+    pub exit_code: Option<i32>,
+    pub stop: ScanStop,
+}
+
 fn capture(
     child: &mut Child,
     mut stdout: ChildStdout,
     mut stderr: ChildStderr,
     request: &ProcessRequest,
     started: Instant,
-) -> Result<ProcessOutput, BridgeError> {
+    scan: Option<ScanBounds>,
+) -> Result<CaptureResult, BridgeError> {
     let limits = request.limits;
     let deadline = started + request.timeout;
     let mut out = Vec::new();
@@ -457,6 +544,12 @@ fn capture(
     let mut stderr_eof = false;
     let mut status: Option<ExitStatus> = None;
     let mut grace_deadline: Option<Instant> = None;
+    let mut line_count = 0usize;
+    let mut lines = LineCursor {
+        max: scan.map(|bounds| bounds.max_lines),
+        seen: &mut line_count,
+    };
+    let mut stop: Option<ScanStop> = None;
 
     loop {
         let mut progressed = false;
@@ -469,11 +562,17 @@ fn capture(
                 &mut out,
                 &mut budget,
                 limits,
+                &mut lines,
             )? {
-                PipeState::Idle => {}
-                PipeState::Progress => progressed = true,
-                PipeState::Eof => stdout_eof = true,
+                PumpOutcome::State(PipeState::Idle) => {}
+                PumpOutcome::State(PipeState::Progress) => progressed = true,
+                PumpOutcome::State(PipeState::Eof) => stdout_eof = true,
+                PumpOutcome::Stop(reason) => stop = Some(reason),
             }
+        }
+
+        if stop.is_some() {
+            break;
         }
 
         if !stderr_eof {
@@ -503,19 +602,31 @@ fn capture(
         match status {
             Some(exit) => {
                 if stdout_eof && stderr_eof {
-                    return build_output(exit, out, err, started);
+                    return Ok(CaptureResult::Complete(build_output(
+                        exit, out, err, started,
+                    )?));
                 }
                 if grace_deadline.is_some_and(|grace| Instant::now() >= grace) {
                     if !stdout_eof {
+                        if scan.is_some() {
+                            stop = Some(ScanStop::Incomplete);
+                            break;
+                        }
                         // Force-closing a still-open stdout can drop the tail
                         // of a JSONL export; never return partial data as Ok.
                         return Err(partial_stdout_error(out.len(), err.len()));
                     }
-                    return build_output(exit, out, err, started);
+                    return Ok(CaptureResult::Complete(build_output(
+                        exit, out, err, started,
+                    )?));
                 }
             }
             None => {
                 if Instant::now() >= deadline {
+                    if scan.is_some() {
+                        stop = Some(ScanStop::Deadline);
+                        break;
+                    }
                     return Err(timeout_error(request));
                 }
             }
@@ -525,6 +636,16 @@ fn capture(
             std::thread::sleep(POLL_INTERVAL);
         }
     }
+
+    let Some(stop) = stop else {
+        return Err(internal_error("capture stopped without a reason"));
+    };
+    Ok(CaptureResult::Scanned(ScannedOutput {
+        stdout: out,
+        stderr: err,
+        exit_code: status.and_then(|status| status.code()),
+        stop,
+    }))
 }
 
 enum PipeState {
@@ -533,10 +654,27 @@ enum PipeState {
     Eof,
 }
 
+enum PumpOutcome {
+    State(PipeState),
+    Stop(ScanStop),
+}
+
 enum Available {
     Empty,
     Bytes(usize),
     Eof,
+}
+
+struct LineCursor<'a> {
+    max: Option<usize>,
+    seen: &'a mut usize,
+}
+
+impl LineCursor<'_> {
+    fn count(&mut self, bytes: &[u8]) -> bool {
+        *self.seen += bytes.iter().filter(|byte| **byte == 0x0A).count();
+        self.max.is_some_and(|max| *self.seen >= max)
+    }
 }
 
 fn pump_stdout(
@@ -546,20 +684,27 @@ fn pump_stdout(
     out: &mut Vec<u8>,
     budget: &mut OutputBudget,
     limits: OutputLimits,
-) -> Result<PipeState, BridgeError> {
+    lines: &mut LineCursor<'_>,
+) -> Result<PumpOutcome, BridgeError> {
     match available_bytes(handle) {
-        Available::Empty => Ok(PipeState::Idle),
-        Available::Eof => Ok(PipeState::Eof),
+        Available::Empty => Ok(PumpOutcome::State(PipeState::Idle)),
+        Available::Eof => Ok(PumpOutcome::State(PipeState::Eof)),
         Available::Bytes(available) => {
             let want = available.min(buffer.len());
             match pipe.read(&mut buffer[..want]) {
-                Ok(0) => Ok(PipeState::Eof),
+                Ok(0) => Ok(PumpOutcome::State(PipeState::Eof)),
                 Ok(read) => {
                     if !budget.push(&buffer[..read], limits) {
+                        if lines.max.is_some() {
+                            return Ok(PumpOutcome::Stop(ScanStop::OutputLimit));
+                        }
                         return Err(output_too_large(limits, budget.total()));
                     }
                     out.extend_from_slice(&buffer[..read]);
-                    Ok(PipeState::Progress)
+                    if lines.count(&buffer[..read]) {
+                        return Ok(PumpOutcome::Stop(ScanStop::LineLimit));
+                    }
+                    Ok(PumpOutcome::State(PipeState::Progress))
                 }
                 Err(error) => Err(internal_error(format!("reading bd stdout failed: {error}"))),
             }

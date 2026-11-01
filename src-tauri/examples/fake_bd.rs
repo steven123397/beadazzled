@@ -71,10 +71,17 @@ fn main() {
                             "{{\"code\":\"events_journal_truncated\",\"since\":1,\"floor\":5,\"head\":9}}"
                         );
                     } else if let Some(contents) = journal_file(workspace) {
-                        io::stdout()
-                            .write_all(&contents)
-                            .expect("write journal file");
-                        io::stdout().flush().expect("flush journal file");
+                        if std::path::Path::new(workspace)
+                            .join("journal-slow")
+                            .exists()
+                        {
+                            stream_journal_slow(workspace, &contents);
+                        } else {
+                            io::stdout()
+                                .write_all(&contents)
+                                .expect("write journal file");
+                            io::stdout().flush().expect("flush journal file");
+                        }
                     } else {
                         print_fixture("events-writes.jsonl");
                     }
@@ -269,6 +276,25 @@ fn print_fixture(name: &str) {
 
 /// Prints a fixture with every `<workspace>` placeholder replaced by the
 /// `-C` argument, so `context` reports the workspace the caller asked about.
+/// Streams a journal one line at a time; used by the backfill deadline test.
+/// The `journal-done` marker only appears when the stream runs to completion,
+/// so a killed reader leaves no marker behind.
+fn stream_journal_slow(workspace: &str, contents: &[u8]) {
+    for line in contents.split(|byte| *byte == b'\n') {
+        if line.is_empty() {
+            continue;
+        }
+        io::stdout().write_all(line).expect("write journal line");
+        io::stdout().write_all(b"\n").expect("write newline");
+        io::stdout().flush().expect("flush journal line");
+        std::thread::sleep(Duration::from_millis(25));
+    }
+    let _ = fs::write(
+        std::path::Path::new(workspace).join("journal-done"),
+        b"done",
+    );
+}
+
 /// A workspace-local `journal.jsonl` stands in for bd's journal in the data
 /// plane integration test; appending a line simulates the record a write emits.
 fn journal_file(workspace: &str) -> Option<Vec<u8>> {
