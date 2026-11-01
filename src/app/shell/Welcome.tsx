@@ -1,16 +1,30 @@
+import { Navigate, useLocation } from 'react-router-dom';
+
 import type { BdStatus, WorkspaceSnapshot } from '@/bindings/bd';
 import { useI18n } from '@/lib/i18n/I18nProvider';
 
 import { SkeletonScreen } from './SkeletonScreen';
 import { activeWorkspace, useWorkspaceContext } from './WorkspaceProvider';
 
+type WelcomeReason = 'workspace-missing' | 'switch-failed';
+
 /** Explains why the app cannot open a workspace, instead of showing a blank screen. */
 export function Welcome() {
   const { t } = useI18n();
+  const location = useLocation();
+  const reason = welcomeReason(location.state);
   const { snapshot, bd, loading, error, reload, refreshBd } = useWorkspaceContext();
 
   if (loading) {
     return <SkeletonScreen />;
+  }
+
+  const project = activeWorkspace(snapshot);
+  // A direct #/welcome with a ready workspace is a stale route, not a blocker.
+  // Keep the reason/error path visible: a failed switch must not bounce the
+  // user back into the old workspace.
+  if (project !== null && reason === null && error === null) {
+    return <Navigate to={`/w/${project.projectId}/list`} replace />;
   }
 
   return (
@@ -18,7 +32,9 @@ export function Welcome() {
       <h1 id="welcome-title" className="text-xl font-semibold">
         {t('welcome.title')}
       </h1>
-      <p className="text-sm text-muted-foreground">{blockerReason(t, snapshot, bd, error)}</p>
+      <p className="text-sm text-muted-foreground">
+        {blockerReason(t, snapshot, bd, error, reason)}
+      </p>
       <button
         type="button"
         onClick={() => {
@@ -39,10 +55,17 @@ function blockerReason(
   t: T,
   snapshot: WorkspaceSnapshot | null,
   bd: BdStatus | null,
-  error: string | null
+  error: string | null,
+  reason: WelcomeReason | null
 ): string {
   if (error !== null) {
     return error;
+  }
+  if (reason === 'workspace-missing') {
+    return t('welcome.workspaceMissing');
+  }
+  if (reason === 'switch-failed') {
+    return t('welcome.switchFailed');
   }
   if (bd === null) {
     return t('welcome.checking');
@@ -57,4 +80,12 @@ function blockerReason(
     case 'broken':
       return bd.error.message;
   }
+}
+
+function welcomeReason(state: unknown): WelcomeReason | null {
+  if (typeof state !== 'object' || state === null) {
+    return null;
+  }
+  const reason = (state as { reason?: unknown }).reason;
+  return reason === 'workspace-missing' || reason === 'switch-failed' ? reason : null;
 }

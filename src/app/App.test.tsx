@@ -152,6 +152,60 @@ test('falls back to welcome when the deep link names an unknown workspace', asyn
   );
 
   expect(await screen.findByRole('heading', { name: /welcome/i })).toBeInTheDocument();
+  expect(screen.getByText('That workspace is no longer available.')).toBeInTheDocument();
+});
+
+test('a deep link to a registered non-active workspace switches to it', async () => {
+  window.location.hash = '#/w/p2/list';
+  let data = snapshot([entry('p1', 'alpha'), entry('p2', 'beta')], '/repo/p1');
+  const switchTo = vi.fn(async (path: string) => {
+    data = snapshot(data.config.workspaces, path);
+    return entry('p2', 'beta');
+  });
+
+  render(
+    <App
+      workspaceApi={fakeApi({
+        snapshot: async () => data,
+        switchTo,
+      })}
+    />
+  );
+
+  expect(await screen.findByRole('heading', { name: 'List' })).toBeInTheDocument();
+  expect(screen.getByLabelText('Status bar')).toHaveTextContent('beta');
+  expect(window.location.hash).toBe('#/w/p2/list');
+  expect(switchTo).toHaveBeenCalledWith('/repo/p2');
+});
+
+test('a bare project route redirects to its list', async () => {
+  window.location.hash = '#/w/p1';
+
+  render(
+    <App
+      workspaceApi={fakeApi({
+        snapshot: async () => snapshot([entry('p1', 'alpha')], '/repo/p1'),
+      })}
+    />
+  );
+
+  expect(await screen.findByRole('heading', { name: 'List' })).toBeInTheDocument();
+  expect(window.location.hash).toBe('#/w/p1/list');
+});
+
+test('welcome with an active workspace redirects to the list', async () => {
+  window.location.hash = '#/welcome';
+
+  render(
+    <App
+      workspaceApi={fakeApi({
+        snapshot: async () => snapshot([entry('p1', 'alpha')], '/repo/p1'),
+      })}
+    />
+  );
+
+  expect(await screen.findByRole('heading', { name: 'List' })).toBeInTheDocument();
+  expect(window.location.hash).toBe('#/w/p1/list');
 });
 
 test('escape returns from an issue route to the list', async () => {

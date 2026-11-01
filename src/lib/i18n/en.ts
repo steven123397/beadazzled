@@ -21,6 +21,8 @@ export const en = {
   'welcome.loading': 'The workspace is still loading.',
   'welcome.bdMissing': 'bd was not found. Install bd or set its path in Settings.',
   'welcome.bdUnsupported': 'bd {found} is older than {min}. Upgrade bd to continue.',
+  'welcome.workspaceMissing': 'That workspace is no longer available.',
+  'welcome.switchFailed': 'The workspace could not be opened. Check its path and try again.',
 
   'status.loadingWorkspace': 'Loading workspace',
   'status.bdUnknown': 'bd unknown',

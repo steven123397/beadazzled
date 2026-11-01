@@ -23,6 +23,8 @@ export const zhCN: Record<keyof typeof en, string> = {
   'welcome.loading': '工作区仍在加载。',
   'welcome.bdMissing': '未找到 bd。请安装 bd，或在设置中指定路径。',
   'welcome.bdUnsupported': 'bd {found} 低于要求的 {min}。请升级 bd 后继续。',
+  'welcome.workspaceMissing': '该工作区已不存在。',
+  'welcome.switchFailed': '无法打开该工作区，请检查路径后重试。',
 
   'status.loadingWorkspace': '正在加载工作区',
   'status.bdUnknown': 'bd 未知',

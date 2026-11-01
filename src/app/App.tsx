@@ -1,4 +1,4 @@
-import { useCallback } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { HashRouter, Navigate, Outlet, Route, Routes, useParams } from 'react-router-dom';
 
 import type { Issue, SyncState } from '@/bindings/bd';
@@ -99,6 +99,7 @@ function AppFrame({
                 <Route index element={<RootRedirect />} />
                 <Route path="welcome" element={<Welcome />} />
                 <Route path="w/:projectId" element={<ProjectGate />}>
+                  <Route index element={<Navigate to="list" replace />} />
                   <Route path="list" element={<Placeholder titleKey="nav.list" />} />
                   <Route path="board" element={<Placeholder titleKey="nav.board" />} />
                   <Route path="issue/:issueId" element={<IssuePlaceholder />} />
@@ -124,7 +125,17 @@ function RootRedirect() {
 
   const project = activeWorkspace(snapshot);
   if (project === null) {
-    return <Navigate to="/welcome" replace />;
+    return (
+      <Navigate
+        to="/welcome"
+        replace
+        state={
+          snapshot !== null && snapshot.active !== null
+            ? { reason: 'workspace-missing' }
+            : undefined
+        }
+      />
+    );
   }
 
   return <Navigate to={`/w/${project.projectId}/list`} replace />;
@@ -133,16 +144,46 @@ function RootRedirect() {
 /** A deep link whose projectId is not registered lands on the welcome screen. */
 function ProjectGate() {
   const { projectId } = useParams<{ projectId: string }>();
-  const { snapshot, loading } = useWorkspaceContext();
+  const { snapshot, loading, switchTo } = useWorkspaceContext();
+  const [switching, setSwitching] = useState(false);
+  const attempted = useRef<string | null>(null);
+
+  const project =
+    snapshot?.config.workspaces.find((workspace) => workspace.projectId === projectId) ?? null;
+  const isActive = project !== null && snapshot?.active === project.path;
+
+  useEffect(() => {
+    if (loading || project === null || isActive || switching) {
+      return;
+    }
+    if (attempted.current === project.path) {
+      return;
+    }
+    attempted.current = project.path;
+    setSwitching(true);
+    void switchTo(project.path).then((ok) => {
+      setSwitching(false);
+      // On success the snapshot reload makes isActive true. A false result (or
+      // a reload failure) leaves the mismatch visible below instead of looping.
+      if (!ok) {
+        attempted.current = project.path;
+      }
+    });
+  }, [isActive, loading, project, switchTo, switching]);
 
   if (loading) {
     return <SkeletonScreen />;
   }
 
-  const project =
-    snapshot?.config.workspaces.find((workspace) => workspace.projectId === projectId) ?? null;
   if (project === null) {
-    return <Navigate to="/welcome" replace />;
+    return <Navigate to="/welcome" replace state={{ reason: 'workspace-missing' }} />;
+  }
+
+  if (!isActive) {
+    if (switching || attempted.current !== project.path) {
+      return <SkeletonScreen />;
+    }
+    return <Navigate to="/welcome" replace state={{ reason: 'switch-failed' }} />;
   }
 
   return <Outlet />;
