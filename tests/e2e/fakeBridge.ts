@@ -7,6 +7,8 @@ export type FakeBridgeOptions = {
   syncState?: Record<string, unknown>;
   theme?: 'light' | 'dark' | 'system';
   language?: 'en' | 'zh-CN';
+  /** False renders the no-workspace welcome state. */
+  active?: boolean;
 };
 
 /**
@@ -41,6 +43,7 @@ export async function installFakeBridge(
     syncState,
     theme,
     language,
+    active = true,
   } = options;
 
   await page.addInitScript(
@@ -51,6 +54,7 @@ export async function installFakeBridge(
       syncState: sync,
       theme: pref,
       language: lang,
+      active,
     }) => {
       const path = `/repo/${id}`;
       const workspace = {
@@ -68,10 +72,10 @@ export async function installFakeBridge(
           language: 'en',
           theme: 'system',
           lastWorkspacePath: null,
-          workspaces: [workspace],
+          workspaces: active ? [workspace] : [],
         },
         missing: [],
-        active: path,
+        active: active ? path : null,
         corruptBackup: null,
       };
 
@@ -96,7 +100,7 @@ export async function installFakeBridge(
         language: lang,
       };
     },
-    { projectId, name, issues, syncState, theme, language }
+    { projectId, name, issues, syncState, theme, language, active }
   );
 }
 
