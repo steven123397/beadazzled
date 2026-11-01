@@ -1,7 +1,11 @@
 import { fireEvent, render, screen } from '@testing-library/react';
-import { expect, test } from 'vitest';
+import { afterEach, expect, test } from 'vitest';
 
 import { I18nProvider, useI18n } from './I18nProvider';
+
+afterEach(() => {
+  document.documentElement.lang = 'en';
+});
 
 function Probe() {
   const { language, setLanguage, t } = useI18n();
@@ -31,6 +35,7 @@ test('starts in English and switches instantly', () => {
   expect(screen.getByTestId('language')).toHaveTextContent('zh-CN');
   expect(screen.getByTestId('label')).toHaveTextContent('列表');
   expect(localStorage.getItem('beadazzled.language')).toBe('zh-CN');
+  expect(document.documentElement.lang).toBe('zh-CN');
 });
 
 test('restores the stored language', () => {

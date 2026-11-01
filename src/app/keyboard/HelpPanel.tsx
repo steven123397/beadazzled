@@ -1,7 +1,10 @@
+import { useRef } from 'react';
+
 import { useI18n } from '@/lib/i18n/I18nProvider';
 
 import { formatKeys } from './resolve';
 import type { Shortcut, ShortcutGroup } from './types';
+import { useFocusTrap } from './useFocusTrap';
 
 const GROUP_ORDER: ShortcutGroup[] = ['General', 'Navigation', 'Views', 'Data', 'Help'];
 
@@ -13,6 +16,8 @@ export function HelpPanel({
   onClose: () => void;
 }) {
   const { t } = useI18n();
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(dialogRef);
   const groups = GROUP_ORDER.map((group) => ({
     group,
     items: shortcuts.filter((shortcut) => shortcut.group === group),
@@ -20,6 +25,8 @@ export function HelpPanel({
 
   return (
     <div
+      ref={dialogRef}
+      tabIndex={-1}
       role="dialog"
       aria-modal="true"
       aria-label={t('keyboard.title')}

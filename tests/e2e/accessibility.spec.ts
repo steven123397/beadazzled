@@ -29,7 +29,7 @@ test('shell routes have no serious or critical accessibility violations', async 
   await expect(page.getByRole('heading', { name: 'Settings' })).toBeVisible();
   expect(await seriousViolations(page)).toEqual([]);
 
-  await page.goto('/#/welcome');
+  await page.goto('/#/w/missing/list');
   await expect(page.getByRole('heading', { name: /welcome/i })).toBeVisible();
   expect(await seriousViolations(page)).toEqual([]);
 });
@@ -50,7 +50,10 @@ test('the palette and help overlays have no serious or critical violations', asy
 });
 
 test('the dark theme has no serious or critical violations', async ({ page }) => {
-  await installFakeBridge(page, { theme: 'dark' });
+  await installFakeBridge(page, {
+    theme: 'dark',
+    syncState: { kind: 'healthy', lastSeq: 1, lastEventAt: null },
+  });
   await page.goto('/');
   await expect(page.getByRole('heading', { name: 'List' })).toBeVisible();
   await expect(page.locator('html')).toHaveClass(/dark/);
@@ -59,5 +62,17 @@ test('the dark theme has no serious or critical violations', async ({ page }) =>
 
   await page.keyboard.press('?');
   await expect(page.getByRole('dialog', { name: 'Keyboard shortcuts' })).toBeVisible();
+  expect(await seriousViolations(page)).toEqual([]);
+});
+
+test('the dark warning tone has no serious or critical violations', async ({ page }) => {
+  await installFakeBridge(page, {
+    theme: 'dark',
+    syncState: { kind: 'journal-disabled' },
+  });
+  await page.goto('/');
+  await expect(page.getByRole('heading', { name: 'List' })).toBeVisible();
+  await expect(page.getByLabel('Status bar')).toContainText('Journal off');
+
   expect(await seriousViolations(page)).toEqual([]);
 });

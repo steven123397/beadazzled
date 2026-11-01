@@ -10,12 +10,22 @@ test('keyboard shortcuts open the palette and the help panel', async ({ page }) 
   await expect(help).toContainText('Command palette');
   await expect(help).toContainText('Ctrl+K');
 
+  await page.keyboard.press('Tab');
+  expect(
+    await page.evaluate(() => Boolean(document.activeElement?.closest('[role="dialog"]')))
+  ).toBe(true);
+
   await page.keyboard.press('Escape');
   await expect(help).toBeHidden();
 
   await page.keyboard.press('Control+k');
   const palette = page.getByRole('dialog', { name: 'Command palette' });
   await expect(palette).toBeVisible();
+
+  await page.keyboard.press('Tab');
+  expect(
+    await page.evaluate(() => Boolean(document.activeElement?.closest('[role="dialog"]')))
+  ).toBe(true);
 
   await page.getByRole('combobox').fill('settings');
   await expect(palette.getByText('Go to Settings')).toBeVisible();

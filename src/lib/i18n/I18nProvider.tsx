@@ -1,4 +1,12 @@
-import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react';
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from 'react';
 
 import { loadLanguage, saveLanguage, translate, type Language, type MessageKey } from './index';
 
@@ -18,6 +26,10 @@ export function I18nProvider({
   initialLanguage?: Language;
 }) {
   const [language, setLanguageState] = useState<Language>(initialLanguage);
+
+  useEffect(() => {
+    document.documentElement.lang = language;
+  }, [language]);
 
   const setLanguage = useCallback((next: Language) => {
     setLanguageState(next);

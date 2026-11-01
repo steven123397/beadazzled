@@ -1,6 +1,7 @@
 import { Command } from 'cmdk';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 
+import { useFocusTrap } from '@/app/keyboard/useFocusTrap';
 import { useI18n } from '@/lib/i18n/I18nProvider';
 import type { MessageKey } from '@/lib/i18n';
 
@@ -17,14 +18,18 @@ export function CommandPalette({
 }) {
   const { t } = useI18n();
   const [query, setQuery] = useState('');
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(dialogRef);
   const results = rankCommands(commands, query, RESULT_LIMIT);
 
   return (
     <div
+      ref={dialogRef}
+      tabIndex={-1}
       role="dialog"
       aria-modal="true"
       aria-label={t('palette.title')}
-      className="fixed inset-0 z-30 flex items-start justify-center bg-black/60 p-6"
+      className="fixed inset-0 z-30 flex items-start justify-center bg-black/60 p-6 outline-none"
       onKeyDown={(event) => {
         if (event.key === 'Escape') {
           event.stopPropagation();
@@ -47,7 +52,7 @@ export function CommandPalette({
           value={query}
           onValueChange={setQuery}
           placeholder={t('palette.placeholder')}
-          className="w-full border-b border-border bg-transparent px-3 py-2 text-sm outline-none"
+          className="w-full border-b border-border bg-transparent px-3 py-2 text-sm"
         />
         <Command.List className="max-h-80 overflow-auto p-1">
           <Command.Empty className="px-3 py-2 text-sm text-muted-foreground">

@@ -57,6 +57,18 @@ test('error text meets 4.5:1 in both themes', () => {
   }
 });
 
+test('sync status tones meet 4.5:1 in both themes', () => {
+  for (const selector of [':root', '.dark']) {
+    const tokens = block(selector);
+    for (const tone of ['warning', 'success']) {
+      expect(
+        contrastRatio(tokens[tone], tokens.background),
+        `${selector} ${tone}`
+      ).toBeGreaterThanOrEqual(4.5);
+    }
+  }
+});
+
 test('primary button text stays readable', () => {
   const tokens = block(':root');
   expect(contrastRatio(tokens['primary-foreground'], tokens.primary)).toBeGreaterThanOrEqual(4.5);

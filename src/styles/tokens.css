@@ -37,6 +37,9 @@
   --ring: #7170ff;
   /* #c4362f only reaches 3.7:1 on the dark background; error text is 12px. */
   --destructive: #f87171;
+  /* The light warning/success tones are ~4.0/3.7:1 on #08090a. */
+  --warning: #e5b567;
+  --success: #56d364;
 }
 
 /* Tailwind v4 reads these to expose bg-background, text-muted-foreground, ... */
