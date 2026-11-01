@@ -1,0 +1,57 @@
+# ADR-0005: CI 门禁与外部工具信任
+
+状态：已接受（2026-11-01）
+影响模块：CI、质量门禁（CONSTRAINTS）、bridge 测试、发布流程
+
+## 背景
+
+到 bza-ryr.4 为止，CONSTRAINTS 的 block 检查都只在本地自觉执行：没有 CI，
+PR 不会自动跑 `check:fast` / `check:task` / `check:deps`；`cargo fmt --check`
+与 `cargo clippy --all-targets -- -D warnings` 也没有 gate。另外，
+`check-secrets.mjs` 与 `check-deps.mjs` 在本地会回退到 PATH 或可写的
+`%LOCALAPPDATA%\Microsoft\WinGet\Packages` 解析 gitleaks / osv-scanner，
+在 CI 上等于信任一个未固定的本地目录。
+
+## 决策
+
+- 使用 **GitHub Actions**，`windows-latest` 单 job（`Quality gates (Windows)`），
+  在 `pull_request` 与 `push` 到 `main` 时运行；产品只支持 Windows。
+- 顺序执行以下阻塞门禁：
+  1. `npm run check:fast`（typecheck、lint、secrets）
+  2. `npm run check:rust:style`（`cargo fmt --check` + `cargo clippy --all-targets -- -D warnings`）
+  3. `npm run build`（前端生产构建）
+  4. `npm run check:task`（架构边界、质量脚本单测、Vitest 覆盖率、bridge 覆盖率）
+  5. `npm run check:deps`（osv-scanner）
+- **外部工具固定版本并从官方 release 下载**，workflow 内校验 SHA256 后才使用：
+  - gitleaks 8.30.1，`gitleaks_8.30.1_windows_x64.zip`，
+    SHA256 `d29144deff3a68aa93ced33dddf84b7fdc26070add4aa0f4513094c8332afc4e`
+  - osv-scanner 2.7.0，`osv-scanner_windows_amd64.exe`，
+    SHA256 `9964ed64ec9a387391eb4cc006ad5c531154821aef29b793e02c448de4686438`
+  - 路径通过 `GITLEAKS_PATH` / `OSV_SCANNER_PATH` 显式注入；CI 不查询 PATH，
+    也不读取 `%LOCALAPPDATA%`。
+- `cargo-llvm-cov` 固定 `0.9.1` 并用 `--locked` 安装；同时安装
+  `llvm-tools-preview`，保证覆盖率命令可在干净 runner 上运行。
+- checkout 使用 `fetch-depth: 0`，让 gitleaks 扫描完整历史。
+- CI 失败即 job 失败；在 GitHub 仓库设置中把该 job 设为 main 的必需检查
+  （branch protection / ruleset）是**人工步骤**，不随代码自动生效。
+
+## 后果
+
+- PR 与 main push 都会跑完整门禁；配置 branch protection 后，失败会阻止合并。
+- 首次 CI 需要编译 Tauri、覆盖率插桩和安装 cargo-llvm-cov，耗时明显；
+  暂不缓存 `src-tauri/target`（体积大）。若持续超过可接受范围，再用缓存或
+  独立 job 优化，不降低门禁强度。
+- 升级 gitleaks / osv-scanner / cargo-llvm-cov 时，必须同时更新 workflow 中
+  的版本与 SHA256，并同步 CONSTRAINTS 与本节记录。
+- E2E、安装包体积、性能与 a11y 检查仍不在本 workflow 中；它们由各自阶段的
+  issue 接线，CONSTRAINTS 的 Exceptions 保持登记。
+
+## 被拒绝的备选
+
+- **CI 中继续用 winget / PATH 解析工具**：版本与内容不可控，且依赖可写的
+  `%LOCALAPPDATA%`，正是本次要消除的风险。
+- **使用 `latest` 或未校验的下载**：无法复现，也无法发现供应链替换。
+- **直接跑 `check:full`**：包含 E2E、`build:app`、体积与性能测量，当前缺少
+  对应产物与 runner 配置；会把 CI 变成长期红灯，反而促使弱化门禁。
+- **用第三方 install action 安装 cargo-llvm-cov**：`cargo install --locked`
+  更透明；CI 时间若成为问题再评估，但必须固定版本。

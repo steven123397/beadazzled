@@ -44,7 +44,13 @@
 |---|---|---|
 | 编辑循环 | ≤ 5s | typecheck、lint、secrets；只查改动文件 |
 | 交还给人之前 | ≤ 90s | bridge 单测 + 改动行覆盖率 + 架构边界 |
-| CI / review | 不限 | 全量测试、E2E、依赖扫描、构建、体积与性能测量 |
+| CI / review | 不限 | 全量测试、Rust 风格、依赖扫描、构建、体积与性能测量 |
+
+CI 由 `.github/workflows/ci.yml` 执行（PR 与 main push）：`check:fast`、
+`check:rust:style`、`check:task`、`check:deps`、`build`。外部工具固定版本并经
+SHA256 校验：gitleaks 8.30.1、osv-scanner 2.7.0，通过 `GITLEAKS_PATH` /
+`OSV_SCANNER_PATH` 注入；CI 不解析 PATH 或 `%LOCALAPPDATA%`。见
+[ADR-0005](docs/adr/0005-ci-gates-and-external-tool-trust.md)。
 
 bridge 测试**禁止真的 spawn `bd`**：单次调用 1.0–1.4s，几十个用例就能把 90 秒预算吃穿，还会把测试绑死在本机 bd 版本上。用录制好的真实 JSON 样本（`bd export` / `bd events`）跑纯逻辑；真实 `bd` 只出现在 3 条 E2E 里。
 
@@ -55,7 +61,7 @@ bridge 测试**禁止真的 spawn `bd`**：单次调用 1.0–1.4s，几十个�
 | secrets | 0 | 2026-10-31 实测，gitleaks 8.30.1，2 commits / 29.34 KB / 395ms |
 | 安装包体积 | 未测量 | 无构建产物 |
 | 冷启动、热启动、内存、详情切换、滚动 | 未测量 | 无应用壳 |
-| bridge 行覆盖率 | 未测量 | bridge 未实现；命令已接线（`test:rust:coverage`） |
+| bridge 行覆盖率 | 92.4%（870/942 行，6 个 bridge 文件） | 2026-11-01 实测；阈值 80% 由 `check:task` 执行 |
 | 依赖漏洞 | 0 高危（2 medium、2 unknown） | 2026-10-31 实测，osv-scanner 2.7.0，npm 285 包 + crates 407 包 |
 | 对比度、键盘可达 | 未测量 | 无 UI |
 
@@ -63,7 +69,7 @@ bridge 测试**禁止真的 spawn `bd`**：单次调用 1.0–1.4s，几十个�
 
 | 项 | 原因 | owner | 到期 | 处置 |
 |---|---|---|---|---|
-| 类型 / lint / 覆盖 / 边界 / E2E / 体积 / 性能 / a11y 检查未接线 | 尚无代码与构建系统 | steven123397 | 第一条脚手架 PR 合并前 | 必须补齐 `check:fast` / `check:task` / `check:full` 三个脚本，否则不得标记该 PR 完成 |
+| E2E / 体积 / 性能 / a11y 检查未接线 | 类型、lint、覆盖、边界、secrets、Rust 风格与依赖扫描已由 CI 的 quality job 执行；其余尚无可用产物 | steven123397 | 2026-12-31 | 随对应阶段接线；已接线的门禁不得回退 |
 | 前端（Vitest）覆盖率无门槛 | 尚无历史基线；bridge 已单独设 80% 门槛 | steven123397 | 2026-12-31 | 前端基线明确后 ratchet 转 block |
 | 性能预算暂为 warn | 无可测产物 | steven123397 | 2026-12-31 | 应用壳跑通后 ratchet：连续三次超标提 issue 或重设预算，不许默默调阈值 |
 
