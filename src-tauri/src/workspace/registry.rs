@@ -139,10 +139,13 @@ impl AppConfig {
         mut moved: WorkspaceEntry,
     ) -> Option<usize> {
         let index = self.workspace_index(old_path)?;
-        moved.name = self.workspaces[index].name.clone();
-        if self.workspaces[index].project_id != moved.project_id {
-            moved.checkpoint = None;
-        }
+        let existing = &self.workspaces[index];
+        moved.name = existing.name.clone();
+        moved.checkpoint = if existing.project_id == moved.project_id {
+            existing.checkpoint.clone()
+        } else {
+            None
+        };
         self.workspaces[index] = moved;
         self.retarget_last_workspace(old_path, index);
         Some(index)
@@ -650,6 +653,26 @@ mod tests {
         assert_eq!(config.workspaces[0].name, "my project");
         assert_eq!(config.workspaces[0].project_id, "p9");
         assert!(config.workspaces[0].checkpoint.is_none());
+    }
+
+    #[test]
+    fn relocating_within_the_same_project_keeps_the_checkpoint() {
+        let mut config = AppConfig::default();
+        config.add_workspace(with_checkpoint(entry("D:/old", "p1", NOW), 12));
+
+        assert_eq!(
+            config.relocate_workspace("D:/old", entry("D:/new", "p1", LATER)),
+            Some(0)
+        );
+
+        assert_eq!(config.workspaces[0].path, "D:/new");
+        assert_eq!(
+            config.workspaces[0]
+                .checkpoint
+                .clone()
+                .map(|checkpoint| checkpoint.seq),
+            Some(12)
+        );
     }
 
     #[test]

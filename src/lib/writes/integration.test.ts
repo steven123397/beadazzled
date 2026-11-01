@@ -3,7 +3,7 @@ import { afterEach, expect, test, vi } from 'vitest';
 import type { BridgeError, CreateSpec, Issue, JournalRecord, WriteCommand } from '@/bindings/bd';
 
 import { createIssue, updateIssue } from './commands';
-import { describeError } from './errors';
+import { describeError } from '@/lib/errors';
 import { submitWrite, type WriteFlow } from './flow';
 import { createTicketStore } from '../sync/store';
 import { createEchoWaiter } from '../sync/echo';

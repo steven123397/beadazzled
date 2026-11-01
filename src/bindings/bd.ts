@@ -102,3 +102,17 @@ export type UpdateSpec = { id: string, status: string | null, priority: number |
 description: string | null, acceptance: string | null, add_labels: Array<string>, remove_labels: Array<string>, if_status: string | null, if_assignee: string | null, };
 
 export type AssigneeChange = { "Set": string } | "Clear";
+
+export type WorkspaceSnapshot = { config: AppConfig, 
+/**
+ * Registered workspaces whose directory no longer exists.
+ */
+missing: Array<string>, 
+/**
+ * The workspace to reopen on startup, if registered.
+ */
+active: string | null, 
+/**
+ * Where a corrupt `config.json` was moved, if that happened on startup.
+ */
+corruptBackup: string | null, };

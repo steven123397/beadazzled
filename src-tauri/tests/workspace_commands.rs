@@ -1,0 +1,272 @@
+//! Workspace service tests through `examples/fake_bd`.
+//!
+//! These cover the command layer end to end minus Tauri: discovery, add,
+//! switch, relocate, checkpoints, restart recovery and corrupt configs.
+
+mod common;
+
+use std::fs;
+use std::path::{Path, PathBuf};
+
+use beadazzled_lib::bridge::BridgeErrorCode;
+use beadazzled_lib::commands::WorkspaceService;
+use beadazzled_lib::workspace::discovery::BdStatus;
+use beadazzled_lib::workspace::registry;
+
+const PROJECT_ID: &str = "00000000-0000-4000-8000-000000000000";
+
+fn service(config_path: &Path) -> WorkspaceService {
+    let service = WorkspaceService::open(config_path).expect("open workspace service");
+    service.set_bd_path(Some(common::fake_bd_path().display().to_string()));
+    service
+}
+
+fn workspace_named(dir: &Path, name: &str) -> PathBuf {
+    let workspace = dir.join(name);
+    fs::create_dir_all(&workspace).expect("create workspace");
+    workspace
+}
+
+fn path_string(path: &Path) -> String {
+    path.display().to_string()
+}
+
+#[test]
+fn the_configured_fake_bd_is_reported_ready() {
+    let dir = common::temp_dir("cmd-status");
+    let service = service(&dir.join("config.json"));
+
+    let status = service.bd_status(false);
+
+    assert!(matches!(status, BdStatus::Ready { .. }), "{status:?}");
+}
+
+#[test]
+fn adding_a_workspace_persists_it_and_opens_it() {
+    let dir = common::temp_dir("cmd-add");
+    let config_path = dir.join("config.json");
+    let workspace = common::workspace(&dir);
+    let service = service(&config_path);
+
+    let entry = service
+        .add_workspace(&path_string(&workspace))
+        .expect("workspace is added");
+
+    assert_eq!(entry.path, path_string(&workspace));
+    assert_eq!(entry.project_id, PROJECT_ID);
+    assert_eq!(
+        service.snapshot().active.as_deref(),
+        Some(entry.path.as_str())
+    );
+
+    service.flush().expect("flush");
+    let reloaded = registry::load(&config_path).expect("reload").config;
+    assert_eq!(reloaded.workspaces.len(), 1);
+    assert_eq!(reloaded.workspaces[0].path, path_string(&workspace));
+    assert_eq!(
+        reloaded.last_workspace_path.as_deref(),
+        Some(path_string(&workspace).as_str())
+    );
+}
+
+#[test]
+fn a_plain_directory_is_rejected_and_not_registered() {
+    let dir = common::temp_dir("cmd-not-beads");
+    let config_path = dir.join("config.json");
+    let plain = workspace_named(&dir, "not-beads here");
+    let service = service(&config_path);
+
+    let error = service
+        .add_workspace(&path_string(&plain))
+        .expect_err("a plain directory is rejected");
+
+    assert_eq!(error.code, BridgeErrorCode::WsNotBeads);
+    assert!(service.snapshot().config.workspaces.is_empty());
+    service.flush().expect("flush");
+    assert!(registry::load(&config_path)
+        .expect("reload")
+        .config
+        .workspaces
+        .is_empty());
+}
+
+#[test]
+fn adding_the_same_workspace_twice_does_not_duplicate_it() {
+    let dir = common::temp_dir("cmd-dedupe");
+    let workspace = common::workspace(&dir);
+    let service = service(&dir.join("config.json"));
+    let with_separator = format!("{}\\", path_string(&workspace));
+
+    service
+        .add_workspace(&path_string(&workspace))
+        .expect("first add");
+    service.add_workspace(&with_separator).expect("second add");
+
+    assert_eq!(service.snapshot().config.workspaces.len(), 1);
+}
+
+#[test]
+fn switching_and_removing_update_the_active_workspace() {
+    let dir = common::temp_dir("cmd-switch");
+    let first = common::workspace(&dir);
+    let second = workspace_named(&dir, "second");
+    let service = service(&dir.join("config.json"));
+    service
+        .add_workspace(&path_string(&first))
+        .expect("add first");
+    service
+        .add_workspace(&path_string(&second))
+        .expect("add second");
+
+    service
+        .switch_workspace(&path_string(&first))
+        .expect("switch");
+    assert_eq!(
+        service.snapshot().active.as_deref(),
+        Some(path_string(&first).as_str())
+    );
+
+    assert!(service.remove_workspace(&path_string(&first)));
+    assert!(service.snapshot().active.is_none());
+    assert_eq!(service.snapshot().config.workspaces.len(), 1);
+    assert!(!service.remove_workspace(&path_string(&first)));
+}
+
+#[test]
+fn relocating_keeps_the_name_and_the_checkpoint_for_the_same_project() {
+    let dir = common::temp_dir("cmd-relocate");
+    let old = common::workspace(&dir);
+    let new = workspace_named(&dir, "moved");
+    let service = service(&dir.join("config.json"));
+    service.add_workspace(&path_string(&old)).expect("add");
+    service.set_checkpoint(&path_string(&old), 42);
+
+    let moved = service
+        .relocate_workspace(&path_string(&old), &path_string(&new))
+        .expect("relocate");
+
+    assert_eq!(moved.path, path_string(&new));
+    assert_eq!(moved.name, "workspace");
+    assert_eq!(moved.checkpoint.map(|checkpoint| checkpoint.seq), Some(42));
+    assert_eq!(
+        service
+            .checkpoint(&path_string(&new), PROJECT_ID)
+            .map(|checkpoint| checkpoint.seq),
+        Some(42)
+    );
+}
+
+#[test]
+fn checkpoints_only_apply_to_the_matching_project_id() {
+    let dir = common::temp_dir("cmd-checkpoint");
+    let workspace = common::workspace(&dir);
+    let service = service(&dir.join("config.json"));
+    service
+        .add_workspace(&path_string(&workspace))
+        .expect("add");
+
+    assert!(service.set_checkpoint(&path_string(&workspace), 7));
+
+    assert_eq!(
+        service
+            .checkpoint(&path_string(&workspace), PROJECT_ID)
+            .map(|checkpoint| checkpoint.seq),
+        Some(7)
+    );
+    assert!(service
+        .checkpoint(&path_string(&workspace), "another-project")
+        .is_none());
+    assert!(!service.set_checkpoint("D:/not/registered", 1));
+}
+
+#[test]
+fn a_restart_reopens_the_last_workspace() {
+    let dir = common::temp_dir("cmd-restart");
+    let config_path = dir.join("config.json");
+    let workspace = common::workspace(&dir);
+    let service = service(&config_path);
+    service
+        .add_workspace(&path_string(&workspace))
+        .expect("add");
+    service.flush().expect("flush");
+    drop(service);
+
+    let reopened = WorkspaceService::open(&config_path).expect("reopen");
+
+    let snapshot = reopened.snapshot();
+    assert_eq!(snapshot.config.workspaces.len(), 1);
+    assert_eq!(
+        snapshot.active.as_deref(),
+        Some(path_string(&workspace).as_str())
+    );
+    assert!(matches!(reopened.bd_status(false), BdStatus::Ready { .. }));
+}
+
+#[test]
+fn a_corrupt_config_is_backed_up_and_reported() {
+    let dir = common::temp_dir("cmd-corrupt");
+    let config_path = dir.join("config.json");
+    fs::write(&config_path, "{this is not json").expect("write corrupt config");
+
+    let service = WorkspaceService::open(&config_path).expect("open");
+
+    let snapshot = service.snapshot();
+    let backup = snapshot.corrupt_backup.expect("backup path");
+    assert!(Path::new(&backup).exists());
+    assert!(!config_path.exists());
+    assert!(snapshot.config.workspaces.is_empty());
+}
+
+#[test]
+fn a_deleted_workspace_directory_is_reported_as_missing() {
+    let dir = common::temp_dir("cmd-missing");
+    let workspace = common::workspace(&dir);
+    let service = service(&dir.join("config.json"));
+    service
+        .add_workspace(&path_string(&workspace))
+        .expect("add");
+
+    fs::remove_dir_all(&workspace).expect("remove workspace");
+
+    assert_eq!(service.snapshot().missing, vec![path_string(&workspace)]);
+}
+
+#[test]
+fn switching_to_a_missing_workspace_fails_without_mutating_the_registry() {
+    let dir = common::temp_dir("cmd-switch-missing");
+    let first = common::workspace(&dir);
+    let second = workspace_named(&dir, "second");
+    let service = service(&dir.join("config.json"));
+    service
+        .add_workspace(&path_string(&first))
+        .expect("add first");
+    service
+        .add_workspace(&path_string(&second))
+        .expect("add second");
+    fs::remove_dir_all(&first).expect("remove first");
+
+    let error = service
+        .switch_workspace(&path_string(&first))
+        .expect_err("missing workspace is refused");
+
+    assert_eq!(error.code, BridgeErrorCode::WsInaccessible);
+    assert_eq!(
+        service.snapshot().active.as_deref(),
+        Some(path_string(&second).as_str())
+    );
+}
+
+#[test]
+fn the_bd_path_is_persisted_for_the_next_run() {
+    let dir = common::temp_dir("cmd-bd-path");
+    let config_path = dir.join("config.json");
+    let service = service(&config_path);
+
+    service.flush().expect("flush");
+
+    let reloaded = registry::load(&config_path).expect("reload").config;
+    assert_eq!(
+        reloaded.bd_path.as_deref(),
+        Some(common::fake_bd_path().display().to_string().as_str())
+    );
+}
