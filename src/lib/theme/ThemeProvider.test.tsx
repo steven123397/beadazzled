@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, expect, test } from 'vitest';
 
 import { ThemeProvider, useTheme } from './ThemeProvider';
@@ -22,6 +22,24 @@ function stubSystem(prefersDark: boolean): void {
     removeListener: () => undefined,
     dispatchEvent: () => false,
   })) as unknown as typeof window.matchMedia;
+}
+
+function stubSystemListener(prefersDark: boolean): (matches: boolean) => void {
+  let listener: ((event: MediaQueryListEvent) => void) | null = null;
+  window.matchMedia = ((query: string) => ({
+    matches: prefersDark,
+    media: query,
+    onchange: null,
+    addEventListener: (_type: string, callback: (event: MediaQueryListEvent) => void) => {
+      listener = callback;
+    },
+    removeEventListener: () => undefined,
+    addListener: () => undefined,
+    removeListener: () => undefined,
+    dispatchEvent: () => false,
+  })) as unknown as typeof window.matchMedia;
+
+  return (matches: boolean) => listener?.({ matches } as MediaQueryListEvent);
 }
 
 function Probe() {
@@ -69,4 +87,34 @@ test('an explicit choice applies immediately and persists', () => {
   expect(screen.getByTestId('resolved')).toHaveTextContent('light');
   expect(document.documentElement.classList.contains('dark')).toBe(false);
   expect(localStorage.getItem('beadazzled.theme')).toBe('light');
+});
+
+test('system preference follows a media-query change', () => {
+  const emit = stubSystemListener(false);
+
+  render(
+    <ThemeProvider initialPreference="system">
+      <Probe />
+    </ThemeProvider>
+  );
+  expect(screen.getByTestId('resolved')).toHaveTextContent('light');
+
+  act(() => emit(true));
+
+  expect(screen.getByTestId('resolved')).toHaveTextContent('dark');
+  expect(document.documentElement.classList.contains('dark')).toBe(true);
+});
+
+test('restores the persisted preference when no initial value is passed', () => {
+  localStorage.setItem('beadazzled.theme', 'dark');
+
+  render(
+    <ThemeProvider>
+      <Probe />
+    </ThemeProvider>
+  );
+
+  expect(screen.getByTestId('preference')).toHaveTextContent('dark');
+  expect(screen.getByTestId('resolved')).toHaveTextContent('dark');
+  expect(document.documentElement.classList.contains('dark')).toBe(true);
 });

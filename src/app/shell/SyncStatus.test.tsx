@@ -2,7 +2,7 @@ import { expect, test } from 'vitest';
 
 import type { SyncState } from '@/bindings/bd';
 
-import { describeSyncState } from './SyncStatus';
+import { describeSyncState, syncToneClass } from './SyncStatus';
 
 test('loading distinguishes the export and journal steps', () => {
   expect(describeSyncState({ kind: 'loading', step: 'export' }).key).toBe('status.loadingIssues');
@@ -47,4 +47,11 @@ test('bd-unavailable is an error', () => {
   };
 
   expect(describeSyncState(state)).toEqual({ key: 'status.bdUnavailable', tone: 'danger' });
+});
+
+test('each tone maps to its semantic text class', () => {
+  expect(syncToneClass('neutral')).toBe('text-muted-foreground');
+  expect(syncToneClass('positive')).toBe('text-success');
+  expect(syncToneClass('warning')).toBe('text-warning');
+  expect(syncToneClass('danger')).toBe('text-destructive');
 });

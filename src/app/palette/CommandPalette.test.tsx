@@ -78,6 +78,33 @@ test('escape closes the palette', () => {
   expect(onClose).toHaveBeenCalled();
 });
 
+test('shows the empty state when nothing matches', () => {
+  open(commands(vi.fn()));
+
+  fireEvent.change(screen.getByRole('combobox'), { target: { value: 'zzz-no-match' } });
+
+  expect(screen.getByText('No matching commands')).toBeInTheDocument();
+  expect(screen.queryByRole('option')).not.toBeInTheDocument();
+});
+
+test('renders at most 50 results and stays inside the 50ms input-to-result budget', () => {
+  const items: CommandItem[] = Array.from({ length: 1200 }, (_, index) => ({
+    id: `action:${index}`,
+    title: `Keyboard action ${index}`,
+    group: 'Actions',
+    run: () => undefined,
+  }));
+  open(items);
+
+  const input = screen.getByRole('combobox');
+  const started = performance.now();
+  fireEvent.change(input, { target: { value: 'keyboard' } });
+  const elapsed = performance.now() - started;
+
+  expect(screen.getAllByRole('option')).toHaveLength(50);
+  expect(elapsed).toBeLessThan(50);
+});
+
 test('follows the active language', () => {
   render(
     <I18nProvider initialLanguage="zh-CN">

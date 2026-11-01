@@ -93,6 +93,29 @@ test('the language action switches to the other catalog', () => {
   expect(setLanguage).toHaveBeenCalledWith('zh-CN');
 });
 
+test('the language action cycles back from zh-CN to en', () => {
+  const setLanguage = vi.fn();
+  const commands = buildCommands([], context({ language: 'zh-CN', setLanguage }));
+
+  commands.find((command) => command.id === 'action:language')?.run();
+
+  expect(setLanguage).toHaveBeenCalledWith('en');
+});
+
+test('rankCommands caps the result set', () => {
+  const commands = Array.from({ length: 60 }, (_, index) => ({
+    id: `action:${index}`,
+    title: `Matching action ${index}`,
+    group: 'Actions' as const,
+    run: () => undefined,
+  }));
+
+  const ranked = rankCommands(commands, 'matching', 50);
+
+  expect(ranked).toHaveLength(50);
+  expect(ranked[0]?.id).toBe('action:0');
+});
+
 test('command titles follow the active language', () => {
   const commands = buildCommands([], context({ t: (key, vars) => translate('zh-CN', key, vars) }));
 

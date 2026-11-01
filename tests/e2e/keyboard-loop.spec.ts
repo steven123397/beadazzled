@@ -12,7 +12,8 @@ test('the keyboard loop opens workspace, list, detail, back and board without bd
   await expect(page.getByRole('heading', { name: 'List' })).toBeVisible();
   await clearInvokeLog(page);
 
-  // List -> Detail through the palette.
+  // List -> Detail through the palette. Row-level J/K/Enter navigation lands
+// with bza-e06; when it does, keep this leg and add separate row coverage.
   await page.keyboard.press('Control+k');
   await page.getByRole('combobox').fill('bza-1');
   await page.keyboard.press('Enter');

@@ -226,6 +226,44 @@ test('escape returns from an issue route to the list', async () => {
   expect(window.location.hash).toBe('#/w/p1/list');
 });
 
+test('escape closes an overlay without leaving the issue route', async () => {
+  window.location.hash = '#/w/p1/issue/bza-1';
+
+  render(
+    <App
+      workspaceApi={fakeApi({
+        snapshot: async () => snapshot([entry('p1', 'alpha')], '/repo/p1'),
+      })}
+    />
+  );
+  await screen.findByRole('heading', { name: /bza-1/ });
+
+  fireEvent.keyDown(window, { key: 'k', ctrlKey: true });
+  expect(screen.getByRole('dialog', { name: 'Command palette' })).toBeInTheDocument();
+
+  fireEvent.keyDown(window, { key: 'Escape' });
+
+  expect(screen.queryByRole('dialog', { name: 'Command palette' })).not.toBeInTheDocument();
+  expect(screen.getByRole('heading', { name: /bza-1/ })).toBeInTheDocument();
+  expect(window.location.hash).toBe('#/w/p1/issue/bza-1');
+});
+
+test('a workspace load failure is visible in the shell', async () => {
+  window.location.hash = '#/w/p1/list';
+
+  render(
+    <App
+      workspaceApi={fakeApi({
+        snapshot: async () => {
+          throw new Error('disk io');
+        },
+      })}
+    />
+  );
+
+  expect(await screen.findByLabelText('Status bar')).toHaveTextContent('disk io');
+});
+
 test('shows a busy skeleton instead of an empty list while the workspace loads', async () => {
   window.location.hash = '#/w/p1/list';
 
