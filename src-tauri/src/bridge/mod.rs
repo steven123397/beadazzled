@@ -402,6 +402,7 @@ fn remember_prefix(prefix: &mut Vec<u8>, chunk: &[u8]) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::bridge::argv::{AssigneeChange, CreateSpec, UpdateSpec, WriteCommand};
     use crate::sync::state::{LoadingStep, SyncState};
     use crate::workspace::discovery::BdStatus;
     use crate::workspace::registry::{AppConfig, Checkpoint, Language, Theme, WorkspaceEntry};
@@ -433,6 +434,10 @@ mod tests {
             BdStatus::decl(),
             SyncState::decl(),
             LoadingStep::decl(),
+            WriteCommand::decl(),
+            CreateSpec::decl(),
+            UpdateSpec::decl(),
+            AssigneeChange::decl(),
         ];
 
         let mut output = String::from(
@@ -467,6 +472,8 @@ mod tests {
             "BdStatus",
             "SyncState",
             "LoadingStep",
+            "WriteCommand",
+            "AssigneeChange",
         ] {
             assert!(
                 written.contains(expected),

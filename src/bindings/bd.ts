@@ -86,3 +86,19 @@ export type BdStatus = { "kind": "ready", path: string, version: string, } | { "
 export type SyncState = { "kind": "loading", step: LoadingStep, } | { "kind": "healthy", lastSeq: number, lastEventAt: string | null, } | { "kind": "journal-disabled" } | { "kind": "journal-truncated", floor: number, recovered: boolean, } | { "kind": "restarting", attempt: number, } | { "kind": "bd-unavailable", error: BridgeError, };
 
 export type LoadingStep = "export" | "journal";
+
+export type WriteCommand = { "Create": CreateSpec } | { "Update": UpdateSpec } | { "Close": { id: string, reason: string | null, } } | { "Reopen": { id: string, } } | { "Comment": { id: string, text: string, } };
+
+export type CreateSpec = { title: string, 
+/**
+ * Always sent on stdin, never in argv.
+ */
+description: string, issue_type: string, priority: number, labels: Array<string>, acceptance: string | null, assignee: string | null, };
+
+export type UpdateSpec = { id: string, status: string | null, priority: number | null, assignee: AssigneeChange | null, title: string | null, 
+/**
+ * Sent on stdin via `--body-file -` when present.
+ */
+description: string | null, acceptance: string | null, add_labels: Array<string>, remove_labels: Array<string>, if_status: string | null, if_assignee: string | null, };
+
+export type AssigneeChange = { "Set": string } | "Clear";

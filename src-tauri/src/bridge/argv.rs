@@ -3,14 +3,16 @@
 //! The process layer prepends `-C <workspace>` and runs the args without a
 //! shell, so every user string here stays a single argument, verbatim.
 
+use serde::{Deserialize, Serialize};
 use std::ffi::OsString;
+use ts_rs::TS;
 
 /// Text at or above this size travels on stdin; argv keeps only the flag.
 pub const LONG_TEXT_THRESHOLD: usize = 8 * 1024;
 
 /// One user write action. Callers merge multiple field edits into one
 /// [`UpdateSpec`] so a single action always becomes a single `bd update`.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 pub enum WriteCommand {
     Create(CreateSpec),
     Update(UpdateSpec),
@@ -19,7 +21,7 @@ pub enum WriteCommand {
     Comment { id: String, text: String },
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 pub struct CreateSpec {
     pub title: String,
     /// Always sent on stdin, never in argv.
@@ -31,7 +33,7 @@ pub struct CreateSpec {
     pub assignee: Option<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 pub struct UpdateSpec {
     pub id: String,
     pub status: Option<String>,
@@ -66,7 +68,7 @@ impl UpdateSpec {
 }
 
 /// Three-state assignee edit: leave untouched, set a name, or clear it.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 pub enum AssigneeChange {
     Set(String),
     Clear,
