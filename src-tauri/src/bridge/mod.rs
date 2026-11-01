@@ -96,7 +96,7 @@ impl BdBridge {
     /// `follow=true` starts a no-timeout reader; call [`JournalReader::next_batch`]
     /// from a worker thread because it blocks on the child's stdout.
     pub fn journal(&self, since: i64, follow: bool) -> Result<JournalReader, BridgeError> {
-        let args = journal_args(since);
+        let args = journal_args(since, follow);
         if follow {
             let request = self.request("journal", args, READ_TIMEOUT);
             let mut process = self.runner.spawn_follow(&request)?;
@@ -145,7 +145,7 @@ impl BdBridge {
         max_records: usize,
         deadline: Duration,
     ) -> Result<Backfill, BridgeError> {
-        let request = self.request("journal", journal_args(since), deadline);
+        let request = self.request("journal", journal_args(since, false), deadline);
         let scanned = self.runner.run_scan(
             &request,
             ScanBounds {
@@ -281,6 +281,8 @@ enum JournalReaderKind {
         stdout: ChildStdout,
         stream: JournalStream,
         prefix: Vec<u8>,
+        /// Newest raw bytes, so a marker split across reads is still seen.
+        tail: Vec<u8>,
         done: bool,
     },
 }
@@ -302,6 +304,7 @@ impl JournalReader {
                 stdout,
                 stream: JournalStream::new(),
                 prefix: Vec::new(),
+                tail: Vec::new(),
                 done: false,
             },
         }
@@ -324,6 +327,7 @@ impl JournalReader {
                 stdout,
                 stream,
                 prefix,
+                tail,
                 done,
             } => {
                 if *done {
@@ -331,34 +335,53 @@ impl JournalReader {
                 }
 
                 let mut buffer = [0u8; 64 * 1024];
-                let read = stdout.read(&mut buffer).map_err(|error| {
-                    BridgeError::new(
-                        BridgeErrorCode::Internal,
-                        format!("reading bd journal failed: {error}"),
-                    )
-                })?;
+                loop {
+                    let read = stdout.read(&mut buffer).map_err(|error| {
+                        BridgeError::new(
+                            BridgeErrorCode::Internal,
+                            format!("reading bd journal failed: {error}"),
+                        )
+                    })?;
 
-                if read == 0 {
-                    *done = true;
-                    let exit_code = process
-                        .try_wait()
-                        .ok()
-                        .flatten()
-                        .and_then(|status| status.code())
-                        .unwrap_or(-1);
+                    if read == 0 {
+                        *done = true;
+                        let exit_code = process
+                            .try_wait()
+                            .ok()
+                            .flatten()
+                            .and_then(|status| status.code())
+                            .unwrap_or(-1);
+                        let stderr = process.stderr_lossy();
+                        if let Some(error) = journal_disabled(exit_code, prefix.as_slice(), &stderr)
+                        {
+                            return Err(error);
+                        }
+                        if let Some(error) = journal_truncated(prefix.as_slice(), &stderr) {
+                            return Err(error);
+                        }
+                        stream.take_partial();
+                        return Ok(Vec::new());
+                    }
+
+                    let chunk = &buffer[..read];
+                    remember_prefix(prefix, chunk);
+                    remember_tail(tail, chunk);
+
+                    // The truncation marker is a JSON line that is not a
+                    // record; catch it before the parser rejects the batch.
                     let stderr = process.stderr_lossy();
-                    if let Some(error) = journal_disabled(exit_code, prefix.as_slice(), &stderr) {
+                    if let Some(error) = journal_truncated(tail.as_slice(), &stderr) {
                         return Err(error);
                     }
-                    if let Some(error) = journal_truncated(prefix.as_slice(), &stderr) {
-                        return Err(error);
-                    }
-                    stream.take_partial();
-                    return Ok(Vec::new());
-                }
 
-                remember_prefix(prefix, &buffer[..read]);
-                stream.push(&buffer[..read])
+                    let records = stream.push(chunk)?;
+                    if !records.is_empty() {
+                        return Ok(records);
+                    }
+                    // The chunk ended in the middle of a line. Keep reading
+                    // until it completes or the process exits: an empty batch
+                    // means end of stream to the sync engine.
+                }
             }
         }
     }
@@ -380,14 +403,20 @@ impl std::fmt::Debug for JournalReader {
     }
 }
 
-fn journal_args(since: i64) -> Vec<OsString> {
-    vec![
+fn journal_args(since: i64, follow: bool) -> Vec<OsString> {
+    let mut args = vec![
         OsString::from("events"),
         OsString::from("tail"),
         OsString::from("--since"),
         OsString::from(since.to_string()),
         OsString::from("--json"),
-    ]
+    ];
+    // Without --follow bd prints the backlog and exits; the reader then sees
+    // EOF and the sync engine keeps reconnecting to a stream that ended.
+    if follow {
+        args.push(OsString::from("--follow"));
+    }
+    args
 }
 
 fn parse_bd_version(stdout: &str) -> Result<BdVersion, BridgeError> {
@@ -453,6 +482,15 @@ fn remember_prefix(prefix: &mut Vec<u8>, chunk: &[u8]) {
     if remaining > 0 {
         let take = remaining.min(chunk.len());
         prefix.extend_from_slice(&chunk[..take]);
+    }
+}
+
+/// Keeps the newest bytes so a truncation marker split across reads is seen.
+fn remember_tail(tail: &mut Vec<u8>, chunk: &[u8]) {
+    tail.extend_from_slice(chunk);
+    let excess = tail.len().saturating_sub(JOURNAL_PREFIX_LIMIT);
+    if excess > 0 {
+        tail.drain(..excess);
     }
 }
 

@@ -64,17 +64,20 @@ fn main() {
                 "export" => print_fixture("export-relations.json"),
                 "events" => {
                     let lowercase = workspace.to_lowercase();
+                    let root = std::path::Path::new(workspace);
+                    if root.join("journal-argv").exists() {
+                        write_journal_argv(workspace, &args);
+                    }
                     if lowercase.contains("journal-disabled") {
                         eprintln!("note: the events journal is disabled for this workspace");
                     } else if lowercase.contains("journal-truncated") {
                         println!(
                             "{{\"code\":\"events_journal_truncated\",\"since\":1,\"floor\":5,\"head\":9}}"
                         );
+                    } else if root.join("journal-split").exists() {
+                        stream_journal_split();
                     } else if let Some(contents) = journal_file(workspace) {
-                        if std::path::Path::new(workspace)
-                            .join("journal-slow")
-                            .exists()
-                        {
+                        if root.join("journal-slow").exists() {
                             stream_journal_slow(workspace, &contents);
                         } else {
                             io::stdout()
@@ -293,6 +296,46 @@ fn stream_journal_slow(workspace: &str, contents: &[u8]) {
         std::path::Path::new(workspace).join("journal-done"),
         b"done",
     );
+}
+
+/// Writes the received argv so a test can assert which flags bd was given.
+fn write_journal_argv(workspace: &str, args: &[String]) {
+    let path = std::path::Path::new(workspace).join("journal-argv.json");
+    let record = serde_json::json!({ "args": args });
+    fs::write(path, record.to_string()).expect("write argv capture");
+}
+
+/// Writes one record in two flushes, so the reader sees a half line first.
+fn stream_journal_split() {
+    let record = serde_json::json!({
+        "seq": 1,
+        "ts": "2026-11-01T00:00:00Z",
+        "op": "update",
+        "issue_id": "fx-split",
+        "issue": {
+            "id": "fx-split",
+            "title": "Split across reads",
+            "description": "x".repeat(10 * 1024),
+            "status": "open",
+            "priority": 2,
+            "issue_type": "task",
+            "created_at": "2026-11-01T00:00:00Z",
+            "updated_at": "2026-11-01T00:00:00Z"
+        }
+    })
+    .to_string();
+    let split = record.len() / 2;
+    let mut stdout = io::stdout();
+    stdout
+        .write_all(&record.as_bytes()[..split])
+        .expect("write the first half");
+    stdout.flush().expect("flush the first half");
+    std::thread::sleep(Duration::from_millis(150));
+    stdout
+        .write_all(&record.as_bytes()[split..])
+        .expect("write the second half");
+    stdout.write_all(b"\n").expect("write the newline");
+    stdout.flush().expect("flush the second half");
 }
 
 /// A workspace-local `journal.jsonl` stands in for bd's journal in the data
