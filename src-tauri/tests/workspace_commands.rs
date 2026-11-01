@@ -7,11 +7,14 @@ mod common;
 
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::{mpsc, Arc, Mutex as StdMutex};
+use std::time::Duration;
 
 use beadazzled_lib::bridge::{BridgeErrorCode, UpdateSpec, WriteCommand};
+use beadazzled_lib::commands::config_writer::ConfigWriter;
 use beadazzled_lib::commands::WorkspaceService;
 use beadazzled_lib::workspace::discovery::BdStatus;
-use beadazzled_lib::workspace::registry;
+use beadazzled_lib::workspace::registry::{self, AppConfig};
 
 const PROJECT_ID: &str = "00000000-0000-4000-8000-000000000000";
 
@@ -29,6 +32,77 @@ fn workspace_named(dir: &Path, name: &str) -> PathBuf {
 
 fn path_string(path: &Path) -> String {
     path.display().to_string()
+}
+
+#[test]
+fn a_paused_queue_cannot_put_an_older_snapshot_last() {
+    let dir = common::temp_dir("cmd-queue-order");
+    let workspace = common::workspace(&dir);
+    let config_path = dir.join("config.json");
+    let saved = Arc::new(StdMutex::new(Vec::<AppConfig>::new()));
+
+    let (entered_tx, entered_rx) = mpsc::channel::<()>();
+    let (release_tx, release_rx) = mpsc::channel::<()>();
+    let entered_tx = Arc::new(StdMutex::new(Some(entered_tx)));
+    let release_rx = Arc::new(StdMutex::new(release_rx));
+
+    let capture = Arc::clone(&saved);
+    let writer = ConfigWriter::with_saver(
+        config_path.clone(),
+        Duration::from_secs(60),
+        Arc::new(move |_path, config| {
+            capture.lock().unwrap().push(config.clone());
+            Ok(())
+        }),
+    );
+    let service =
+        WorkspaceService::open_with_writer(config_path, Arc::clone(&writer)).expect("open service");
+    service.set_bd_path(Some(common::fake_bd_path().display().to_string()));
+    let path = path_string(&workspace);
+    service.add_workspace(&path).expect("add workspace");
+
+    // Hold the next queue call (the first checkpoint) until released.
+    writer.set_queue_hook(Some(Arc::new(move || {
+        let taken = entered_tx.lock().unwrap().take();
+        if let Some(tx) = taken {
+            tx.send(()).expect("signal the queue was entered");
+            release_rx.lock().unwrap().recv().expect("wait for release");
+        }
+    })));
+
+    let service = Arc::new(service);
+    let first = {
+        let service = Arc::clone(&service);
+        let path = path.clone();
+        std::thread::spawn(move || service.set_checkpoint(&path, 1))
+    };
+    entered_rx
+        .recv_timeout(Duration::from_secs(2))
+        .expect("the first queue call started");
+
+    let second = {
+        let service = Arc::clone(&service);
+        let path = path.clone();
+        std::thread::spawn(move || service.set_checkpoint(&path, 2))
+    };
+    // The second mutation must wait behind the first one's state lock.
+    std::thread::sleep(Duration::from_millis(150));
+    release_tx.send(()).expect("release the first queue call");
+
+    assert!(first.join().expect("first checkpoint thread"));
+    assert!(second.join().expect("second checkpoint thread"));
+    service.flush().expect("flush");
+
+    let saved = saved.lock().unwrap().clone();
+    let last_seq = saved
+        .last()
+        .and_then(|config| config.workspaces[0].checkpoint.as_ref())
+        .map(|checkpoint| checkpoint.seq);
+    assert_eq!(
+        last_seq,
+        Some(2),
+        "the later mutation must be the one that lands: {saved:?}"
+    );
 }
 
 #[test]

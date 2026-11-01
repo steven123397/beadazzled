@@ -17,6 +17,7 @@ use crate::workspace::registry::{save_atomic, AppConfig};
 pub const SAVE_DEBOUNCE: Duration = Duration::from_millis(500);
 
 type Saver = Arc<dyn Fn(&Path, &AppConfig) -> io::Result<()> + Send + Sync>;
+type QueueHook = Arc<dyn Fn() + Send + Sync>;
 
 pub struct ConfigWriter {
     path: PathBuf,
@@ -25,6 +26,8 @@ pub struct ConfigWriter {
     inner: Mutex<Inner>,
     /// Serializes saves: an older snapshot must never land after a newer one.
     save_lock: Mutex<()>,
+    /// Test seam: pauses one queue call to force an interleaving.
+    queue_hook: Mutex<Option<QueueHook>>,
 }
 
 #[derive(Default)]
@@ -51,11 +54,23 @@ impl ConfigWriter {
             saver,
             inner: Mutex::new(Inner::default()),
             save_lock: Mutex::new(()),
+            queue_hook: Mutex::new(None),
         })
+    }
+
+    /// Test seam: runs before a snapshot is stored, so a test can hold one
+    /// queue call while another mutation runs.
+    #[doc(hidden)]
+    pub fn set_queue_hook(&self, hook: Option<QueueHook>) {
+        *lock(&self.queue_hook) = hook;
     }
 
     /// Queues a snapshot; a worker saves the latest one after the debounce.
     pub fn queue(self: &Arc<Self>, config: AppConfig) {
+        let hook = lock(&self.queue_hook).clone();
+        if let Some(hook) = hook {
+            hook();
+        }
         let mut inner = lock(&self.inner);
         inner.generation += 1;
         inner.pending = Some((inner.generation, config));

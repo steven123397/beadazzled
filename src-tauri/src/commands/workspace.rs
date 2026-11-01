@@ -33,6 +33,10 @@ pub struct WorkspaceSnapshot {
     pub corrupt_backup: Option<String>,
 }
 
+/// Persistence invariant: every mutation queues its snapshot while the
+/// state lock is still held. The writer numbers snapshots in queue order, so
+/// queueing after dropping the lock would let a concurrent command store an
+/// older snapshot last.
 pub struct WorkspaceService {
     writer: std::sync::Arc<ConfigWriter>,
     state: Mutex<State>,
@@ -47,11 +51,22 @@ struct State {
 impl WorkspaceService {
     pub fn open(config_path: impl Into<PathBuf>) -> std::io::Result<Self> {
         let config_path = config_path.into();
+        let writer = ConfigWriter::new(config_path.clone());
+        Self::open_with_writer(config_path, writer)
+    }
+
+    /// Test seam: supply the writer so a test can pause its queue.
+    #[doc(hidden)]
+    pub fn open_with_writer(
+        config_path: impl Into<PathBuf>,
+        writer: std::sync::Arc<ConfigWriter>,
+    ) -> std::io::Result<Self> {
+        let config_path = config_path.into();
         let loaded = load(&config_path)?;
         let discovery =
             std::sync::Arc::new(BdDiscovery::from_env(loaded.config.bd_path.as_deref()));
         Ok(Self {
-            writer: ConfigWriter::new(config_path),
+            writer,
             state: Mutex::new(State {
                 config: loaded.config,
                 discovery,
@@ -117,7 +132,6 @@ impl WorkspaceService {
         state.config.switch_workspace(&canonical, now);
         let saved = state.config.clone();
         let result = state.config.workspaces[index].clone();
-        drop(state);
         self.writer.queue(saved);
         Ok(result)
     }
@@ -135,7 +149,6 @@ impl WorkspaceService {
         state.config.switch_workspace(&canonical, now_iso());
         let saved = state.config.clone();
         let result = state.config.workspaces[index].clone();
-        drop(state);
         self.writer.queue(saved);
         Ok(result)
     }
@@ -146,7 +159,6 @@ impl WorkspaceService {
             return false;
         }
         let saved = state.config.clone();
-        drop(state);
         self.writer.queue(saved);
         true
     }
@@ -170,7 +182,6 @@ impl WorkspaceService {
             .ok_or_else(|| not_registered(old_path))?;
         let result = state.config.workspaces[index].clone();
         let saved = state.config.clone();
-        drop(state);
         self.writer.queue(saved);
         Ok(result)
     }
@@ -186,7 +197,6 @@ impl WorkspaceService {
             return false;
         }
         let saved = state.config.clone();
-        drop(state);
         self.writer.queue(saved);
         true
     }
