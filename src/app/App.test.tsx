@@ -1,10 +1,27 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, expect, test } from 'vitest';
 
-import type { BdStatus, SyncState, WorkspaceEntry, WorkspaceSnapshot } from '@/bindings/bd';
+import type { BdStatus, Issue, SyncState, WorkspaceEntry, WorkspaceSnapshot } from '@/bindings/bd';
 import type { WorkspaceApi } from '@/lib/workspace/api';
 
 import { App } from './App';
+
+function issue(id: string, title: string): Issue {
+  return {
+    id,
+    title,
+    description: '',
+    status: 'open',
+    priority: 2,
+    issue_type: 'task',
+    created_at: '2026-11-01T00:00:00Z',
+    updated_at: '2026-11-01T00:00:00Z',
+    labels: [],
+    dependency_count: 0,
+    dependent_count: 0,
+    comment_count: 0,
+  };
+}
 
 function entry(projectId: string, name = projectId): WorkspaceEntry {
   return {
@@ -128,4 +145,43 @@ test('keeps the shell reachable for settings without a workspace', async () => {
   render(<App workspaceApi={fakeApi()} />);
 
   expect(await screen.findByRole('heading', { name: 'Settings' })).toBeInTheDocument();
+});
+
+test('ctrl+k opens the palette and searches tickets', async () => {
+  window.location.hash = '#/w/p1/list';
+
+  render(
+    <App
+      workspaceApi={fakeApi({
+        snapshot: async () => snapshot([entry('p1', 'alpha')], '/repo/p1'),
+      })}
+      issues={[issue('bza-9xy', 'Detail reading')]}
+    />
+  );
+  await screen.findByRole('heading', { name: 'List' });
+
+  fireEvent.keyDown(window, { key: 'k', ctrlKey: true });
+  expect(screen.getByRole('dialog', { name: 'Command palette' })).toBeInTheDocument();
+
+  fireEvent.change(screen.getByRole('combobox'), { target: { value: 'detail' } });
+  expect(screen.getByText('Detail reading')).toBeInTheDocument();
+});
+
+test('the help panel is generated from the shortcut registry', async () => {
+  window.location.hash = '#/w/p1/list';
+
+  render(
+    <App
+      workspaceApi={fakeApi({
+        snapshot: async () => snapshot([entry('p1', 'alpha')], '/repo/p1'),
+      })}
+    />
+  );
+  await screen.findByRole('heading', { name: 'List' });
+
+  fireEvent.keyDown(window, { key: '?' });
+
+  const dialog = screen.getByRole('dialog', { name: 'Keyboard shortcuts' });
+  expect(dialog).toHaveTextContent('Command palette');
+  expect(dialog).toHaveTextContent('Ctrl+K');
 });

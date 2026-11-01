@@ -1,6 +1,6 @@
 import { HashRouter, Navigate, Outlet, Route, Routes, useParams } from 'react-router-dom';
 
-import type { SyncState } from '@/bindings/bd';
+import type { Issue, SyncState } from '@/bindings/bd';
 import { workspaceApi as defaultWorkspaceApi, type WorkspaceApi } from '@/lib/workspace/api';
 import { useWorkspace } from '@/lib/workspace/useWorkspace';
 
@@ -16,11 +16,14 @@ export type AppProps = {
   workspaceApi?: WorkspaceApi;
   /** Wired to the sync engine later; the shell only renders it. */
   syncState?: SyncState;
+  /** Palettes search these; the sync engine supplies them later. */
+  issues?: readonly Issue[];
 };
 
 export function App({
   workspaceApi = defaultWorkspaceApi,
   syncState = { kind: 'loading', step: 'export' },
+  issues = [],
 }: AppProps) {
   const workspace = useWorkspace(workspaceApi);
 
@@ -30,7 +33,7 @@ export function App({
         <WorkspaceProvider workspace={workspace}>
           <HashRouter>
             <Routes>
-              <Route element={<Shell />}>
+              <Route element={<Shell issues={issues} />}>
                 <Route index element={<RootRedirect />} />
                 <Route path="welcome" element={<Welcome />} />
                 <Route path="w/:projectId" element={<ProjectGate />}>
