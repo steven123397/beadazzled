@@ -82,3 +82,7 @@ export type Language = "en" | "zh-CN";
 export type Theme = "light" | "dark" | "system";
 
 export type BdStatus = { "kind": "ready", path: string, version: string, } | { "kind": "not-found", searched: Array<string>, } | { "kind": "unsupported", path: string, found: string, min: string, } | { "kind": "broken", path: string, error: BridgeError, };
+
+export type SyncState = { "kind": "loading", step: LoadingStep, } | { "kind": "healthy", lastSeq: number, lastEventAt: string | null, } | { "kind": "journal-disabled" } | { "kind": "journal-truncated", floor: number, recovered: boolean, } | { "kind": "restarting", attempt: number, } | { "kind": "bd-unavailable", error: BridgeError, };
+
+export type LoadingStep = "export" | "journal";

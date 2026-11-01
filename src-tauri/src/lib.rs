@@ -1,4 +1,5 @@
 pub mod bridge;
+pub mod sync;
 pub mod workspace;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
