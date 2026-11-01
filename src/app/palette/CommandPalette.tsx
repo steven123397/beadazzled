@@ -45,6 +45,7 @@ export function CommandPalette({
       <Command
         shouldFilter={false}
         loop
+        label={t('palette.placeholder')}
         className="w-full max-w-md overflow-hidden rounded-lg border border-border bg-card text-foreground"
       >
         <Command.Input

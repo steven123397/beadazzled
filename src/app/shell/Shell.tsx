@@ -69,6 +69,18 @@ export function Shell({
   const openDiagnostics = useCallback(() => setDiagnosticsOpen(true), []);
   const toggleSidebar = useCallback(() => setSidebarCollapsed((collapsed) => !collapsed), []);
 
+  // A pointer switch is just navigation: ProjectGate performs (and reports) the
+  // real switch, exactly as it does for a deep link.
+  const switchWorkspace = useCallback(
+    (path: string) => {
+      const entry = snapshot?.config.workspaces.find((workspace) => workspace.path === path);
+      if (entry !== undefined) {
+        navigate(`/w/${entry.projectId}/list`, { replace: true });
+      }
+    },
+    [snapshot, navigate]
+  );
+
   // One payload for the palette action and the diagnostics panel, so the two
   // copies never drift apart.
   const diagnosticsText = useCallback(
@@ -237,7 +249,14 @@ export function Shell({
 
   return (
     <div className="flex h-screen flex-col bg-background text-foreground">
-      <TopBar project={project} onRefresh={refresh} />
+      <TopBar
+        project={project}
+        workspaces={snapshot?.config.workspaces ?? []}
+        missing={snapshot?.missing ?? []}
+        onSwitch={switchWorkspace}
+        onRefresh={refresh}
+        onOpenPalette={openPalette}
+      />
       <div className="flex min-h-0 flex-1">
         <Sidebar project={project} collapsed={sidebarCollapsed} onToggle={toggleSidebar} />
         <main className="min-w-0 flex-1 overflow-auto">

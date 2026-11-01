@@ -27,7 +27,7 @@ test('keyboard shortcuts open the palette and the help panel', async ({ page }) 
     await page.evaluate(() => Boolean(document.activeElement?.closest('[role="dialog"]')))
   ).toBe(true);
 
-  await page.getByRole('combobox').fill('settings');
+  await page.getByRole('combobox', { name: 'Search commands and tickets' }).fill('settings');
   await expect(palette.getByText('Go to Settings')).toBeVisible();
 
   await page.keyboard.press('Enter');
@@ -59,10 +59,12 @@ test('single-key shortcuts do not fire while typing in the palette', async ({ pa
   const palette = page.getByRole('dialog', { name: 'Command palette' });
   await expect(palette).toBeVisible();
 
-  await page.getByRole('combobox').fill('?');
+  await page.getByRole('combobox', { name: 'Search commands and tickets' }).fill('?');
 
   // A bare "?" must stay in the input instead of opening the help panel.
   await expect(palette).toBeVisible();
   await expect(page.getByRole('dialog', { name: 'Keyboard shortcuts' })).toBeHidden();
-  await expect(page.getByRole('combobox')).toHaveValue('?');
+  await expect(page.getByRole('combobox', { name: 'Search commands and tickets' })).toHaveValue(
+    '?'
+  );
 });

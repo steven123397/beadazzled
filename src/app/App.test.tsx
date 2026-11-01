@@ -321,7 +321,9 @@ test('ctrl+k opens the palette and searches tickets', async () => {
   fireEvent.keyDown(window, { key: 'k', ctrlKey: true });
   expect(screen.getByRole('dialog', { name: 'Command palette' })).toBeInTheDocument();
 
-  fireEvent.change(screen.getByRole('combobox'), { target: { value: 'detail' } });
+  fireEvent.change(screen.getByRole('combobox', { name: 'Search commands and tickets' }), {
+    target: { value: 'detail' },
+  });
   expect(screen.getByText('Detail reading')).toBeInTheDocument();
 });
 
@@ -398,7 +400,9 @@ test('production sync wiring feeds the status bar and ticket search', async () =
   expect(await screen.findByLabelText('Status bar')).toHaveTextContent('Live');
 
   fireEvent.keyDown(window, { key: 'k', ctrlKey: true });
-  fireEvent.change(screen.getByRole('combobox'), { target: { value: 'detail' } });
+  fireEvent.change(screen.getByRole('combobox', { name: 'Search commands and tickets' }), {
+    target: { value: 'detail' },
+  });
   expect(screen.getByText('Detail reading')).toBeInTheDocument();
 });
 
