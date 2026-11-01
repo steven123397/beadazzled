@@ -33,21 +33,13 @@ try {
         'the bridge module lands (bza-3ej).'
     );
   } else {
-    const result = spawnSync(
-      'cargo',
-      ['llvm-cov', '--manifest-path', path.join(root, 'src-tauri', 'Cargo.toml'), '--json'],
-      { encoding: 'utf8', maxBuffer: MAX_BUFFER_BYTES }
-    );
+    const manifest = path.join(root, 'src-tauri', 'Cargo.toml');
+    const fakeBd = buildFakeBd(manifest);
 
-    if (result.error) {
-      throw new Error(`cargo llvm-cov could not start: ${result.error.message}`);
-    }
-    if (result.status !== 0) {
-      process.stderr.write(result.stderr ?? '');
-      throw new Error(`cargo llvm-cov exited with status ${result.status}`);
-    }
-
-    const evaluation = evaluateBridgeCoverage(JSON.parse(result.stdout));
+    const stdout = runCargo(['llvm-cov', '--manifest-path', manifest, '--json'], 'cargo llvm-cov', {
+      env: { ...process.env, FAKE_BD_PATH: fakeBd },
+    });
+    const evaluation = evaluateBridgeCoverage(JSON.parse(stdout));
     const percent = evaluation.percent === null ? 'n/a' : evaluation.percent.toFixed(1);
     console.log(
       `check-bridge-coverage: ${percent}% lines (${evaluation.covered}/${evaluation.lines}) ` +
@@ -64,4 +56,45 @@ try {
 } catch (error) {
   console.error(`check-bridge-coverage: ${error instanceof Error ? error.message : String(error)}`);
   process.exitCode = 1;
+}
+
+function runCargo(args, label, options = {}) {
+  const result = spawnSync('cargo', args, {
+    encoding: 'utf8',
+    maxBuffer: MAX_BUFFER_BYTES,
+    ...options,
+  });
+
+  if (result.error) {
+    throw new Error(`${label} could not start: ${result.error.message}`);
+  }
+  if (result.status !== 0) {
+    process.stderr.write(result.stderr ?? '');
+    throw new Error(`${label} exited with status ${result.status}`);
+  }
+
+  return result.stdout ?? '';
+}
+
+// cargo-llvm-cov runs tests with `cargo test --tests`, which does not build
+// examples. The bridge process tests spawn examples/fake_bd, so build it in the
+// default target directory and tell the tests where it is.
+function buildFakeBd(manifest) {
+  const metadata = JSON.parse(
+    runCargo(
+      ['metadata', '--manifest-path', manifest, '--format-version', '1', '--no-deps'],
+      'cargo metadata'
+    )
+  );
+  if (!metadata.target_directory) {
+    throw new Error('cargo metadata did not report target_directory');
+  }
+
+  runCargo(
+    ['build', '--manifest-path', manifest, '--example', 'fake_bd'],
+    'cargo build --example fake_bd'
+  );
+
+  const file = process.platform === 'win32' ? 'fake_bd.exe' : 'fake_bd';
+  return path.join(metadata.target_directory, 'debug', 'examples', file);
 }

@@ -7,6 +7,7 @@
 
 pub mod error;
 pub mod parse;
+pub mod process;
 pub mod types;
 
 pub use error::{map_exit, BridgeError, BridgeErrorCode};
