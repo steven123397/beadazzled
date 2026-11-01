@@ -13,7 +13,7 @@ use std::ffi::OsString;
 use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Child, ChildStderr, ChildStdout, Command, ExitStatus, Stdio};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
 use serde_json::Value;
@@ -130,11 +130,40 @@ pub struct CallRecord {
 
 type CallLog = Arc<Mutex<VecDeque<CallRecord>>>;
 
+/// Short calls on one workspace must not overlap. The lock belongs to the
+/// workspace (the external resource), not to a runner instance: every
+/// `BdBridge` created for the same path has to share it, otherwise a fresh
+/// bridge per IPC call would never serialize anything.
+type WorkspaceLocks = Mutex<HashMap<PathBuf, Arc<Mutex<()>>>>;
+
+fn workspace_lock(workspace: &Path) -> Arc<Mutex<()>> {
+    static LOCKS: OnceLock<WorkspaceLocks> = OnceLock::new();
+    LOCKS
+        .get_or_init(|| Mutex::new(HashMap::new()))
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .entry(normalize_workspace(workspace))
+        .or_insert_with(|| Arc::new(Mutex::new(())))
+        .clone()
+}
+
+fn normalize_workspace(workspace: &Path) -> PathBuf {
+    // Windows treats these as the same directory, but PathBuf equality does
+    // not: normalize before using the path as a mutex key.
+    let trimmed = workspace
+        .to_string_lossy()
+        .trim_end_matches(['\\', '/'])
+        .to_owned();
+    let canonical = std::fs::canonicalize(&trimmed).unwrap_or_else(|_| PathBuf::from(&trimmed));
+    let text = canonical.to_string_lossy();
+    let stripped = text.strip_prefix(r"\\?\").unwrap_or(&text);
+    PathBuf::from(stripped.to_lowercase())
+}
+
 /// Runs short bd calls serially per workspace and records diagnostics.
 #[derive(Debug)]
 pub struct ProcessRunner {
     bd_path: PathBuf,
-    workspace_locks: Mutex<HashMap<PathBuf, Arc<Mutex<()>>>>,
     calls: CallLog,
 }
 
@@ -142,7 +171,6 @@ impl ProcessRunner {
     pub fn new(bd_path: impl Into<PathBuf>) -> Self {
         Self {
             bd_path: bd_path.into(),
-            workspace_locks: Mutex::new(HashMap::new()),
             calls: Arc::new(Mutex::new(VecDeque::new())),
         }
     }
@@ -154,7 +182,7 @@ impl ProcessRunner {
     pub fn run(&self, request: &ProcessRequest) -> Result<ProcessOutput, BridgeError> {
         let (result, started) = match &request.workspace {
             Some(workspace) => {
-                let lock = self.workspace_lock(workspace);
+                let lock = workspace_lock(workspace);
                 let _guard = lock.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
                 let started = Instant::now();
                 (self.run_locked(request, started), started)
@@ -184,8 +212,20 @@ impl ProcessRunner {
         request: &ProcessRequest,
         bounds: ScanBounds,
     ) -> Result<ScannedOutput, BridgeError> {
-        let started = Instant::now();
-        let result = self.run_scan_locked(request, bounds, started);
+        // A backfill is a short read: it joins the same workspace semaphore as
+        // `run`, so it cannot overlap a write on that workspace.
+        let (result, started) = match &request.workspace {
+            Some(workspace) => {
+                let lock = workspace_lock(workspace);
+                let _guard = lock.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+                let started = Instant::now();
+                (self.run_scan_locked(request, bounds, started), started)
+            }
+            None => {
+                let started = Instant::now();
+                (self.run_scan_locked(request, bounds, started), started)
+            }
+        };
         match &result {
             Ok(output) => self.record(request, started, output.exit_code, None),
             Err(error) => self.record(request, started, None, Some(error.code)),
@@ -355,28 +395,6 @@ impl ProcessRunner {
         }
 
         Ok((child, job))
-    }
-
-    fn workspace_lock(&self, workspace: &Path) -> Arc<Mutex<()>> {
-        self.workspace_locks
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner())
-            .entry(Self::normalize_workspace(workspace))
-            .or_insert_with(|| Arc::new(Mutex::new(())))
-            .clone()
-    }
-
-    fn normalize_workspace(workspace: &Path) -> PathBuf {
-        // Windows treats these as the same directory, but PathBuf equality does
-        // not: normalize before using the path as a mutex key.
-        let trimmed = workspace
-            .to_string_lossy()
-            .trim_end_matches(['\\', '/'])
-            .to_owned();
-        let canonical = std::fs::canonicalize(&trimmed).unwrap_or_else(|_| PathBuf::from(&trimmed));
-        let text = canonical.to_string_lossy();
-        let stripped = text.strip_prefix(r"\\?\").unwrap_or(&text);
-        PathBuf::from(stripped.to_lowercase())
     }
 
     fn record(
