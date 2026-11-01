@@ -19,6 +19,7 @@ const CAPABILITY_MAP_SCRIPTS = [
   'test:unit',
   'test:rust',
   'gen:bindings',
+  'check:bindings',
   'check:boundaries',
   'build',
   'build:app',

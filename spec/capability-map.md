@@ -48,6 +48,7 @@ Windows 桌面应用，成为 **beads 前端在 Windows 上的最好选择**：L
 | 覆盖率 | `npm run test:unit -- --coverage` |
 | Rust 测试 | `npm run test:rust` |
 | 生成 TS 绑定 | `npm run gen:bindings` |
+| 绑定漂移 | `npm run check:bindings` |
 | 架构边界 | `npm run check:boundaries` |
 | 生产构建 | `npm run build` |
 | 安装包 | `npm run build:app` |

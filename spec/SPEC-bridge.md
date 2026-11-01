@@ -193,7 +193,8 @@ pub enum WriteCommand {
 ## Module Commands
 
 - `npm run test:rust` — `cargo test --manifest-path src-tauri/Cargo.toml`
-- `npm run gen:bindings` — 导出 ts-rs 绑定；CI 中运行后 `git diff --exit-code src/bindings`
+- `npm run gen:bindings` — 通过 `export_bindings` 测试导出 ts-rs 绑定（会重写 `src/bindings/bd.ts`）
+- `npm run check:bindings` — 重新生成后与已提交的 `src/bindings/bd.ts` 比较，工作区保持原样；CI 由 `check:task` 首先执行（`export_bindings` 会重写文件，检查必须跑在任何 cargo test 之前）
 - `npm run check:boundaries` — 唯一入口与禁止路径检查
 
 ## Module Structure

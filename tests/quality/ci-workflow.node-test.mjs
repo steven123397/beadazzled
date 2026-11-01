@@ -35,6 +35,19 @@ test('CI runs every blocking gate and the scripts exist', () => {
   }
 });
 
+test('bindings drift is checked before any gate that runs cargo tests', () => {
+  // The export_bindings test rewrites src/bindings/bd.ts on every cargo test,
+  // so the drift check has to run before test:rust:coverage inside check:task.
+  const taskChecks = packageJson.scripts['check:task'] ?? '';
+
+  assert.match(
+    taskChecks,
+    /^npm run check:bindings && /,
+    'check:task must run check:bindings first'
+  );
+  assert.ok(workflow.includes('npm run check:task'), 'workflow is missing npm run check:task');
+});
+
 test('CI pins and verifies gitleaks and osv-scanner', () => {
   const pins = [
     'v8.30.1',
