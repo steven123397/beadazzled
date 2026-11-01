@@ -15,7 +15,7 @@ use tauri::{AppHandle, Emitter, Manager, State};
 
 use crate::bridge::{BdBridge, BridgeError, BridgeErrorCode, Issue, JournalRecord};
 use crate::commands::WorkspaceService;
-use crate::sync::{BaselineOutcome, SyncConfig, SyncEngine, SyncSink, SyncState};
+use crate::sync::{BaselineOutcome, FollowOutcome, SyncConfig, SyncEngine, SyncSink, SyncState};
 use crate::workspace::discovery::BdStatus;
 
 pub const EVENT_SNAPSHOT: &str = "sync:snapshot";
@@ -42,6 +42,14 @@ pub struct SyncController {
     /// Incremented whenever a worker starts or stops; sinks compare against it.
     generation: Arc<AtomicU64>,
     running: Mutex<Option<Running>>,
+    /// Serialises start/stop: two overlapping commands must not each install a
+    /// worker, or the displaced one keeps its bd follow process alive with no
+    /// handle left to stop it.
+    lifecycle: Mutex<()>,
+    /// Held across a checkpoint write. Stopping takes it after bumping the
+    /// generation, so a write that already passed its liveness check cannot
+    /// land after the next generation begins.
+    persist: Arc<Mutex<()>>,
 }
 
 impl SyncController {
@@ -50,6 +58,8 @@ impl SyncController {
             app,
             generation: Arc::new(AtomicU64::new(0)),
             running: Mutex::new(None),
+            lifecycle: Mutex::new(()),
+            persist: Arc::new(Mutex::new(())),
         }
     }
 
@@ -59,7 +69,11 @@ impl SyncController {
     /// (unknown workspace, bd missing); runtime failures are emitted as
     /// [`SyncState::BdUnavailable`] by the worker.
     pub fn start(&self, workspace: &str) -> Result<(), BridgeError> {
-        self.stop();
+        // The whole transition runs under one lock: a concurrent start would
+        // otherwise overwrite the Running slot and orphan the worker it
+        // replaced. `stop_locked` is used because this guard is already held.
+        let _lifecycle = lock(&self.lifecycle);
+        self.stop_locked();
 
         let service = self.app.state::<WorkspaceService>();
         let snapshot = service.snapshot();
@@ -104,6 +118,7 @@ impl SyncController {
             workspace: workspace.to_owned(),
             generation,
             current: Arc::clone(&self.generation),
+            persist: Arc::clone(&self.persist),
         };
         let bridge_thread = Arc::clone(&bridge);
         let stop_thread = Arc::clone(&stop);
@@ -120,7 +135,16 @@ impl SyncController {
     /// Stops the worker and invalidates its sink. The join happens on a helper
     /// thread so a command never blocks on a backoff sleep or a slow bd read.
     pub fn stop(&self) {
+        let _lifecycle = lock(&self.lifecycle);
+        self.stop_locked();
+    }
+
+    fn stop_locked(&self) {
         self.generation.fetch_add(1, Ordering::SeqCst);
+        // The generation is already bumped, so once this lock is free every
+        // later write sees the new value and returns. Taking it waits out a
+        // checkpoint write that is already in flight.
+        drop(lock(&self.persist));
         let running = lock(&self.running).take();
         if let Some(running) = running {
             running.stop.store(true, Ordering::SeqCst);
@@ -132,15 +156,78 @@ impl SyncController {
     }
 }
 
+/// How many full rebuilds a worker attempts when the journal keeps losing
+/// sequences before it reports bd as unavailable.
+const MAX_GAP_REBUILDS: u32 = 3;
+
+#[derive(Debug, PartialEq)]
+enum FollowStep {
+    Stop,
+    Rebuild,
+    GiveUp { expected: i64, got: i64 },
+}
+
+/// What the worker does after `follow` returns.
+///
+/// A gap means bd lost events: the engine documents that the caller must
+/// rebuild the baseline. Ending the thread instead leaves the last emitted
+/// state on `Healthy`, so the status bar claims "Live" while nothing is
+/// syncing. Rebuilding is bounded so a pathological journal cannot spin.
+fn follow_step(outcome: &FollowOutcome, rebuilds: u32) -> FollowStep {
+    match outcome {
+        FollowOutcome::Gap { .. } if rebuilds < MAX_GAP_REBUILDS => FollowStep::Rebuild,
+        FollowOutcome::Gap { expected, got } => FollowStep::GiveUp {
+            expected: *expected,
+            got: *got,
+        },
+        // Every other outcome already emitted its own state (stopped,
+        // journal disabled, truncated, bd unavailable).
+        _ => FollowStep::Stop,
+    }
+}
+
 fn run_sync(bridge: Arc<BdBridge>, mut sink: TauriSink, since: i64, stop: Arc<AtomicBool>) {
     let mut engine = SyncEngine::new(bridge, SyncConfig::default());
-    if matches!(
-        engine.baseline(&mut sink, since),
-        BaselineOutcome::Healthy { .. }
-    ) && !stop.load(Ordering::SeqCst)
-    {
-        let should_stop = || stop.load(Ordering::SeqCst);
-        engine.follow(&mut sink, should_stop, thread::sleep);
+    let should_stop = || stop.load(Ordering::SeqCst);
+    let mut since = since;
+    let mut rebuilds = 0;
+
+    loop {
+        if should_stop() {
+            return;
+        }
+
+        // A non-healthy baseline already emitted its state; the worker has
+        // nothing left to follow.
+        if !matches!(
+            engine.baseline(&mut sink, since),
+            BaselineOutcome::Healthy { .. }
+        ) {
+            return;
+        }
+
+        let outcome = engine.follow(&mut sink, should_stop, thread::sleep);
+        match follow_step(&outcome, rebuilds) {
+            FollowStep::Stop => return,
+            FollowStep::Rebuild => {
+                rebuilds += 1;
+                // Rebuild from scratch: the missed sequences are unknown, so
+                // the safe cursor is zero; a truncated journal falls back to
+                // its floor inside the baseline.
+                since = 0;
+            }
+            FollowStep::GiveUp { expected, got } => {
+                sink.state(&SyncState::BdUnavailable {
+                    error: BridgeError::new(
+                        BridgeErrorCode::Internal,
+                        format!(
+                            "journal sequence gap at {got} (expected {expected}) survived {MAX_GAP_REBUILDS} rebuilds"
+                        ),
+                    ),
+                });
+                return;
+            }
+        }
     }
 }
 
@@ -149,6 +236,7 @@ struct TauriSink {
     workspace: String,
     generation: u64,
     current: Arc<AtomicU64>,
+    persist: Arc<Mutex<()>>,
 }
 
 impl TauriSink {
@@ -157,6 +245,10 @@ impl TauriSink {
     }
 
     fn persist(&self, seq: i64) {
+        // The liveness check and the write are one critical section: `stop`
+        // bumps the generation and then takes this lock, so a worker from the
+        // previous generation can never write a checkpoint afterwards.
+        let _guard = lock(&self.persist);
         if !self.alive() {
             return;
         }
@@ -249,4 +341,50 @@ pub fn sync_refresh(
 #[tauri::command]
 pub fn sync_stop(controller: State<'_, SyncController>) {
     controller.stop();
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{follow_step, FollowStep, MAX_GAP_REBUILDS};
+    use crate::bridge::{BridgeError, BridgeErrorCode};
+    use crate::sync::FollowOutcome;
+
+    fn gap() -> FollowOutcome {
+        FollowOutcome::Gap {
+            expected: 7,
+            got: 9,
+        }
+    }
+
+    #[test]
+    fn a_gap_asks_for_a_rebuild_while_attempts_remain() {
+        for rebuilds in 0..MAX_GAP_REBUILDS {
+            assert_eq!(follow_step(&gap(), rebuilds), FollowStep::Rebuild);
+        }
+    }
+
+    #[test]
+    fn a_gap_that_survives_every_rebuild_gives_up_with_the_sequences() {
+        assert_eq!(
+            follow_step(&gap(), MAX_GAP_REBUILDS),
+            FollowStep::GiveUp {
+                expected: 7,
+                got: 9
+            }
+        );
+    }
+
+    #[test]
+    fn terminal_outcomes_stop_without_rebuilding() {
+        let cases = [
+            FollowOutcome::Stopped,
+            FollowOutcome::JournalDisabled,
+            FollowOutcome::JournalTruncated { floor: 12 },
+            FollowOutcome::BdUnavailable(BridgeError::new(BridgeErrorCode::Internal, "boom")),
+        ];
+
+        for outcome in cases {
+            assert_eq!(follow_step(&outcome, 0), FollowStep::Stop);
+        }
+    }
 }

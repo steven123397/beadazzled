@@ -82,14 +82,17 @@ pub trait SyncSink {
 #[derive(Debug, Default)]
 pub struct RecordingSink {
     pub snapshots: Vec<Vec<Issue>>,
+    /// The cursor each snapshot was emitted with, in order.
+    pub snapshot_since: Vec<i64>,
     pub records: Vec<JournalRecord>,
     pub states: Vec<SyncState>,
 }
 
 #[cfg(test)]
 impl SyncSink for RecordingSink {
-    fn snapshot(&mut self, issues: &[Issue], _since: i64) {
+    fn snapshot(&mut self, issues: &[Issue], since: i64) {
         self.snapshots.push(issues.to_vec());
+        self.snapshot_since.push(since);
     }
 
     fn records(&mut self, records: &[JournalRecord]) {

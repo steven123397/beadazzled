@@ -22,13 +22,16 @@ const PROJECT_ID: &str = "00000000-0000-4000-8000-000000000000";
 #[derive(Default)]
 struct CollectingSink {
     snapshots: Vec<Vec<Issue>>,
+    /// The cursor each snapshot was emitted with, in order.
+    snapshot_since: Vec<i64>,
     records: Vec<JournalRecord>,
     states: Vec<SyncState>,
 }
 
 impl SyncSink for CollectingSink {
-    fn snapshot(&mut self, issues: &[Issue], _since: i64) {
+    fn snapshot(&mut self, issues: &[Issue], since: i64) {
         self.snapshots.push(issues.to_vec());
+        self.snapshot_since.push(since);
     }
 
     fn records(&mut self, records: &[JournalRecord]) {
@@ -239,7 +242,11 @@ fn degraded_states_are_visible_without_a_ui() {
             recovered: false
         }
     );
-    assert_eq!(sink.snapshots.len(), 1);
+    assert_eq!(
+        sink.snapshot_since,
+        vec![0, 4],
+        "the store is reseeded at floor - 1 before the retry"
+    );
     assert_eq!(
         sink.states.last(),
         Some(&SyncState::JournalTruncated {
