@@ -54,7 +54,13 @@ fn main() {
                     }
                     println!("bd version 1.3.2 (9b65b9e19)");
                 }
-                "context" => print_fixture("context.json"),
+                "context" => {
+                    if workspace.to_lowercase().contains("not-beads") {
+                        eprintln!("Error: not a beads workspace");
+                        process::exit(1);
+                    }
+                    print_fixture_with_workspace("context.json", workspace);
+                }
                 "export" => print_fixture("export-relations.json"),
                 "events" => {
                     let workspace = workspace.to_lowercase();
@@ -253,6 +259,21 @@ fn print_fixture(name: &str) {
         .join(name);
     let bytes = fs::read(&path).expect("read fixture");
     io::stdout().write_all(&bytes).expect("write fixture");
+    io::stdout().flush().expect("flush fixture");
+}
+
+/// Prints a fixture with every `<workspace>` placeholder replaced by the
+/// `-C` argument, so `context` reports the workspace the caller asked about.
+fn print_fixture_with_workspace(name: &str, workspace: &str) {
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../tests/fixtures/bd")
+        .join(name);
+    let fixture = fs::read_to_string(&path).expect("read fixture");
+    let escaped = serde_json::to_string(workspace).expect("escape workspace");
+    let rendered = fixture.replace("<workspace>", escaped.trim_matches('"'));
+    io::stdout()
+        .write_all(rendered.as_bytes())
+        .expect("write fixture");
     io::stdout().flush().expect("flush fixture");
 }
 
