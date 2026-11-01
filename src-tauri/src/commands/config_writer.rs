@@ -88,7 +88,17 @@ impl ConfigWriter {
     pub fn flush(&self) -> io::Result<()> {
         let pending = lock(&self.inner).pending.take();
         let result = match pending {
-            Some((generation, config)) => self.save_if_newer(generation, &config),
+            Some((generation, config)) => match self.save_if_newer(generation, &config) {
+                Ok(()) => Ok(()),
+                Err(error) => {
+                    // Keep the snapshot so a later flush can retry it.
+                    let mut inner = lock(&self.inner);
+                    if inner.pending.is_none() {
+                        inner.pending = Some((generation, config));
+                    }
+                    Err(error)
+                }
+            },
             None => {
                 // Wait for a save that is already in flight: app exit must not
                 // cut it off halfway through the atomic write.
@@ -112,7 +122,19 @@ impl ConfigWriter {
             thread::sleep(self.delay);
             let pending = lock(&self.inner).pending.take();
             if let Some((generation, config)) = pending {
-                let _ = self.save_if_newer(generation, &config);
+                if let Err(error) = self.save_if_newer(generation, &config) {
+                    let mut inner = lock(&self.inner);
+                    if inner.pending.is_none() {
+                        // Keep the snapshot for the next flush or queue, and
+                        // stop the worker so a dead disk is not retried in a
+                        // hot loop.
+                        inner.pending = Some((generation, config));
+                        inner.running = false;
+                        return;
+                    }
+                    // A newer snapshot arrived meanwhile; keep working on it.
+                    inner.last_error = Some(error.to_string());
+                }
                 continue;
             }
 
@@ -136,7 +158,11 @@ impl ConfigWriter {
         let result = (self.saver)(&self.path, config);
         let mut inner = lock(&self.inner);
         match &result {
-            Ok(()) => inner.saved = inner.saved.max(generation),
+            Ok(()) => {
+                inner.saved = inner.saved.max(generation);
+                // The newest snapshot is on disk; an earlier failure is moot.
+                inner.last_error = None;
+            }
             Err(error) => inner.last_error = Some(error.to_string()),
         }
         result
@@ -221,6 +247,37 @@ mod tests {
 
         let error = writer.flush().expect_err("the failure surfaces");
         assert!(error.to_string().contains("disk full"));
+    }
+
+    #[test]
+    fn flush_retries_a_snapshot_after_a_transient_failure() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+
+        let attempts = AtomicUsize::new(0);
+        let saved = Arc::new(StdMutex::new(Vec::<AppConfig>::new()));
+        let capture = Arc::clone(&saved);
+        let writer = ConfigWriter::with_saver(
+            "config.json",
+            Duration::from_millis(5),
+            Arc::new(move |_path, config| {
+                if attempts.fetch_add(1, Ordering::SeqCst) == 0 {
+                    return Err(io::Error::other("disk full"));
+                }
+                capture.lock().unwrap().push(config.clone());
+                Ok(())
+            }),
+        );
+
+        writer.queue(config_with_bd("a"));
+        let deadline = std::time::Instant::now() + Duration::from_secs(2);
+        while writer.last_error().is_none() && std::time::Instant::now() < deadline {
+            thread::sleep(Duration::from_millis(10));
+        }
+        assert!(writer.last_error().is_some(), "the first save failed");
+
+        writer.flush().expect("the retry succeeds");
+        assert_eq!(saved.lock().unwrap().len(), 1);
+        assert_eq!(saved.lock().unwrap()[0].bd_path.as_deref(), Some("a"));
     }
 
     #[test]
