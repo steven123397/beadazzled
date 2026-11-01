@@ -14,3 +14,4 @@ src-tauri/app-icon.svg
 .claude
 tests/fixtures
 LICENSE
+src/bindings
