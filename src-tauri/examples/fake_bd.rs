@@ -189,7 +189,16 @@ fn main() {
             let count = env_u64("FAKE_BD_STREAM_COUNT", 20);
             let interval = env_u64("FAKE_BD_STREAM_INTERVAL_MS", 50);
             for index in 0..count {
-                println!("{}", serde_json::json!({ "seq": index }));
+                println!(
+                    "{}",
+                    serde_json::json!({
+                        "seq": index,
+                        "ts": "2026-11-01T00:00:00Z",
+                        "op": "create",
+                        "issue_id": "fx-live",
+                        "issue": null,
+                    })
+                );
                 io::stdout().flush().expect("flush stdout");
                 sleep_ms(interval);
             }

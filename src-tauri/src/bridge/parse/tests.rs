@@ -360,3 +360,55 @@ fn map_exit_keeps_only_the_first_two_kib_of_stderr() {
         .expect("stderr excerpt");
     assert_eq!(kept.len(), 2048);
 }
+
+#[test]
+fn parse_export_accepts_crlf_and_whitespace_only_lines() {
+    let line = read_fixture("export-statuses.json")
+        .lines()
+        .next()
+        .expect("fixture has a line")
+        .to_owned();
+    let input = format!("  \r\n{line}\r\n\t\r\n");
+
+    let issues = parse_export(input.as_bytes()).expect("CRLF and blank lines are tolerated");
+
+    assert_eq!(issues.len(), 1);
+    assert_eq!(issues[0].id, "fx-maz");
+}
+
+#[test]
+fn parse_export_treats_whitespace_only_output_as_empty() {
+    assert!(parse_export(b"  \n\t\r\n")
+        .expect("whitespace is not an error")
+        .is_empty());
+}
+
+#[test]
+fn journal_stream_accepts_crlf_and_whitespace_only_chunks() {
+    let record =
+        r#"{"seq":7,"ts":"2026-11-01T00:00:00Z","op":"create","issue_id":"fx-1","issue":null}"#;
+    let chunk = format!("  \r\n{record}\r\n\t\r\n");
+
+    let mut stream = JournalStream::new();
+    let records = stream.push(chunk.as_bytes()).expect("CRLF lines parse");
+
+    assert_eq!(records.len(), 1);
+    assert_eq!(records[0].seq, 7);
+}
+
+#[test]
+fn journal_truncation_requires_since_floor_and_head() {
+    let complete = br#"{"code":"events_journal_truncated","since":1,"floor":5,"head":9}"#;
+    assert!(journal_truncated(complete, "").is_some());
+
+    for missing in [
+        r#"{"code":"events_journal_truncated","floor":5,"head":9}"#,
+        r#"{"code":"events_journal_truncated","since":1,"head":9}"#,
+        r#"{"code":"events_journal_truncated","since":1,"floor":5}"#,
+    ] {
+        assert!(
+            journal_truncated(missing.as_bytes(), "").is_none(),
+            "incomplete truncation marker was accepted: {missing}"
+        );
+    }
+}

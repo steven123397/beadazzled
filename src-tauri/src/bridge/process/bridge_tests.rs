@@ -18,7 +18,7 @@ use windows_sys::Win32::System::Threading::{
     GetExitCodeProcess, OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION,
 };
 
-use super::{OutputLimits, ProcessRequest, ProcessRunner, PIPE_GRACE};
+use super::{OutputBudget, OutputLimits, ProcessRequest, ProcessRunner, PIPE_GRACE};
 use crate::bridge::argv::{argv_for, CreateSpec, WriteCommand};
 use crate::bridge::error::{map_exit, BridgeError, BridgeErrorCode};
 use crate::bridge::parse::{parse_export, JournalStream};
@@ -705,4 +705,71 @@ fn a_stale_write_maps_exit_13_to_write_conflict() {
 
     let error = map_exit(output.exit_code, &output.stderr);
     assert_eq!(error.code, BridgeErrorCode::WriteConflict);
+}
+
+#[test]
+fn output_budget_resets_the_line_counter_after_a_newline() {
+    let limits = OutputLimits {
+        total: 1024,
+        line: 8,
+        stderr: 64,
+    };
+    let mut budget = OutputBudget::default();
+
+    assert!(budget.push(b"12345678\n", limits));
+    assert!(
+        budget.push(b"12345678", limits),
+        "the newline must reset the line counter"
+    );
+    assert_eq!(budget.total(), 17);
+    assert!(
+        !budget.push(b"9", limits),
+        "a ninth byte on the new line exceeds the cap"
+    );
+}
+
+#[test]
+fn multibyte_stderr_is_capped_on_a_byte_boundary_without_panicking() {
+    for (limit, expected) in [(5usize, "中\u{FFFD}"), (3, "中")] {
+        let dir = temp_dir(&format!("stderr-multibyte-{limit}"));
+        let workspace = workspace(&dir);
+        let mut request = request(&workspace, "exit");
+        request.limits.stderr = limit;
+        request.env.push(env("FAKE_BD_STDERR", "中文"));
+        request.env.push(env("FAKE_BD_EXIT", "1"));
+
+        let output = runner().run(&request).expect("nonzero exit is output");
+
+        assert_eq!(output.stderr, expected, "stderr limit {limit}");
+        assert!(
+            output.stderr.len() <= limit + 3,
+            "lossy output must stay bounded: {}",
+            output.stderr.len()
+        );
+    }
+}
+
+#[test]
+fn journal_reader_returns_follow_records_before_the_child_exits() {
+    let dir = temp_dir("follow-live");
+    let workspace = workspace(&dir);
+    let mut request = request(&workspace, "stream");
+    request.env.push(env("FAKE_BD_STREAM_COUNT", "30"));
+    request.env.push(env("FAKE_BD_STREAM_INTERVAL_MS", "200"));
+
+    let mut process = runner().spawn_follow(&request).expect("follow starts");
+    let stdout = process.take_stdout().expect("follow exposes stdout");
+    let mut reader = crate::bridge::JournalReader::follow(process, stdout);
+
+    let started = Instant::now();
+    let records = reader.next_batch().expect("the first record arrives");
+    let elapsed = started.elapsed();
+
+    assert_eq!(records.first().expect("one record").seq, 0);
+    assert!(
+        elapsed < Duration::from_secs(2),
+        "next_batch waited for the child to exit: {elapsed:?}"
+    );
+
+    drop(reader);
 }
