@@ -139,6 +139,36 @@ impl AppConfig {
         mut moved: WorkspaceEntry,
     ) -> Option<usize> {
         let index = self.workspace_index(old_path)?;
+
+        // Relocating onto a path that is already registered would leave two
+        // entries for one directory, and every lookup would only ever see the
+        // first. Drop the stale entry; the registered one already owns the
+        // path and keeps its own checkpoint.
+        if let Some(target) = self.workspace_index(&moved.path) {
+            if target != index {
+                let old = &self.workspaces[index];
+                let carry = if old.project_id == self.workspaces[target].project_id {
+                    old.checkpoint.clone()
+                } else {
+                    None
+                };
+                self.workspaces.remove(index);
+                let surviving = if target > index { target - 1 } else { target };
+                let entry = &mut self.workspaces[surviving];
+                if entry.checkpoint.is_none() {
+                    entry.checkpoint = carry;
+                }
+                let path = entry.path.clone();
+                let pointing_at_either = self.last_workspace_path.as_deref().is_some_and(|last| {
+                    path_key(last) == path_key(old_path) || path_key(last) == path_key(&moved.path)
+                });
+                if pointing_at_either {
+                    self.last_workspace_path = Some(path);
+                }
+                return Some(surviving);
+            }
+        }
+
         let existing = &self.workspaces[index];
         moved.name = existing.name.clone();
         moved.checkpoint = if existing.project_id == moved.project_id {

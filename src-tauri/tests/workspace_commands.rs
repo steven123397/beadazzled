@@ -157,6 +157,36 @@ fn relocating_keeps_the_name_and_the_checkpoint_for_the_same_project() {
 }
 
 #[test]
+fn relocating_onto_a_registered_workspace_collapses_the_entries() {
+    let dir = common::temp_dir("cmd-relocate-duplicate");
+    let first = common::workspace(&dir);
+    let second = workspace_named(&dir, "second");
+    let service = service(&dir.join("config.json"));
+    service
+        .add_workspace(&path_string(&first))
+        .expect("add first");
+    service
+        .add_workspace(&path_string(&second))
+        .expect("add second");
+
+    let moved = service
+        .relocate_workspace(&path_string(&first), &path_string(&second))
+        .expect("relocate onto a registered path");
+
+    assert_eq!(moved.path, path_string(&second));
+    let snapshot = service.snapshot();
+    assert_eq!(
+        snapshot.config.workspaces.len(),
+        1,
+        "one entry per directory, even after a relocate"
+    );
+    assert_eq!(
+        snapshot.active.as_deref(),
+        Some(path_string(&second).as_str())
+    );
+}
+
+#[test]
 fn checkpoints_only_apply_to_the_matching_project_id() {
     let dir = common::temp_dir("cmd-checkpoint");
     let workspace = common::workspace(&dir);
