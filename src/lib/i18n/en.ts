@@ -56,6 +56,7 @@ export const en = {
   'shortcut.list': 'Go to List',
   'shortcut.board': 'Go to Board',
   'shortcut.settings': 'Go to Settings',
+  'shortcut.back': 'Back to List',
 
   'palette.title': 'Command palette',
   'palette.placeholder': 'Search commands and tickets',

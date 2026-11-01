@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from 'react';
-import { Outlet, useNavigate } from 'react-router-dom';
+import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 
 import type { Issue } from '@/bindings/bd';
 import { HelpPanel } from '@/app/keyboard/HelpPanel';
@@ -20,7 +20,9 @@ export function Shell({ issues = [] }: { issues?: readonly Issue[] }) {
   const { preference, setPreference } = useTheme();
   const { snapshot, bd, reload } = useWorkspaceContext();
   const navigate = useNavigate();
+  const location = useLocation();
   const project = activeWorkspace(snapshot);
+  const onIssueRoute = /^\/w\/[^/]+\/issue\//.test(location.pathname);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -142,8 +144,20 @@ export function Shell({ issues = [] }: { issues?: readonly Issue[] }) {
       run: (ctx) => ctx.navigate('/settings'),
     });
 
+    if (project !== null && onIssueRoute) {
+      const projectId = project.projectId;
+      list.push({
+        id: 'back-to-list',
+        keys: 'escape',
+        labelKey: 'shortcut.back',
+        group: 'Navigation',
+        when: () => !overlayOpen,
+        run: (ctx) => ctx.navigate(`/w/${projectId}/list`),
+      });
+    }
+
     return list;
-  }, [project, paletteOpen, helpOpen]);
+  }, [project, paletteOpen, helpOpen, onIssueRoute]);
 
   useShortcuts(shortcuts, context);
 

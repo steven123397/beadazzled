@@ -129,6 +129,24 @@ test('falls back to welcome when the deep link names an unknown workspace', asyn
   expect(await screen.findByRole('heading', { name: /welcome/i })).toBeInTheDocument();
 });
 
+test('escape returns from an issue route to the list', async () => {
+  window.location.hash = '#/w/p1/issue/bza-1';
+
+  render(
+    <App
+      workspaceApi={fakeApi({
+        snapshot: async () => snapshot([entry('p1', 'alpha')], '/repo/p1'),
+      })}
+    />
+  );
+  await screen.findByRole('heading', { name: /bza-1/ });
+
+  fireEvent.keyDown(window, { key: 'Escape' });
+
+  expect(await screen.findByRole('heading', { name: 'List' })).toBeInTheDocument();
+  expect(window.location.hash).toBe('#/w/p1/list');
+});
+
 test('shows a busy skeleton instead of an empty list while the workspace loads', async () => {
   window.location.hash = '#/w/p1/list';
 

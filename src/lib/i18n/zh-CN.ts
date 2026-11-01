@@ -58,6 +58,7 @@ export const zhCN: Record<keyof typeof en, string> = {
   'shortcut.list': '前往列表',
   'shortcut.board': '前往看板',
   'shortcut.settings': '前往设置',
+  'shortcut.back': '返回列表',
 
   'palette.title': '命令面板',
   'palette.placeholder': '搜索命令与票',

@@ -45,7 +45,7 @@ export function HelpPanel({
               {items.map((shortcut) => (
                 <div key={shortcut.id} className="flex items-center justify-between gap-4 text-sm">
                   <dt className="text-foreground">{t(shortcut.labelKey)}</dt>
-                  <dd className="rounded bg-muted px-2 py-0.5 font-mono text-xs text-muted-foreground">
+                  <dd className="rounded bg-muted px-2 py-0.5 font-mono text-xs text-foreground">
                     {formatKeys(shortcut.keys)}
                   </dd>
                 </div>
