@@ -16,7 +16,7 @@
 
 ## 契约：类型
 
-Rust 为唯一事实来源；用 `ts-rs` 生成 TS（禁止手改 `src/bindings/`）。未知字段必须保留（`#[serde(flatten)] extra: Map<String, Value>`），以保证 bd 升级不丢数据。
+Rust 为唯一事实来源；用 `ts-rs` 生成 TS（禁止手改 `src/bindings/`）。未知字段必须保留（`#[serde(flatten)]` 的 `extra`，Rust 侧实现为 `ExtraFields`），以保证 bd 升级不丢数据。`extra` 是实现细节：wire 上未知字段平铺在对象顶层，因此 TS 侧用索引签名表达，而不是嵌套属性（见 [ADR-0004](../docs/adr/0004-unknown-fields-and-ts-shape.md)）。
 
 ```ts
 // src/bindings/bd.ts —— 由 Rust 生成，勿手改
@@ -41,7 +41,7 @@ export type Issue = {
   dependency_count: number;
   dependent_count: number;
   comment_count: number;
-  extra: Record<string, unknown>;
+  [key: string]: unknown;        // bd 新增的未知字段（wire 上平铺在顶层）
 };
 
 export type Comment = {
@@ -86,6 +86,8 @@ export type BridgeError = {
   detail?: Record<string, unknown>;      // 原始 stderr 摘要、exit code、line 等
 };
 ```
+
+所有承载 bd 数据的类型（`Comment`、`Dependency`、`JournalRecord`、`WorkspaceContext`）都以同样的 `[key: string]: unknown` 索引签名保留未知字段；`JournalRecord.issue` 在 `delete` 时为 `null`。`src/bindings/bd.ts` 的实际输出以生成结果为准。
 
 ## 契约：Rust 接口
 
