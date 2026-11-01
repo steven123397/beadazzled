@@ -323,22 +323,26 @@ mod tests {
 
 // ---- Tauri commands -------------------------------------------------------
 
+// Plain sync commands run inline on the main thread, so a slow bd call would
+// freeze the window for its whole timeout. Every command that can spawn bd
+// (or block on a debounced flush) is marked async and runs on the thread pool.
+
 #[tauri::command]
 pub fn workspace_snapshot(service: tauri::State<'_, WorkspaceService>) -> WorkspaceSnapshot {
     service.snapshot()
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn bd_status(service: tauri::State<'_, WorkspaceService>, refresh: bool) -> BdStatus {
     service.bd_status(refresh)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn bd_set_path(service: tauri::State<'_, WorkspaceService>, path: Option<String>) -> BdStatus {
     service.set_bd_path(path)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn workspace_add(
     service: tauri::State<'_, WorkspaceService>,
     path: String,
@@ -359,7 +363,7 @@ pub fn workspace_remove(service: tauri::State<'_, WorkspaceService>, path: Strin
     service.remove_workspace(&path)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn workspace_relocate(
     service: tauri::State<'_, WorkspaceService>,
     old_path: String,
@@ -386,7 +390,7 @@ pub fn workspace_checkpoint(
     service.checkpoint(&path, &project_id)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn execute_write(
     service: tauri::State<'_, WorkspaceService>,
     command: WriteCommand,
@@ -394,7 +398,7 @@ pub fn execute_write(
     service.write(&command)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn workspace_flush(service: tauri::State<'_, WorkspaceService>) -> Result<(), BridgeError> {
     service
         .flush()
