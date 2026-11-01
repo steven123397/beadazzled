@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
@@ -11,6 +13,7 @@ import {
 } from '../../scripts/lib/dependency-audit.mjs';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
+const scriptPath = path.join(repoRoot, 'scripts/check-deps.mjs');
 
 function report(packages) {
   return {
@@ -209,4 +212,20 @@ test('the committed osv-allowlist.json parses and has no expired entries', () =>
   const result = evaluateAllowlist([], entries, new Date());
 
   assert.equal(result.expired.length, 0, 'osv-allowlist.json has expired entries');
+});
+
+test('a missing OSV_SCANNER_PATH fails instead of falling back to PATH or WinGet', () => {
+  const dir = mkdtempSync(path.join(os.tmpdir(), 'beadazzled-deps-'));
+
+  try {
+    const result = spawnSync(process.execPath, [scriptPath, '--root', dir], {
+      encoding: 'utf8',
+      env: { ...process.env, OSV_SCANNER_PATH: path.join(dir, 'missing-osv-scanner.exe') },
+    });
+
+    assert.equal(result.status, 1, result.stdout + result.stderr);
+    assert.match(result.stderr, /OSV_SCANNER_PATH is set but does not exist/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });

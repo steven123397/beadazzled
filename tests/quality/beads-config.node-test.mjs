@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
@@ -7,6 +9,7 @@ import { fileURLToPath } from 'node:url';
 import { findSecretConfigKeys } from '../../scripts/lib/beads-config.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
+const scriptPath = path.join(root, 'scripts/check-secrets.mjs');
 
 test('comments and non-secret keys are ignored', () => {
   const text = [
@@ -79,4 +82,20 @@ test('non-secret list items do not trigger', () => {
   const text = ['labels:', '    - ui', '    - name: gpt', '    - model: gpt'].join('\n');
 
   assert.deepEqual(findSecretConfigKeys(text), []);
+});
+
+test('a missing GITLEAKS_PATH fails instead of falling back to PATH or WinGet', () => {
+  const dir = mkdtempSync(path.join(os.tmpdir(), 'beadazzled-secrets-'));
+
+  try {
+    const result = spawnSync(process.execPath, [scriptPath, '--root', dir], {
+      encoding: 'utf8',
+      env: { ...process.env, GITLEAKS_PATH: path.join(dir, 'missing-gitleaks.exe') },
+    });
+
+    assert.equal(result.status, 1, result.stdout + result.stderr);
+    assert.match(result.stderr, /GITLEAKS_PATH is set but does not exist/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });

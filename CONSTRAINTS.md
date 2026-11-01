@@ -53,7 +53,8 @@
 CI 由 `.github/workflows/ci.yml` 执行（PR 与 main push）：`check:fast`、
 `check:rust:style`、`check:task`、`check:deps`、`build`。外部工具固定版本并经
 SHA256 校验：gitleaks 8.30.1、osv-scanner 2.7.0，通过 `GITLEAKS_PATH` /
-`OSV_SCANNER_PATH` 注入；CI 不解析 PATH 或 `%LOCALAPPDATA%`。见
+`OSV_SCANNER_PATH` 注入；CI 不解析 PATH 或 `%LOCALAPPDATA%`。显式注入的路径
+若不存在则直接失败，不回退 PATH / WinGet。见
 [ADR-0005](docs/adr/0005-ci-gates-and-external-tool-trust.md)。
 
 bridge 测试**禁止真的 spawn `bd`**：单次调用 1.0–1.4s，几十个用例就能把 90 秒预算吃穿，还会把测试绑死在本机 bd 版本上。用录制好的真实 JSON 样本（`bd export` / `bd events`）跑纯逻辑；真实 `bd` 只出现在 3 条 E2E 里。

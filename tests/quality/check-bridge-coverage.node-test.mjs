@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url';
 
 import {
   evaluateBridgeCoverage,
+  isBridgeSource,
   listBridgeSourceFiles,
 } from '../../scripts/lib/bridge-coverage.mjs';
 
@@ -109,4 +110,11 @@ test('the CLI reports not applicable when the bridge module does not exist', () 
 
   assert.equal(result.status, 0, result.stdout + result.stderr);
   assert.match(result.stdout, /no bridge sources/i);
+});
+
+test('test-only bridge modules do not count toward coverage', () => {
+  assert.equal(isBridgeSource('src-tauri/src/bridge/test_support.rs'), false);
+  assert.equal(isBridgeSource('src-tauri/src/bridge/process/bridge_tests.rs'), false);
+  assert.equal(isBridgeSource('src-tauri/src/bridge/parse/tests.rs'), false);
+  assert.equal(isBridgeSource('src-tauri/src/bridge/process.rs'), true);
 });

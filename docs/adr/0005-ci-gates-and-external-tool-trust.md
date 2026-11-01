@@ -55,3 +55,15 @@ PR 不会自动跑 `check:fast` / `check:task` / `check:deps`；`cargo fmt --che
   对应产物与 runner 配置；会把 CI 变成长期红灯，反而促使弱化门禁。
 - **用第三方 install action 安装 cargo-llvm-cov**：`cargo install --locked`
   更透明；CI 时间若成为问题再评估，但必须固定版本。
+## 附注：2026-11-01 工具路径与覆盖率开销（bza-ryr.23）
+
+- `GITLEAKS_PATH` / `OSV_SCANNER_PATH` 现在 fail-closed：显式设置但文件不存在
+  时直接失败，不再回退 PATH / WinGet。CI 注入的是确定路径，拼错必须看得见。
+- `cargo llvm-cov --json --summary-only`：实测该开关保留每个文件的 summary
+  （bridge 阈值只需要 `files[].summary.lines`），JSON 更小，已采用。
+- 覆盖率只统计生产 bridge 文件：`test_support.rs` 与模块内 `tests.rs` /
+  `bridge_tests.rs` 不计入分母（bza-ryr.25 把测试搬进 src 后需要这条）。
+- 缓存结论沿用本节：`src-tauri/target` 仍不缓存（Windows 上体积大、失效频繁，
+  缓存上限与恢复成本不划算）；cargo-llvm-cov 二进制缓存暂不接线——会新增
+  actions/cache 步骤，其运行时版本需与 Node 24 升级策略一并核对。CI 时长
+  成为实际问题时，再按“固定版本”原则评估。

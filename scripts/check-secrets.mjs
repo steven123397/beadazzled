@@ -51,7 +51,12 @@ function findInWinget() {
 
 function resolveGitleaks() {
   const configured = process.env.GITLEAKS_PATH;
-  if (configured && existsSync(configured)) {
+  if (configured) {
+    // CI injects this path explicitly; a typo must fail instead of silently
+    // falling back to PATH/WinGet and running a different binary.
+    if (!existsSync(configured)) {
+      throw new Error(`GITLEAKS_PATH is set but does not exist: ${configured}`);
+    }
     return configured;
   }
   return findOnPath() ?? findInWinget();

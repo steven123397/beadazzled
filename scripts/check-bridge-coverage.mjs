@@ -36,9 +36,13 @@ try {
     const manifest = path.join(root, 'src-tauri', 'Cargo.toml');
     const fakeBd = buildFakeBd(manifest);
 
-    const stdout = runCargo(['llvm-cov', '--manifest-path', manifest, '--json'], 'cargo llvm-cov', {
-      env: { ...process.env, FAKE_BD_PATH: fakeBd },
-    });
+    const stdout = runCargo(
+      ['llvm-cov', '--manifest-path', manifest, '--json', '--summary-only'],
+      'cargo llvm-cov',
+      {
+        env: { ...process.env, FAKE_BD_PATH: fakeBd },
+      }
+    );
     const evaluation = evaluateBridgeCoverage(JSON.parse(stdout));
     const percent = evaluation.percent === null ? 'n/a' : evaluation.percent.toFixed(1);
     console.log(

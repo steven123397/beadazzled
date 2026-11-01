@@ -57,7 +57,12 @@ function findInWinget() {
 
 function resolveOsvScanner() {
   const configured = process.env.OSV_SCANNER_PATH;
-  if (configured && existsSync(configured)) {
+  if (configured) {
+    // CI injects this path explicitly; a typo must fail instead of silently
+    // falling back to PATH/WinGet and running a different binary.
+    if (!existsSync(configured)) {
+      throw new Error(`OSV_SCANNER_PATH is set but does not exist: ${configured}`);
+    }
     return configured;
   }
   return findOnPath() ?? findInWinget();

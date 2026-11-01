@@ -13,6 +13,16 @@ export function normalizePath(filename) {
 
 export function isBridgeSource(filename) {
   const normalized = normalizePath(filename);
+  // Test-only modules live under src/bridge so process/parse can stay private
+  // (bza-ryr.25); they are not production bridge code and must not move the
+  // coverage threshold.
+  if (
+    /(?:^|\/)src-tauri\/src\/bridge\/(?:test_support\.rs|tests\.rs|[^/]+\/(?:tests|bridge_tests)\.rs)$/.test(
+      normalized
+    )
+  ) {
+    return false;
+  }
   return (
     /(?:^|\/)src-tauri\/src\/bridge\//.test(normalized) ||
     /(?:^|\/)src-tauri\/src\/bridge\.rs$/.test(normalized)
