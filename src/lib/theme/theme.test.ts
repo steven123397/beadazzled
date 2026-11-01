@@ -62,3 +62,21 @@ test('theme preference can be read while system is the default', () => {
     restore();
   }
 });
+
+test('a storage that throws on read or write degrades to the default theme', () => {
+  const readOnly = {
+    getItem: () => {
+      throw new Error('security error');
+    },
+    setItem: () => undefined,
+  } as unknown as Storage;
+  expect(loadTheme(readOnly)).toBe('system');
+
+  const unwritable = {
+    getItem: () => null,
+    setItem: () => {
+      throw new Error('quota exceeded');
+    },
+  } as unknown as Storage;
+  expect(() => saveTheme('dark', unwritable)).not.toThrow();
+});

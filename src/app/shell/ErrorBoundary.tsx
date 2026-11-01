@@ -1,17 +1,22 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react';
 
+import { copyText, type CopyResult } from '@/lib/clipboard';
+
 type Props = {
   title: string;
   copyLabel: string;
+  /** Shown after a copy attempt; omitted means no feedback line. */
+  copiedLabel?: string;
+  failedLabel?: string;
   children: ReactNode;
 };
-type State = { error: Error | null };
+type State = { error: Error | null; copy: CopyResult | null };
 
 /** Keeps a render failure from turning the window white. */
 export class ErrorBoundary extends Component<Props, State> {
-  state: State = { error: null };
+  state: State = { error: null, copy: null };
 
-  static getDerivedStateFromError(error: Error): State {
+  static getDerivedStateFromError(error: Error): Partial<State> {
     return { error };
   }
 
@@ -24,7 +29,9 @@ export class ErrorBoundary extends Component<Props, State> {
     if (error === null) {
       return;
     }
-    void navigator.clipboard?.writeText(`${error.name}: ${error.message}\n${error.stack ?? ''}`);
+    void copyText(`${error.name}: ${error.message}\n${error.stack ?? ''}`).then((copy) =>
+      this.setState({ copy })
+    );
   };
 
   render() {
@@ -32,6 +39,13 @@ export class ErrorBoundary extends Component<Props, State> {
     if (error === null) {
       return this.props.children;
     }
+
+    const notice =
+      this.state.copy === 'copied'
+        ? this.props.copiedLabel
+        : this.state.copy === 'failed'
+          ? this.props.failedLabel
+          : undefined;
 
     return (
       <div
@@ -49,6 +63,11 @@ export class ErrorBoundary extends Component<Props, State> {
         >
           {this.props.copyLabel}
         </button>
+        {notice === undefined ? null : (
+          <p role="status" aria-live="polite" className="text-xs text-muted-foreground">
+            {notice}
+          </p>
+        )}
       </div>
     );
   }

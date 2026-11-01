@@ -20,13 +20,23 @@ export function isLanguage(value: unknown): value is Language {
   return value === 'en' || value === 'zh-CN';
 }
 
+/** Reads the saved language; an unreadable storage falls back to English. */
 export function loadLanguage(storage: Storage = localStorage): Language {
-  const stored = storage.getItem(LANGUAGE_STORAGE_KEY);
-  return isLanguage(stored) ? stored : 'en';
+  try {
+    const stored = storage.getItem(LANGUAGE_STORAGE_KEY);
+    return isLanguage(stored) ? stored : 'en';
+  } catch {
+    return 'en';
+  }
 }
 
+/** Best-effort write: a restricted profile keeps the choice for this session only. */
 export function saveLanguage(language: Language, storage: Storage = localStorage): void {
-  storage.setItem(LANGUAGE_STORAGE_KEY, language);
+  try {
+    storage.setItem(LANGUAGE_STORAGE_KEY, language);
+  } catch {
+    // Nothing to do: the catalog switch already happened in memory.
+  }
 }
 
 /** Looks up `key` and substitutes `{name}` placeholders from `vars`. */

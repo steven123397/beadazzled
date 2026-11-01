@@ -98,19 +98,20 @@ export function buildCommands(issues: readonly Issue[], context: PaletteContext)
     }
   );
 
-  for (const issue of issues) {
-    commands.push({
-      id: `issue:${issue.id}`,
-      title: issue.title,
-      subtitle: issue.id,
-      group: 'Issues',
-      keywords: `${issue.id} ${issue.status} ${issue.labels.join(' ')}`,
-      run: () => {
-        if (context.project !== null) {
-          context.navigate(`/w/${context.project.projectId}/issue/${issue.id}`);
-        }
-      },
-    });
+  // Ticket commands are workspace-scoped: without one, every entry would be a
+  // click that goes nowhere, so the group is absent instead of inert.
+  if (context.project !== null) {
+    const projectId = context.project.projectId;
+    for (const issue of issues) {
+      commands.push({
+        id: `issue:${issue.id}`,
+        title: issue.title,
+        subtitle: issue.id,
+        group: 'Issues',
+        keywords: `${issue.id} ${issue.status} ${issue.labels.join(' ')}`,
+        run: () => context.navigate(`/w/${projectId}/issue/${issue.id}`),
+      });
+    }
   }
 
   return commands;

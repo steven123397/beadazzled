@@ -8,6 +8,7 @@ import { useShortcuts } from '@/app/keyboard/useShortcuts';
 import { CommandPalette } from '@/app/palette/CommandPalette';
 import { buildCommands } from '@/app/palette/commands';
 import { useI18n } from '@/lib/i18n/I18nProvider';
+import { copyText, type CopyResult } from '@/lib/clipboard';
 import { formatDiagnostics } from '@/lib/diagnostics';
 import { loadSidebarCollapsed, saveSidebarCollapsed } from '@/lib/shell/layout';
 import { useTheme } from '@/lib/theme/ThemeProvider';
@@ -46,6 +47,7 @@ export function Shell({
   // Read once at mount so a restored collapse never renders expanded first.
   const [sidebarCollapsed, setSidebarCollapsed] = useState(loadSidebarCollapsed);
   const [lastRefreshAt, setLastRefreshAt] = useState(() => Date.now());
+  const [copyNotice, setCopyNotice] = useState<CopyResult | null>(null);
 
   const refreshData = useMemo(
     () => onRefresh ?? (() => void reload()),
@@ -100,8 +102,16 @@ export function Shell({
   );
 
   const copyDiagnostics = useCallback(() => {
-    void navigator.clipboard?.writeText(diagnosticsText());
+    void copyText(diagnosticsText()).then(setCopyNotice);
   }, [diagnosticsText]);
+
+  useEffect(() => {
+    if (copyNotice === null) {
+      return undefined;
+    }
+    const timer = setTimeout(() => setCopyNotice(null), 2500);
+    return () => clearTimeout(timer);
+  }, [copyNotice]);
 
   const context: ShortcutContext = {
     navigate,
@@ -274,6 +284,15 @@ export function Shell({
           onCopy={copyDiagnostics}
           onClose={closeOverlay}
         />
+      ) : null}
+      {copyNotice !== null ? (
+        <p
+          role="status"
+          aria-live="polite"
+          className="pointer-events-none fixed bottom-8 left-1/2 z-40 -translate-x-1/2 rounded border border-border bg-card px-3 py-1 text-xs text-foreground shadow"
+        >
+          {t(copyNotice === 'copied' ? 'clipboard.copied' : 'clipboard.failed')}
+        </p>
       ) : null}
     </div>
   );

@@ -674,3 +674,36 @@ test('sync state changes are announced politely', async () => {
   const live = screen.getByText('Live');
   expect(live).toHaveAttribute('aria-live', 'polite');
 });
+
+test('a failed copy tells the user instead of doing nothing', async () => {
+  window.location.hash = '#/w/p1/list';
+  Object.defineProperty(navigator, 'clipboard', {
+    value: {
+      writeText: async () => {
+        throw new Error('permission denied');
+      },
+    },
+    configurable: true,
+  });
+  Object.defineProperty(document, 'execCommand', {
+    value: () => {
+      throw new Error('unsupported');
+    },
+    configurable: true,
+  });
+
+  render(
+    <App
+      workspaceApi={fakeApi({
+        snapshot: async () => snapshot([entry('p1', 'alpha')], '/repo/p1'),
+      })}
+    />
+  );
+  await screen.findByRole('heading', { name: 'List' });
+
+  const dialog = await openDiagnostics();
+  fireEvent.click(within(dialog).getByRole('button', { name: 'Copy diagnostics' }));
+
+  expect(await screen.findByText(/Copy failed/)).toBeInTheDocument();
+  Reflect.deleteProperty(document, 'execCommand');
+});

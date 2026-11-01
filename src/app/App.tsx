@@ -101,7 +101,12 @@ function AppFrame({
   }, [reload, sync.refresh]);
 
   return (
-    <ErrorBoundary title={t('error.title')} copyLabel={t('error.copy')}>
+    <ErrorBoundary
+      title={t('error.title')}
+      copyLabel={t('error.copy')}
+      copiedLabel={t('clipboard.copied')}
+      failedLabel={t('clipboard.failed')}
+    >
       <SyncStatusProvider state={shellSyncState}>
         <WorkspaceProvider workspace={workspace}>
           <HashRouter>

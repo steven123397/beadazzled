@@ -57,6 +57,9 @@ export const en = {
   'error.title': 'Something went wrong',
   'error.copy': 'Copy diagnostics',
 
+  'clipboard.copied': 'Copied',
+  'clipboard.failed': 'Copy failed — select the text manually',
+
   'keyboard.title': 'Keyboard shortcuts',
   'keyboard.close': 'Close',
   'keyboard.group.General': 'General',

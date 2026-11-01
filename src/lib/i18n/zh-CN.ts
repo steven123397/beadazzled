@@ -59,6 +59,9 @@ export const zhCN: Record<keyof typeof en, string> = {
   'error.title': '出错了',
   'error.copy': '复制诊断信息',
 
+  'clipboard.copied': '已复制',
+  'clipboard.failed': '复制失败，请手动选择文本',
+
   'keyboard.title': '键盘快捷键',
   'keyboard.close': '关闭',
   'keyboard.group.General': '通用',

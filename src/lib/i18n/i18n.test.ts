@@ -1,6 +1,6 @@
 import { expect, test } from 'vitest';
 
-import { catalogs, translate, type MessageKey } from './index';
+import { catalogs, loadLanguage, saveLanguage, translate, type MessageKey } from './index';
 import { en } from './en';
 import { zhCN } from './zh-CN';
 
@@ -66,4 +66,22 @@ test('translate falls back to the key so missing strings are visible', () => {
 test('zh-CN actually translates the shell copy', () => {
   expect(zhCN['nav.list']).not.toBe(en['nav.list']);
   expect(zhCN['welcome.title']).toMatch(/[一-鿿]/);
+});
+
+test('a storage that throws on read or write degrades to the default language', () => {
+  const readOnly = {
+    getItem: () => {
+      throw new Error('security error');
+    },
+    setItem: () => undefined,
+  } as unknown as Storage;
+  expect(loadLanguage(readOnly)).toBe('en');
+
+  const unwritable = {
+    getItem: () => null,
+    setItem: () => {
+      throw new Error('quota exceeded');
+    },
+  } as unknown as Storage;
+  expect(() => saveLanguage('zh-CN', unwritable)).not.toThrow();
 });

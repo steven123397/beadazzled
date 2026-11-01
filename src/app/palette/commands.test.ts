@@ -147,3 +147,15 @@ test('ranks 1200 candidates in under 50ms', () => {
 
   expect(elapsed).toBeLessThan(50);
 });
+
+test('builds no issue commands while no workspace is open', () => {
+  const navigate = vi.fn();
+  const commands = buildCommands([issue('bza-1', 'Fix the shell')], context({ project: null, navigate }));
+
+  expect(commands.some((command) => command.group === 'Issues')).toBe(false);
+  expect(commands.some((command) => command.id === 'issue:bza-1')).toBe(false);
+
+  // Workspace-independent actions still work; nothing routes into a project.
+  commands.forEach((command) => command.run());
+  expect(navigate).not.toHaveBeenCalledWith(expect.stringContaining('/w/'));
+});
