@@ -39,7 +39,9 @@ pub fn run() {
     app.run(|app, event| {
         if let tauri::RunEvent::Exit = event {
             let service = app.state::<commands::WorkspaceService>();
-            let _ = service.flush();
+            if let Err(error) = service.flush() {
+                eprintln!("failed to flush the workspace config on exit: {error}");
+            }
         }
     });
 }
