@@ -35,6 +35,21 @@ test('keyboard shortcuts open the palette and the help panel', async ({ page }) 
   await expect(page).toHaveURL(/#\/settings$/);
 });
 
+test('a chord miss or expiry does not swallow the next shortcut', async ({ page }) => {
+  await page.goto('/#/settings');
+  await expect(page.getByRole('heading', { name: 'Settings' })).toBeVisible();
+
+  await page.keyboard.press('g');
+  await page.keyboard.press('?');
+  await expect(page.getByRole('dialog', { name: 'Keyboard shortcuts' })).toBeVisible();
+  await page.keyboard.press('Escape');
+
+  await page.keyboard.press('g');
+  await page.waitForTimeout(900);
+  await page.keyboard.press('?');
+  await expect(page.getByRole('dialog', { name: 'Keyboard shortcuts' })).toBeVisible();
+});
+
 test('single-key shortcuts do not fire while typing in the palette', async ({ page }) => {
   await page.goto('/#/settings');
   await expect(page.getByRole('heading', { name: 'Settings' })).toBeVisible();

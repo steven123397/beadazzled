@@ -60,6 +60,7 @@ export function isEditableTarget(target: EventTarget | null): boolean {
   const element = target as {
     tagName?: unknown;
     isContentEditable?: unknown;
+    closest?: (selector: string) => Element | null;
     getAttribute?: (name: string) => string | null;
   };
   if (typeof element.tagName === 'string') {
@@ -70,6 +71,15 @@ export function isEditableTarget(target: EventTarget | null): boolean {
   }
   if (element.isContentEditable === true) {
     return true;
+  }
+  // A contenteditable host often contains focusable descendants (spans, code
+  // blocks); checking only the event target would let single-key shortcuts
+  // fire inside an editor.
+  if (typeof element.closest === 'function') {
+    const host = element.closest('[contenteditable]');
+    if (host !== null) {
+      return host.getAttribute('contenteditable') !== 'false';
+    }
   }
   // jsdom does not implement isContentEditable; fall back to the attribute.
   if (typeof element.getAttribute === 'function') {
@@ -111,19 +121,19 @@ export function resolveShortcut<T extends Shortcut>(
     return { binding: null, pending };
   }
 
-  if (pending !== null) {
-    if (now - pending.at > timeout) {
-      return { binding: null, pending: null };
-    }
+  if (pending !== null && now - pending.at <= timeout) {
     const chord = shortcuts.find(
       (shortcut) =>
         isChord(shortcut) &&
         bindingKeys(shortcut)[0] === pending.prefix &&
         bindingKeys(shortcut)[1] === token
     );
-    return { binding: chord ?? null, pending: null };
+    if (chord !== undefined) {
+      return { binding: chord, pending: null };
+    }
   }
-
+  // A chord miss or an expired prefix must not swallow the current key: treat
+  // it as a fresh press so direct shortcuts and new chords still work.
   const direct = shortcuts.find(
     (shortcut) => bindingKeys(shortcut).length === 1 && bindingKeys(shortcut)[0] === token
   );

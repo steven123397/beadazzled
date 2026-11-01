@@ -91,6 +91,29 @@ test('an expired chord does not fire', () => {
   expect(second.pending).toBeNull();
 });
 
+test('a chord miss or expiry lets the current key fire a direct shortcut', () => {
+  const first = resolveShortcut(shortcuts, { key: 'g' }, { now: 100 });
+  const missed = resolveShortcut(shortcuts, { key: '?' }, { now: 200, pending: first.pending });
+  expect(missed.binding?.id).toBe('help');
+  expect(missed.pending).toBeNull();
+
+  const expired = resolveShortcut(shortcuts, { key: '?' }, { now: 1200, pending: first.pending });
+  expect(expired.binding?.id).toBe('help');
+  expect(expired.pending).toBeNull();
+});
+
+test('a modifier shortcut survives a chord miss', () => {
+  const first = resolveShortcut(shortcuts, { key: 'g' }, { now: 100 });
+  const second = resolveShortcut(
+    shortcuts,
+    { key: 'k', ctrlKey: true },
+    { now: 200, pending: first.pending }
+  );
+
+  expect(second.binding?.id).toBe('palette');
+  expect(second.pending).toBeNull();
+});
+
 test('a chord never starts inside an input', () => {
   const first = resolveShortcut(shortcuts, { key: 'g' }, { now: 100, editable: true });
 
@@ -120,6 +143,15 @@ test('editable targets are inputs, textareas and contenteditable hosts', () => {
   const host = document.createElement('div');
   host.setAttribute('contenteditable', 'true');
   expect(isEditableTarget(host)).toBe(true);
+
+  const child = document.createElement('span');
+  host.append(child);
+  expect(isEditableTarget(child)).toBe(true);
+
+  const locked = document.createElement('span');
+  locked.setAttribute('contenteditable', 'false');
+  host.append(locked);
+  expect(isEditableTarget(locked)).toBe(false);
 
   expect(isEditableTarget(document.createElement('button'))).toBe(false);
   expect(isEditableTarget(null)).toBe(false);
