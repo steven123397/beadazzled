@@ -15,12 +15,18 @@ use crate::bridge::{BridgeError, BridgeErrorCode, Issue, JournalRecord};
 pub const MAX_BASELINE_RECORDS: usize = 50_000;
 /// Read budget for the backfill (`SPEC-sync`): records or time, first wins.
 pub const BACKFILL_DEADLINE: Duration = Duration::from_secs(8);
+/// How long a silent follow connection must survive to count as a success.
+pub const RECONNECT_GRACE: Duration = Duration::from_secs(4);
 
 /// Tunables; tests shrink the caps instead of building 50k records.
 #[derive(Debug, Clone)]
 pub struct SyncConfig {
     pub max_baseline_records: usize,
     pub backfill_deadline: Duration,
+    /// A follow connection that stays alive this long counts as a success,
+    /// even when the journal is silent: a reconnect that worked must not
+    /// consume one of the five retries.
+    pub reconnect_grace: Duration,
 }
 
 impl Default for SyncConfig {
@@ -28,6 +34,7 @@ impl Default for SyncConfig {
         Self {
             max_baseline_records: MAX_BASELINE_RECORDS,
             backfill_deadline: BACKFILL_DEADLINE,
+            reconnect_grace: RECONNECT_GRACE,
         }
     }
 }
@@ -140,6 +147,7 @@ impl<S: SyncSource> SyncEngine<S> {
                 return FollowOutcome::Stopped;
             }
 
+            let started = std::time::Instant::now();
             let error = match self.source.journal(self.last_seq, true) {
                 Ok(stream) => match self.consume(stream, sink, &should_stop) {
                     Consume::Stopped => return FollowOutcome::Stopped,
@@ -157,6 +165,12 @@ impl<S: SyncSource> SyncEngine<S> {
                     error
                 }
             };
+
+            // A connection that lived through the grace period was healthy,
+            // even if the journal stayed silent the whole time.
+            if started.elapsed() >= self.config.reconnect_grace {
+                self.backoff.reset();
+            }
 
             if should_stop() {
                 return FollowOutcome::Stopped;
@@ -221,6 +235,7 @@ impl<S: SyncSource> SyncEngine<S> {
                         );
                         return self.unavailable(sink, &error);
                     }
+                    self.backoff.reset();
                     self.set_state(
                         sink,
                         SyncState::Healthy {
@@ -933,6 +948,32 @@ mod tests {
     }
 
     #[test]
+    fn a_silent_reconnect_resets_the_backoff() {
+        let source = Arc::new(SilentSource {
+            attempts: AtomicUsize::new(0),
+            slow_after: 4,
+            healthy_after: 9,
+            record: record(1, "a"),
+        });
+        let config = SyncConfig {
+            reconnect_grace: Duration::from_millis(10),
+            ..SyncConfig::default()
+        };
+        let mut engine = SyncEngine::new(Arc::clone(&source), config);
+        let (mut sink, seen) = CountingSink::new();
+
+        let outcome = engine.follow(&mut sink, || seen.get() > 0, |_| {});
+
+        assert_eq!(outcome, FollowOutcome::Stopped);
+        assert_eq!(
+            source.attempts.load(Ordering::SeqCst),
+            10,
+            "the silent connection must reset the retry budget"
+        );
+        assert_eq!(seqs(&sink.inner.records), vec![1]);
+    }
+
+    #[test]
     fn journal_disabled_during_follow_stops_without_reconnecting() {
         let source = FakeSource::with_export(vec![issue("a")]).follow_err(disabled());
         let mut engine = engine(source, SyncConfig::default());
@@ -989,6 +1030,48 @@ mod tests {
             }
         );
         assert_eq!(seqs(&sink.records), vec![1, 2]);
+    }
+
+    /// A follow stream that stays open for `delay`, then ends silently.
+    struct SlowFollow {
+        delay: Duration,
+    }
+
+    impl FollowStream for SlowFollow {
+        fn next_batch(&mut self) -> Result<Vec<JournalRecord>, BridgeError> {
+            std::thread::sleep(self.delay);
+            Ok(Vec::new())
+        }
+    }
+
+    /// Fails a few times, then holds one silent connection, then recovers.
+    struct SilentSource {
+        attempts: AtomicUsize,
+        slow_after: usize,
+        healthy_after: usize,
+        record: JournalRecord,
+    }
+
+    impl SyncSource for SilentSource {
+        fn export(&self) -> Result<Vec<Issue>, BridgeError> {
+            Ok(vec![issue("a")])
+        }
+
+        fn journal(&self, _since: i64, follow: bool) -> Result<Box<dyn FollowStream>, BridgeError> {
+            assert!(follow, "follow mode is the only caller here");
+            let attempt = self.attempts.fetch_add(1, Ordering::SeqCst);
+            if attempt == self.healthy_after {
+                return Ok(Box::new(FakeFollow::new(vec![Ok(vec![self
+                    .record
+                    .clone()])])));
+            }
+            if attempt == self.slow_after {
+                return Ok(Box::new(SlowFollow {
+                    delay: Duration::from_millis(20),
+                }));
+            }
+            Err(failed())
+        }
     }
 
     /// A source whose export can be repeated and whose backfills are scripted.
@@ -1114,6 +1197,7 @@ mod tests {
         let config = SyncConfig {
             max_baseline_records: 12,
             backfill_deadline: Duration::from_millis(5),
+            ..SyncConfig::default()
         };
         let mut engine = SyncEngine::new(source, config);
         let mut sink = RecordingSink::default();
