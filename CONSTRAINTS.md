@@ -65,8 +65,8 @@ bridge 测试**禁止真的 spawn `bd`**：单次调用 1.0–1.4s，几十个�
 |---|---|---|
 | secrets | 0 | 2026-10-31 实测，gitleaks 8.30.1，2 commits / 29.34 KB / 395ms |
 | 安装包体积 | 未测量 | 无构建产物 |
-| 冷启动 | P95 909–947ms（两轮 n=20，P50 694–792ms） | 2026-11-01 实测，release 9.1MB；新 WebView2 profile；页面加载完成标记。见 [记录](docs/measurements/2026-11-01-startup.md) |
-| 热启动 | P95 873–990ms（两轮 n=20，P50 624–681ms） | 2026-11-01 实测，复用 profile；两轮均超 800ms 预算，按 warn 记录，未改阈值 |
+| 冷启动 | P95 819–1036ms（四轮 n=20，P50 615–713ms） | 2026-11-01 实测，release 9.3MB；新 WebView2 profile；页面加载完成标记。见 [记录](docs/measurements/2026-11-01-startup.md) |
+| 热启动 | P95 801–965ms（四轮 n=20，P50 651–661ms） | 2026-11-01 重测（sync 接线后）；四轮均超 800ms 预算，按 warn 记录，未改阈值 |
 | 内存、详情切换、滚动 | 未测量 | 后续模块落地后接线 |
 | bridge 行覆盖率 | 91.2%（1226/1345 行，6 个 bridge 文件） | 2026-11-01 实测；阈值 80% 由 `check:task` 执行 |
 | 依赖漏洞 | 0 高危（2 medium；2 unknown 已登记 allowlist） | 2026-11-01 实测，osv-scanner 2.7.0，npm 285 包 + crates 407 包 |
