@@ -32,8 +32,8 @@
 | 关键 E2E | 3 条全绿 | `npm run e2e` | CI | block | 装→列表→详情→改状态 | 待接线 |
 | 依赖高危漏洞 | 0；unknown 未豁免即为失败 | `npm run check:deps` | CI | block | 会随安装包分发出去；无 severity 的记录无法自动判级 | 可运行 |
 | 安装包体积 | ≤ 15 MB | `npm run build:app && npm run check:size` | CI | block | Tauri 空壳 5–10MB；超过即说明选型错了 | 可运行（需先 `build:app`） |
-| 冷启动→可交互 | ≤ 2.0s（P95） | `npm run measure:startup` | CI | warn | WebView2 冷启动实测量级 | 待接线 |
-| 热启动→可交互 | ≤ 800ms | 同上 | CI | warn | 双击即开是核心卖点 | 待接线 |
+| 冷启动→可交互 | ≤ 2.0s（P95） | `npm run measure:startup` | CI | warn | WebView2 冷启动实测量级 | 可运行（未接 CI） |
+| 热启动→可交互 | ≤ 800ms | 同上 | CI | warn | 双击即开是核心卖点 | 可运行（未接 CI） |
 | 常驻内存（1000 条票） | ≤ 150 MB | `npm run measure:memory` | CI | warn | WebView2 常见占用 | 待接线 |
 | 详情页切换 | ≤ 50ms | `npm run measure:navigation` | CI | warn | 纯内存读取，只受渲染限制 | 待接线 |
 | 列表滚动（1000 条） | 60fps 不掉帧 | `npm run measure:scroll` | CI | warn | 虚拟滚动的基本盘 | 待接线 |
@@ -65,10 +65,12 @@ bridge 测试**禁止真的 spawn `bd`**：单次调用 1.0–1.4s，几十个�
 |---|---|---|
 | secrets | 0 | 2026-10-31 实测，gitleaks 8.30.1，2 commits / 29.34 KB / 395ms |
 | 安装包体积 | 未测量 | 无构建产物 |
-| 冷启动、热启动、内存、详情切换、滚动 | 未测量 | 无应用壳 |
+| 冷启动 | P95 909–947ms（两轮 n=20，P50 694–792ms） | 2026-11-01 实测，release 9.1MB；新 WebView2 profile；页面加载完成标记。见 [记录](docs/measurements/2026-11-01-startup.md) |
+| 热启动 | P95 873–990ms（两轮 n=20，P50 624–681ms） | 2026-11-01 实测，复用 profile；两轮均超 800ms 预算，按 warn 记录，未改阈值 |
+| 内存、详情切换、滚动 | 未测量 | 后续模块落地后接线 |
 | bridge 行覆盖率 | 91.2%（1226/1345 行，6 个 bridge 文件） | 2026-11-01 实测；阈值 80% 由 `check:task` 执行 |
 | 依赖漏洞 | 0 高危（2 medium；2 unknown 已登记 allowlist） | 2026-11-01 实测，osv-scanner 2.7.0，npm 285 包 + crates 407 包 |
-| 对比度、键盘可达 | 未测量 | 无 UI |
+| 对比度、键盘可达 | axe 0 serious/critical；键盘闭环 E2E 通过 | 2026-11-01 实测；见 `tests/e2e/accessibility.spec.ts`、`keyboard-loop.spec.ts`；axe 尚未接 CI |
 
 ## Exceptions
 

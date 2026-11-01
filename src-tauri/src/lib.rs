@@ -1,3 +1,5 @@
+use std::time::{SystemTime, UNIX_EPOCH};
+
 use tauri::Manager;
 
 pub mod bridge;
@@ -5,9 +7,31 @@ pub mod commands;
 pub mod sync;
 pub mod workspace;
 
+/// Leaves a timestamp for `scripts/measure-startup.mjs`.
+///
+/// The measurement script launches the release binary without the DevTools
+/// protocol (which would add hundreds of milliseconds), so the app reports its
+/// own page-load mark instead. Nothing is written unless the caller explicitly
+/// sets the environment variable.
+fn write_startup_trace(label: &str, url: &str) {
+    let Some(path) = std::env::var_os("BEADAZZLED_STARTUP_TRACE") else {
+        return;
+    };
+    let stamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_millis())
+        .unwrap_or_default();
+    let _ = std::fs::write(path, format!("{label} {stamp} {url}\n"));
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let app = match tauri::Builder::default()
+        .on_page_load(|_webview, payload| {
+            if matches!(payload.event(), tauri::webview::PageLoadEvent::Finished) {
+                write_startup_trace("page-load-finished", payload.url().as_str());
+            }
+        })
         .setup(|app| {
             let config_path = app.path().app_config_dir()?.join("config.json");
             let service = commands::WorkspaceService::open(config_path)?;
