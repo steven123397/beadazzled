@@ -34,6 +34,10 @@ impl SyncSource for BdBridge {
     ) -> Result<Vec<JournalRecord>, BridgeError> {
         Ok(BdBridge::journal_backfill(self, since, max_records, deadline)?.records)
     }
+
+    fn interrupt_follow(&self) {
+        BdBridge::interrupt_follow(self);
+    }
 }
 
 impl<T: SyncSource + ?Sized> SyncSource for std::sync::Arc<T> {
@@ -52,6 +56,10 @@ impl<T: SyncSource + ?Sized> SyncSource for std::sync::Arc<T> {
         deadline: std::time::Duration,
     ) -> Result<Vec<JournalRecord>, BridgeError> {
         (**self).backfill(since, max_records, deadline)
+    }
+
+    fn interrupt_follow(&self) {
+        (**self).interrupt_follow();
     }
 }
 

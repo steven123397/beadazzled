@@ -43,6 +43,11 @@ pub trait SyncSource {
     fn export(&self) -> Result<Vec<Issue>, BridgeError>;
     fn journal(&self, since: i64, follow: bool) -> Result<Box<dyn FollowStream>, BridgeError>;
 
+    /// Ends a blocked follow read (terminates the bd process). The engine's
+    /// `should_stop` flag still decides when the loop returns; fakes that
+    /// never block keep the default.
+    fn interrupt_follow(&self) {}
+
     /// Reads the backfill within the record and time budgets. The default
     /// reads the one-shot journal in full (fakes rely on it); [`BdBridge`]
     /// overrides this with a bounded scan.
@@ -281,6 +286,14 @@ impl<S: SyncSource> SyncEngine<S> {
             }
             _ => FailureAction::Done(self.unavailable(sink, error)),
         }
+    }
+
+    /// Unblocks a follow read that is waiting on the journal.
+    ///
+    /// Callers must flip their `should_stop` flag first: the interrupted read
+    /// returns end-of-stream, and the loop exits on the next flag check.
+    pub fn interrupt_follow(&self) {
+        self.source.interrupt_follow();
     }
 
     fn consume<K: SyncSink>(

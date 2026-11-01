@@ -16,6 +16,7 @@ use std::ffi::OsString;
 use std::io::Read;
 use std::path::PathBuf;
 use std::process::ChildStdout;
+use std::sync::Mutex;
 use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
@@ -24,7 +25,7 @@ use ts_rs::TS;
 
 use self::parse::{journal_disabled, journal_truncated, parse_export, JournalStream};
 use self::process::{
-    FollowProcess, ProcessRequest, ProcessRunner, ScanBounds, ScanStop, READ_TIMEOUT,
+    FollowProcess, FollowStop, ProcessRequest, ProcessRunner, ScanBounds, ScanStop, READ_TIMEOUT,
     VERSION_TIMEOUT, WRITE_TIMEOUT,
 };
 
@@ -44,6 +45,8 @@ const JOURNAL_PREFIX_LIMIT: usize = 8 * 1024;
 pub struct BdBridge {
     runner: ProcessRunner,
     workspace: PathBuf,
+    /// The live follow process, so another thread can end a blocked read.
+    follow_stop: Mutex<Option<FollowStop>>,
 }
 
 impl BdBridge {
@@ -51,6 +54,20 @@ impl BdBridge {
         Self {
             runner: ProcessRunner::new(bd_path),
             workspace: workspace.into(),
+            follow_stop: Mutex::new(None),
+        }
+    }
+
+    /// Terminates the current follow process. A thread blocked in
+    /// [`JournalReader::next_batch`] sees end-of-stream and returns.
+    pub fn interrupt_follow(&self) {
+        let stop = self
+            .follow_stop
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .take();
+        if let Some(stop) = stop {
+            stop.stop();
         }
     }
 
@@ -100,6 +117,10 @@ impl BdBridge {
         if follow {
             let request = self.request("journal", args, READ_TIMEOUT);
             let mut process = self.runner.spawn_follow(&request)?;
+            *self
+                .follow_stop
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(process.stop_handle());
             let stdout = process.take_stdout().ok_or_else(|| {
                 BridgeError::new(
                     BridgeErrorCode::Internal,

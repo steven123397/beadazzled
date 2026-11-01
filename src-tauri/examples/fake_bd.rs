@@ -74,6 +74,8 @@ fn main() {
                         println!(
                             "{{\"code\":\"events_journal_truncated\",\"since\":1,\"floor\":5,\"head\":9}}"
                         );
+                    } else if root.join("journal-hang").exists() {
+                        stream_journal_hang(workspace);
                     } else if root.join("journal-split").exists() {
                         stream_journal_split();
                     } else if let Some(contents) = journal_file(workspace) {
@@ -303,6 +305,25 @@ fn write_journal_argv(workspace: &str, args: &[String]) {
     let path = std::path::Path::new(workspace).join("journal-argv.json");
     let record = serde_json::json!({ "args": args });
     fs::write(path, record.to_string()).expect("write argv capture");
+}
+
+/// Writes the first journal record, then holds stdout open and stays silent.
+/// A reader blocked here can only be released by terminating the process.
+fn stream_journal_hang(workspace: &str) {
+    if let Some(contents) = journal_file(workspace) {
+        if let Some(line) = contents
+            .split(|byte| *byte == b'\n')
+            .find(|line| !line.is_empty())
+        {
+            let mut stdout = io::stdout();
+            stdout
+                .write_all(line)
+                .expect("write the first journal line");
+            stdout.write_all(b"\n").expect("write the newline");
+            stdout.flush().expect("flush the first journal line");
+        }
+    }
+    sleep_ms(60_000);
 }
 
 /// Writes one record in two flushes, so the reader sees a half line first.

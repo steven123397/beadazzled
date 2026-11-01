@@ -297,7 +297,7 @@ impl ProcessRunner {
 
         Ok(FollowProcess {
             child,
-            job,
+            job: Arc::new(job),
             stdout,
             stderr: stderr_buffer,
             log: Arc::clone(&self.calls),
@@ -439,7 +439,7 @@ fn drain_follow_stderr(mut stderr: ChildStderr, buffer: Arc<Mutex<Vec<u8>>>) {
 /// A long-running follow process. Dropping it kills the whole process tree.
 pub struct FollowProcess {
     child: Child,
-    job: JobHandle,
+    job: Arc<JobHandle>,
     stdout: Option<ChildStdout>,
     stderr: Arc<Mutex<Vec<u8>>>,
     log: CallLog,
@@ -449,9 +449,24 @@ pub struct FollowProcess {
     finished: bool,
 }
 
+/// Ends a follow process from another thread, which unblocks its stdout read.
+#[derive(Debug, Clone)]
+pub struct FollowStop(Arc<JobHandle>);
+
+impl FollowStop {
+    pub fn stop(&self) {
+        self.0.terminate();
+    }
+}
+
 impl FollowProcess {
     pub fn take_stdout(&mut self) -> Option<ChildStdout> {
         self.stdout.take()
+    }
+
+    /// A handle another thread can use to end a blocked follow read.
+    pub fn stop_handle(&self) -> FollowStop {
+        FollowStop(Arc::clone(&self.job))
     }
 
     /// The first 2 KiB of follow stderr, drained internally so the child can
@@ -954,7 +969,13 @@ fn push_record(log: &CallLog, record: CallRecord) {
     calls.push_back(record);
 }
 
+#[derive(Debug)]
 struct JobHandle(HANDLE);
+
+// SAFETY: a Win32 job handle may be used from any thread; it is only closed
+// in `Drop`, and the `Arc` keeps it alive for every `FollowStop`.
+unsafe impl Send for JobHandle {}
+unsafe impl Sync for JobHandle {}
 
 impl JobHandle {
     fn assign(child: &Child) -> Result<Self, BridgeError> {
