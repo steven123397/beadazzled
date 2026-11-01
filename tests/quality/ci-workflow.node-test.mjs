@@ -68,3 +68,9 @@ test('CI installs the pinned Rust tools needed by the gates', () => {
   assert.match(workflow, /rustup component add rustfmt clippy llvm-tools-preview/);
   assert.match(workflow, /cargo install cargo-llvm-cov --version 0\.9\.1 --locked/);
 });
+
+test('CI uses the Node 24 action majors', () => {
+  assert.match(workflow, /uses:\s*actions\/checkout@v5/);
+  assert.match(workflow, /uses:\s*actions\/setup-node@v5/);
+  assert.doesNotMatch(workflow, /uses:\s*actions\/(?:checkout|setup-node)@v4/);
+});
