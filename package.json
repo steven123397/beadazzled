@@ -27,7 +27,7 @@
     "check:full": "npm run check:fast && npm run check:task && npm run test:rust && npm run check:deps && npm run build:app && npm run check:size && npm run e2e",
     "build": "tsc -b && vite build",
     "build:app": "tauri build",
-    "check:size": "node scripts/check-size.mjs",
+    "check:size": "node scripts/check-bundle-seam.mjs && node scripts/check-size.mjs",
     "e2e": "playwright test",
     "measure:startup": "node scripts/measure-startup.mjs",
     "measure:memory": "node scripts/measure-memory.mjs",
