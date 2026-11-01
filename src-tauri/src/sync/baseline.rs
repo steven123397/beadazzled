@@ -188,6 +188,9 @@ impl<S: SyncSource> SyncEngine<S> {
         rebuilt: bool,
     ) -> BaselineOutcome {
         self.last_seq = since;
+        // The old timestamp belongs to the previous run; a rebuild that
+        // replays nothing must not report it next to the new sequence.
+        self.last_event_at = None;
         self.set_state(
             sink,
             SyncState::Loading {
@@ -1072,6 +1075,32 @@ mod tests {
             }
             Err(failed())
         }
+    }
+
+    #[test]
+    fn a_rebuild_does_not_reuse_the_previous_event_time() {
+        let source = Arc::new(RebuildSource::new(vec![vec![record(1, "a")], vec![]]));
+        let mut engine = SyncEngine::new(Arc::clone(&source), SyncConfig::default());
+        let mut sink = RecordingSink::default();
+
+        assert_eq!(
+            engine.baseline(&mut sink, 0),
+            BaselineOutcome::Healthy { applied: 1 }
+        );
+        assert!(engine.last_event_at().is_some());
+
+        assert_eq!(
+            engine.baseline(&mut sink, 0),
+            BaselineOutcome::Healthy { applied: 0 }
+        );
+        assert_eq!(engine.last_event_at(), None);
+        assert_eq!(
+            sink.states.last(),
+            Some(&SyncState::Healthy {
+                last_seq: 0,
+                last_event_at: None,
+            })
+        );
     }
 
     /// A source whose export can be repeated and whose backfills are scripted.
