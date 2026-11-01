@@ -20,7 +20,7 @@ function flow(
   };
   const base: WriteFlow = {
     queue: {
-      submit: async (_key, build) => {
+      submit: async (_key, _workspace, build) => {
         const command = build();
         const issueId = 'Reopen' in command ? command.Reopen.id : 'created';
         if (outcome === 'conflict') {
@@ -35,6 +35,7 @@ function flow(
       },
       pendingCount: () => 0,
     },
+    workspace: () => 'C:/ws',
     currentSeq: () => 41,
     waitForEcho: async (issueId, afterSeq, timeoutMs) => {
       state.echoes.push([issueId, afterSeq, timeoutMs]);
@@ -160,7 +161,7 @@ test('back-to-back edits wait for the sequence at dispatch, not at enqueue', asy
   const firstGate = new Promise<void>((resolve) => {
     releaseFirst = resolve;
   });
-  const queue = createWriteQueue(async (command) => {
+  const queue = createWriteQueue(async (_workspace, command) => {
     if ('Reopen' in command && command.Reopen.id === 'first') {
       await firstGate;
     }
@@ -168,6 +169,7 @@ test('back-to-back edits wait for the sequence at dispatch, not at enqueue', asy
   });
   const deps: WriteFlow = {
     queue,
+    workspace: () => 'C:/ws',
     currentSeq: () => store.getState().lastSeq,
     waitForEcho: async (issueId, afterSeq) => {
       echoes.push([issueId, afterSeq]);
@@ -209,7 +211,8 @@ test('createWriteFlow wires afterSeq, echo and refresh from the store', async ()
   let refreshes = 0;
   const flow = createWriteFlow({
     store,
-    execute: async (command) => {
+    workspace: () => 'C:/ws',
+    execute: async (_workspace, command) => {
       sent.push(command);
       return { ok: true, createdId: null };
     },

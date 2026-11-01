@@ -98,7 +98,11 @@ fn main() {
                 "config" => println!("true"),
                 "create" => println!("bza-new"),
                 "update" => {
-                    if args.iter().any(|arg| arg == "stale") {
+                    if args.iter().any(|arg| arg == "stale")
+                        || std::path::Path::new(workspace)
+                            .join("reject-write")
+                            .exists()
+                    {
                         eprintln!("Error: precondition no longer held");
                         process::exit(13);
                     }

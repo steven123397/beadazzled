@@ -26,6 +26,7 @@ function fakeFlow(outcome: WriteResult): {
       },
       pendingCount: () => 0,
     },
+    workspace: () => 'C:/ws',
     currentSeq: () => 0,
     waitForEcho: async () => 'echoed',
     refresh: () => {
@@ -69,6 +70,7 @@ test('the issue stays pending until the write and its echo settle', async () => 
   });
   const flow: WriteFlow = {
     queue: { submit: () => gate, pendingCount: () => 0 },
+    workspace: () => 'C:/ws',
     currentSeq: () => 0,
     waitForEcho: async () => 'echoed',
     refresh: () => {},

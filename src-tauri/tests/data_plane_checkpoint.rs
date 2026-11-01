@@ -160,7 +160,7 @@ fn add_baseline_write_echo_and_restart() {
 
     // A write succeeds, then bd appends the echo record to its journal.
     let outcome = service
-        .write(&WriteCommand::Update(UpdateSpec::new("fx-96d")))
+        .write(&path, &WriteCommand::Update(UpdateSpec::new("fx-96d")))
         .expect("write succeeds");
     assert_eq!(outcome.exit_code, 0);
     append_journal(&workspace, &journal_line(4, "closed"));

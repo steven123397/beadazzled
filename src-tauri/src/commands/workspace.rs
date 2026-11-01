@@ -206,20 +206,26 @@ impl WorkspaceService {
         lock(&self.state).config.checkpoint_for(path, project_id)
     }
 
-    /// Runs one write against the active workspace.
-    pub fn write(&self, command: &WriteCommand) -> Result<WriteOutcome, BridgeError> {
+    /// Runs one write against the workspace the submission belongs to.
+    ///
+    /// The caller carries the workspace it was editing. Resolving the active
+    /// workspace here instead would let a queued write land in a workspace the
+    /// user switched to in the meantime.
+    pub fn write(
+        &self,
+        workspace: &str,
+        command: &WriteCommand,
+    ) -> Result<WriteOutcome, BridgeError> {
         let bd_path = self.ready_bd_path()?;
-        let workspace = {
-            let state = lock(&self.state);
-            state.config.last_workspace_path.clone().ok_or_else(|| {
-                BridgeError::new(
-                    BridgeErrorCode::WsNotBeads,
-                    "no workspace is open; add one before editing",
-                )
-            })?
-        };
-        if !Path::new(&workspace).is_dir() {
-            return Err(ws_inaccessible(&workspace));
+        let registered = lock(&self.state)
+            .config
+            .workspace_index(workspace)
+            .is_some();
+        if !registered {
+            return Err(not_registered(workspace));
+        }
+        if !Path::new(workspace).is_dir() {
+            return Err(ws_inaccessible(workspace));
         }
         BdBridge::new(bd_path, workspace).write(command)
     }
@@ -403,9 +409,10 @@ pub fn workspace_checkpoint(
 #[tauri::command(async)]
 pub fn execute_write(
     service: tauri::State<'_, WorkspaceService>,
+    workspace: String,
     command: WriteCommand,
 ) -> Result<WriteOutcome, BridgeError> {
-    service.write(&command)
+    service.write(&workspace, &command)
 }
 
 #[tauri::command(async)]

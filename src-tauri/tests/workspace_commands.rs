@@ -376,18 +376,34 @@ fn the_bd_path_is_persisted_for_the_next_run() {
 }
 
 #[test]
-fn writes_run_against_the_active_workspace() {
+fn writes_run_against_the_submitted_workspace() {
     let dir = common::temp_dir("cmd-write");
-    let workspace = common::workspace(&dir);
+    let first = common::workspace(&dir);
+    let second = workspace_named(&dir, "second");
+    // This workspace refuses writes; the active one does not.
+    fs::write(first.join("reject-write"), b"").expect("mark the first workspace");
     let service = service(&dir.join("config.json"));
     service
-        .add_workspace(&path_string(&workspace))
-        .expect("add");
+        .add_workspace(&path_string(&first))
+        .expect("add first");
+    service
+        .add_workspace(&path_string(&second))
+        .expect("add second");
+
+    let error = service
+        .write(
+            &path_string(&first),
+            &WriteCommand::Update(UpdateSpec::new("fx-1")),
+        )
+        .expect_err("the write ran in the submitted workspace, not the active one");
+    assert_eq!(error.code, BridgeErrorCode::WriteConflict);
 
     let outcome = service
-        .write(&WriteCommand::Update(UpdateSpec::new("fx-1")))
+        .write(
+            &path_string(&second),
+            &WriteCommand::Update(UpdateSpec::new("fx-1")),
+        )
         .expect("write succeeds");
-
     assert_eq!(outcome.exit_code, 0);
     assert!(outcome.created_id.is_none());
 }
@@ -402,22 +418,30 @@ fn exit_13_maps_to_a_write_conflict() {
         .expect("add");
 
     let error = service
-        .write(&WriteCommand::Update(UpdateSpec::new("stale")))
+        .write(
+            &path_string(&workspace),
+            &WriteCommand::Update(UpdateSpec::new("stale")),
+        )
         .expect_err("exit 13 is a conflict");
 
     assert_eq!(error.code, BridgeErrorCode::WriteConflict);
 }
 
 #[test]
-fn writing_without_an_active_workspace_is_refused() {
-    let dir = common::temp_dir("cmd-write-no-workspace");
+fn writing_to_an_unregistered_workspace_is_refused() {
+    let dir = common::temp_dir("cmd-write-unregistered");
+    let workspace = common::workspace(&dir);
     let service = service(&dir.join("config.json"));
 
     let error = service
-        .write(&WriteCommand::Update(UpdateSpec::new("fx-1")))
-        .expect_err("no workspace means no write");
+        .write(
+            &path_string(&workspace),
+            &WriteCommand::Update(UpdateSpec::new("fx-1")),
+        )
+        .expect_err("an unregistered workspace is not writable");
 
-    assert_eq!(error.code, BridgeErrorCode::WsNotBeads);
+    assert_eq!(error.code, BridgeErrorCode::Internal);
+    assert!(error.message.contains("not registered"));
 }
 
 #[test]
@@ -431,7 +455,10 @@ fn writing_to_a_vanished_workspace_is_refused() {
     fs::remove_dir_all(&workspace).expect("remove workspace");
 
     let error = service
-        .write(&WriteCommand::Update(UpdateSpec::new("fx-1")))
+        .write(
+            &path_string(&workspace),
+            &WriteCommand::Update(UpdateSpec::new("fx-1")),
+        )
         .expect_err("a missing workspace is refused");
 
     assert_eq!(error.code, BridgeErrorCode::WsInaccessible);

@@ -61,7 +61,7 @@ function harness(outcome: (command: unknown) => WriteOutcome): Harness {
   const echoWaits: Harness['echoWaits'] = [];
   let journalDisabled = false;
 
-  const queue = createWriteQueue(async (command) => {
+  const queue = createWriteQueue(async (_workspace, command) => {
     calls.push(command);
     return outcome(command);
   });
@@ -71,6 +71,7 @@ function harness(outcome: (command: unknown) => WriteOutcome): Harness {
 
   const flow: WriteFlow = {
     queue,
+    workspace: () => 'C:/ws',
     currentSeq: () => store.getState().lastSeq,
     waitForEcho: (issueId, afterSeq, timeoutMs) => {
       echoWaits.push([issueId, afterSeq, timeoutMs]);
