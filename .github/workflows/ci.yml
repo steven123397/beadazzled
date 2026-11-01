@@ -101,6 +101,12 @@ jobs:
       - name: Frontend build
         run: npm run build
 
+      # The e2e seam stays out of the bundle only while something checks the
+      # built assets. check:size runs this, but CI never builds an installer,
+      # so it would never run here.
+      - name: Bundle seam check
+        run: node scripts/check-bundle-seam.mjs
+
       # check:task starts with check:bindings. The export_bindings test rewrites
       # src/bindings/bd.ts on every cargo test, so the drift check has to run
       # before test:rust:coverage or it can never see a stale file.

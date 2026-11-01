@@ -22,10 +22,43 @@ function toCspHeader(policy: Record<string, string | string[]>): string {
     .join('; ');
 }
 
+/**
+ * Adds the network device Tauri is developing against to the origin lists.
+ *
+ * `TAURI_DEV_HOST` moves both the page and the HMR socket onto that host, so a
+ * localhost-only policy would block them; the production policy is untouched.
+ */
+function withDevHost(
+  policy: Record<string, string | string[]>,
+  host: string
+): Record<string, string | string[]> {
+  const page = `http://${host}:1420`;
+  const socket = `ws://${host}:1421`;
+  const add = (directive: string, extra: string[]): string[] => {
+    const current = policy[directive];
+    const sources = current === undefined ? [] : Array.isArray(current) ? current : [current];
+    return [...new Set([...sources, ...extra])];
+  };
+
+  return {
+    ...policy,
+    'default-src': add('default-src', [page]),
+    'script-src': add('script-src', [page]),
+    'style-src': add('style-src', [page]),
+    'img-src': add('img-src', [page]),
+    'font-src': add('font-src', [page]),
+    'connect-src': add('connect-src', [page, socket]),
+  };
+}
+
 // Tauri only injects CSP for its own asset protocol, so a devUrl document
 // would run without any policy. Serve devCsp ourselves to keep dev honest.
 function devCspPlugin(): Plugin {
-  const policy = toCspHeader(tauriConfig.app.security.devCsp);
+  const policy = toCspHeader(
+    host === undefined
+      ? tauriConfig.app.security.devCsp
+      : withDevHost(tauriConfig.app.security.devCsp, host)
+  );
 
   return {
     name: 'beadazzled:dev-csp',

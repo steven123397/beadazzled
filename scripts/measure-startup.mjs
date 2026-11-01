@@ -69,7 +69,11 @@ function parseArgs(argv) {
 
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
-    const [name, inline] = arg.split('=');
+    // Split on the first '=' only: a Windows path such as --exe=C:\a=b\app.exe
+    // would otherwise be truncated at the second one.
+    const separator = arg.indexOf('=');
+    const name = separator === -1 ? arg : arg.slice(0, separator);
+    const inline = separator === -1 ? undefined : arg.slice(separator + 1);
 
     if (flagOptions.has(name)) {
       if (name === '--no-build') {
@@ -218,7 +222,9 @@ async function describeFreshness(exe, exeStat) {
     gitHead: head,
     gitDirty: gitValue(['status', '--porcelain']) !== '',
     binaryModifiedAt: new Date(exeStat.mtimeMs).toISOString(),
-    binarySha256: createHash('sha256').update(await readFile(exe)).digest('hex'),
+    binarySha256: createHash('sha256')
+      .update(await readFile(exe))
+      .digest('hex'),
     stale: reasons.length > 0,
     reasons,
   };
@@ -548,7 +554,9 @@ function printReport(result) {
   }
   console.log('');
   console.log(`git: ${result.freshness.gitHead ?? 'unknown'}`);
-  console.log(`binary: ${result.freshness.binaryModifiedAt} sha256=${result.freshness.binarySha256}`);
+  console.log(
+    `binary: ${result.freshness.binaryModifiedAt} sha256=${result.freshness.binarySha256}`
+  );
   console.log(
     `config: ${result.appConfig.path} (${
       result.appConfig.exists ? `active ${result.appConfig.activeWorkspace ?? 'none'}` : 'missing'
