@@ -16,13 +16,17 @@ use std::ffi::OsString;
 use std::io::Read;
 use std::path::PathBuf;
 use std::process::ChildStdout;
+use std::sync::Mutex;
 use std::time::Duration;
 
+use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
+use ts_rs::TS;
 
 use self::parse::{journal_disabled, journal_truncated, parse_export, JournalStream};
 use self::process::{
-    FollowProcess, ProcessRequest, ProcessRunner, READ_TIMEOUT, VERSION_TIMEOUT, WRITE_TIMEOUT,
+    FollowProcess, FollowStop, ProcessRequest, ProcessRunner, ScanBounds, ScanStop, READ_TIMEOUT,
+    VERSION_TIMEOUT, WRITE_TIMEOUT,
 };
 
 pub use argv::{argv_for, Argv, AssigneeChange, CreateSpec, UpdateSpec, WriteCommand};
@@ -41,6 +45,8 @@ const JOURNAL_PREFIX_LIMIT: usize = 8 * 1024;
 pub struct BdBridge {
     runner: ProcessRunner,
     workspace: PathBuf,
+    /// The live follow process, so another thread can end a blocked read.
+    follow_stop: Mutex<Option<FollowStop>>,
 }
 
 impl BdBridge {
@@ -48,6 +54,20 @@ impl BdBridge {
         Self {
             runner: ProcessRunner::new(bd_path),
             workspace: workspace.into(),
+            follow_stop: Mutex::new(None),
+        }
+    }
+
+    /// Terminates the current follow process. A thread blocked in
+    /// [`JournalReader::next_batch`] sees end-of-stream and returns.
+    pub fn interrupt_follow(&self) {
+        let stop = self
+            .follow_stop
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .take();
+        if let Some(stop) = stop {
+            stop.stop();
         }
     }
 
@@ -93,10 +113,14 @@ impl BdBridge {
     /// `follow=true` starts a no-timeout reader; call [`JournalReader::next_batch`]
     /// from a worker thread because it blocks on the child's stdout.
     pub fn journal(&self, since: i64, follow: bool) -> Result<JournalReader, BridgeError> {
-        let args = journal_args(since);
+        let args = journal_args(since, follow);
         if follow {
             let request = self.request("journal", args, READ_TIMEOUT);
             let mut process = self.runner.spawn_follow(&request)?;
+            *self
+                .follow_stop
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(process.stop_handle());
             let stdout = process.take_stdout().ok_or_else(|| {
                 BridgeError::new(
                     BridgeErrorCode::Internal,
@@ -128,6 +152,52 @@ impl BdBridge {
             }
             Ok(JournalReader::once(records))
         }
+    }
+
+    /// Reads at most `max_records` journal records or `deadline`, whichever
+    /// comes first, and returns what was read. The remainder is picked up by a
+    /// follow stream from the last applied seq.
+    ///
+    /// Unlike [`BdBridge::journal`], hitting the record limit or the deadline is
+    /// not an error: a partial batch keeps the baseline inside its budget.
+    pub fn journal_backfill(
+        &self,
+        since: i64,
+        max_records: usize,
+        deadline: Duration,
+    ) -> Result<Backfill, BridgeError> {
+        let request = self.request("journal", journal_args(since, false), deadline);
+        let scanned = self.runner.run_scan(
+            &request,
+            ScanBounds {
+                max_lines: max_records.max(1),
+            },
+        )?;
+
+        let stderr = String::from_utf8_lossy(&scanned.stderr);
+        if let Some(error) = journal_truncated(&scanned.stdout, &stderr) {
+            return Err(error);
+        }
+        if let Some(error) =
+            journal_disabled(scanned.exit_code.unwrap_or(0), &scanned.stdout, &stderr)
+        {
+            return Err(error);
+        }
+        if let Some(code) = scanned.exit_code {
+            if code != 0 {
+                return Err(map_exit(code, &stderr));
+            }
+        }
+
+        let mut stream = JournalStream::new();
+        let mut records = stream.push(&scanned.stdout)?;
+        records.truncate(max_records);
+        // A scan can stop in the middle of a line; follow re-reads it.
+        let _ = stream.take_partial();
+        Ok(Backfill {
+            records,
+            stopped: scanned.stop != ScanStop::Eof,
+        })
     }
 
     /// Runs one write command and maps a nonzero exit through [`map_exit`].
@@ -194,6 +264,14 @@ impl BdBridge {
     }
 }
 
+/// A bounded journal backfill.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Backfill {
+    pub records: Vec<JournalRecord>,
+    /// True when the read stopped at the record limit or the deadline.
+    pub stopped: bool,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BdVersion {
     pub major: u32,
@@ -202,7 +280,7 @@ pub struct BdVersion {
     pub raw: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 pub struct WriteOutcome {
     pub exit_code: i32,
     pub created_id: Option<String>,
@@ -224,6 +302,8 @@ enum JournalReaderKind {
         stdout: ChildStdout,
         stream: JournalStream,
         prefix: Vec<u8>,
+        /// Newest raw bytes, so a marker split across reads is still seen.
+        tail: Vec<u8>,
         done: bool,
     },
 }
@@ -245,6 +325,7 @@ impl JournalReader {
                 stdout,
                 stream: JournalStream::new(),
                 prefix: Vec::new(),
+                tail: Vec::new(),
                 done: false,
             },
         }
@@ -267,6 +348,7 @@ impl JournalReader {
                 stdout,
                 stream,
                 prefix,
+                tail,
                 done,
             } => {
                 if *done {
@@ -274,34 +356,53 @@ impl JournalReader {
                 }
 
                 let mut buffer = [0u8; 64 * 1024];
-                let read = stdout.read(&mut buffer).map_err(|error| {
-                    BridgeError::new(
-                        BridgeErrorCode::Internal,
-                        format!("reading bd journal failed: {error}"),
-                    )
-                })?;
+                loop {
+                    let read = stdout.read(&mut buffer).map_err(|error| {
+                        BridgeError::new(
+                            BridgeErrorCode::Internal,
+                            format!("reading bd journal failed: {error}"),
+                        )
+                    })?;
 
-                if read == 0 {
-                    *done = true;
-                    let exit_code = process
-                        .try_wait()
-                        .ok()
-                        .flatten()
-                        .and_then(|status| status.code())
-                        .unwrap_or(-1);
+                    if read == 0 {
+                        *done = true;
+                        let exit_code = process
+                            .try_wait()
+                            .ok()
+                            .flatten()
+                            .and_then(|status| status.code())
+                            .unwrap_or(-1);
+                        let stderr = process.stderr_lossy();
+                        if let Some(error) = journal_disabled(exit_code, prefix.as_slice(), &stderr)
+                        {
+                            return Err(error);
+                        }
+                        if let Some(error) = journal_truncated(prefix.as_slice(), &stderr) {
+                            return Err(error);
+                        }
+                        stream.take_partial();
+                        return Ok(Vec::new());
+                    }
+
+                    let chunk = &buffer[..read];
+                    remember_prefix(prefix, chunk);
+                    remember_tail(tail, chunk);
+
+                    // The truncation marker is a JSON line that is not a
+                    // record; catch it before the parser rejects the batch.
                     let stderr = process.stderr_lossy();
-                    if let Some(error) = journal_disabled(exit_code, prefix.as_slice(), &stderr) {
+                    if let Some(error) = journal_truncated(tail.as_slice(), &stderr) {
                         return Err(error);
                     }
-                    if let Some(error) = journal_truncated(prefix.as_slice(), &stderr) {
-                        return Err(error);
-                    }
-                    stream.take_partial();
-                    return Ok(Vec::new());
-                }
 
-                remember_prefix(prefix, &buffer[..read]);
-                stream.push(&buffer[..read])
+                    let records = stream.push(chunk)?;
+                    if !records.is_empty() {
+                        return Ok(records);
+                    }
+                    // The chunk ended in the middle of a line. Keep reading
+                    // until it completes or the process exits: an empty batch
+                    // means end of stream to the sync engine.
+                }
             }
         }
     }
@@ -323,14 +424,20 @@ impl std::fmt::Debug for JournalReader {
     }
 }
 
-fn journal_args(since: i64) -> Vec<OsString> {
-    vec![
+fn journal_args(since: i64, follow: bool) -> Vec<OsString> {
+    let mut args = vec![
         OsString::from("events"),
         OsString::from("tail"),
         OsString::from("--since"),
         OsString::from(since.to_string()),
         OsString::from("--json"),
-    ]
+    ];
+    // Without --follow bd prints the backlog and exits; the reader then sees
+    // EOF and the sync engine keeps reconnecting to a stream that ended.
+    if follow {
+        args.push(OsString::from("--follow"));
+    }
+    args
 }
 
 fn parse_bd_version(stdout: &str) -> Result<BdVersion, BridgeError> {
@@ -399,9 +506,23 @@ fn remember_prefix(prefix: &mut Vec<u8>, chunk: &[u8]) {
     }
 }
 
+/// Keeps the newest bytes so a truncation marker split across reads is seen.
+fn remember_tail(tail: &mut Vec<u8>, chunk: &[u8]) {
+    tail.extend_from_slice(chunk);
+    let excess = tail.len().saturating_sub(JOURNAL_PREFIX_LIMIT);
+    if excess > 0 {
+        tail.drain(..excess);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::bridge::argv::{AssigneeChange, CreateSpec, UpdateSpec, WriteCommand};
+    use crate::commands::workspace::WorkspaceSnapshot;
+    use crate::sync::state::{LoadingStep, SyncState};
+    use crate::workspace::discovery::BdStatus;
+    use crate::workspace::registry::{AppConfig, Checkpoint, Language, Theme, WorkspaceEntry};
     use std::fs;
     use std::path::Path;
     use ts_rs::TS;
@@ -422,10 +543,24 @@ mod tests {
             WorkspaceContext::decl(),
             BridgeErrorCode::decl(),
             BridgeError::decl(),
+            AppConfig::decl(),
+            WorkspaceEntry::decl(),
+            Checkpoint::decl(),
+            Language::decl(),
+            Theme::decl(),
+            BdStatus::decl(),
+            SyncState::decl(),
+            LoadingStep::decl(),
+            WriteCommand::decl(),
+            CreateSpec::decl(),
+            UpdateSpec::decl(),
+            AssigneeChange::decl(),
+            WriteOutcome::decl(),
+            WorkspaceSnapshot::decl(),
         ];
 
         let mut output = String::from(
-            "// Generated by `npm run gen:bindings` from src-tauri/src/bridge. Do not edit.\n",
+            "// Generated by `npm run gen:bindings` from the Rust types. Do not edit.\n",
         );
         for declaration in declarations {
             assert!(
@@ -451,6 +586,15 @@ mod tests {
             "JournalRecord",
             "WorkspaceContext",
             "BridgeError",
+            "AppConfig",
+            "WorkspaceEntry",
+            "BdStatus",
+            "SyncState",
+            "LoadingStep",
+            "WriteCommand",
+            "AssigneeChange",
+            "WriteOutcome",
+            "WorkspaceSnapshot",
         ] {
             assert!(
                 written.contains(expected),

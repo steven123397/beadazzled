@@ -108,6 +108,10 @@ impl JournalStream {
     pub fn push(&mut self, chunk: &[u8]) -> Result<Vec<JournalRecord>, BridgeError> {
         self.buffer.extend_from_slice(chunk);
         let mut records = Vec::new();
+        // Walk the buffer once. Copying each line out keeps the borrows simple;
+        // draining per line would memmove the rest of the buffer every time,
+        // which is quadratic when a backfill pushes the whole scan at once.
+        let mut line_start = 0;
         let mut scan_from = self.scan_offset;
 
         while let Some(offset) = self.buffer[scan_from..]
@@ -115,8 +119,7 @@ impl JournalStream {
             .position(|byte| *byte == b'\n')
         {
             let newline = scan_from + offset;
-            let mut line: Vec<u8> = self.buffer.drain(..=newline).collect();
-            line.pop();
+            let line = self.buffer[line_start..newline].to_vec();
             if line.len() > self.line_limit {
                 return Err(journal_line_too_large(line.len(), self.line_limit));
             }
@@ -143,11 +146,16 @@ impl JournalStream {
                 records.push(record);
             }
 
-            scan_from = 0;
+            line_start = newline + 1;
+            scan_from = line_start;
         }
 
-        if self.buffer.len() > self.line_limit {
-            return Err(journal_line_too_large(self.buffer.len(), self.line_limit));
+        let remaining = &self.buffer[line_start..];
+        if remaining.len() > self.line_limit {
+            return Err(journal_line_too_large(remaining.len(), self.line_limit));
+        }
+        if line_start > 0 {
+            self.buffer.drain(..line_start);
         }
         self.scan_offset = self.buffer.len();
 

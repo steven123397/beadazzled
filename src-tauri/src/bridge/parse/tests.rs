@@ -27,6 +27,33 @@ fn detail_value<'a>(error: &'a BridgeError, key: &str) -> Option<&'a Value> {
 }
 
 #[test]
+fn a_large_backfill_is_parsed_in_linear_time() {
+    // journal_backfill pushes the whole scanned buffer in one call; a per-line
+    // drain would memmove the remaining buffer for every line.
+    let line = concat!(
+        r#"{"seq":1,"ts":"2026-11-01T00:00:00Z","op":"update","issue_id":"fx-1","#,
+        r#""issue":{"id":"fx-1","title":"t","description":"","status":"open","#,
+        r#""priority":2,"issue_type":"task","#,
+        r#""created_at":"2026-11-01T00:00:00Z","updated_at":"2026-11-01T00:00:00Z"}}"#,
+        "\n"
+    );
+    let input = line.repeat(50_000);
+    let mut stream = JournalStream::new();
+
+    let started = std::time::Instant::now();
+    let records = stream
+        .push(input.as_bytes())
+        .expect("the capped backfill parses");
+    let elapsed = started.elapsed();
+
+    assert_eq!(records.len(), 50_000);
+    assert!(
+        elapsed < std::time::Duration::from_secs(2),
+        "parsing 50k records took {elapsed:?}; the per-line drain is quadratic"
+    );
+}
+
+#[test]
 fn parse_export_reads_the_recorded_fixture() {
     let issues = parse_export(read_fixture("export-statuses.json").as_bytes())
         .expect("the recorded export parses");

@@ -75,5 +75,8 @@ sync:
     remote: "git+ssh://git@github.com/steven123397/beadazzled.git"
 agents:
     file: CLAUDE.md
-
 events-journal: true
+agent:
+    profile: team-maintainer
+
+no-git-ops: false

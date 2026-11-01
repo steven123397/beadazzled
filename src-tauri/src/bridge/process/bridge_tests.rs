@@ -18,7 +18,10 @@ use windows_sys::Win32::System::Threading::{
     GetExitCodeProcess, OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION,
 };
 
-use super::{OutputBudget, OutputLimits, ProcessRequest, ProcessRunner, PIPE_GRACE};
+use super::{
+    workspace_lock, LineCursor, OutputBudget, OutputLimits, ProcessRequest, ProcessRunner,
+    ScanBounds, ScanStop, PIPE_GRACE,
+};
 use crate::bridge::argv::{argv_for, CreateSpec, WriteCommand};
 use crate::bridge::error::{map_exit, BridgeError, BridgeErrorCode};
 use crate::bridge::parse::{parse_export, JournalStream};
@@ -456,6 +459,79 @@ fn short_calls_on_the_same_workspace_do_not_overlap() {
         intervals[0].1 <= intervals[1].0,
         "calls overlapped: {intervals:?}"
     );
+}
+
+#[test]
+fn separate_runners_for_one_workspace_still_serialize() {
+    // Every IPC call builds its own BdBridge and ProcessRunner; the lock must
+    // belong to the workspace (the external resource), not to the instance.
+    let dir = temp_dir("serial-across-runners");
+    let workspace = workspace(&dir);
+    let log_dir = dir.join("log");
+    fs::create_dir_all(&log_dir).expect("create log dir");
+
+    let make_request = || {
+        let mut request = request(&workspace, "log-interval");
+        request
+            .env
+            .push(env("FAKE_BD_LOG_DIR", log_dir.as_os_str().to_owned()));
+        request.env.push(env("FAKE_BD_SLEEP_MS", "250"));
+        request
+    };
+
+    let first_runner = Arc::new(runner());
+    let first = make_request();
+    let first = std::thread::spawn(move || first_runner.run(&first).expect("first call"));
+
+    let second_runner = Arc::new(runner());
+    let second = make_request();
+    let second = std::thread::spawn(move || second_runner.run(&second).expect("second call"));
+
+    first.join().expect("first thread");
+    second.join().expect("second thread");
+
+    let mut intervals = read_intervals(&log_dir);
+    intervals.sort_unstable();
+    assert_eq!(intervals.len(), 2);
+    assert!(
+        intervals[0].1 <= intervals[1].0,
+        "calls from separate runners overlapped: {intervals:?}"
+    );
+}
+
+#[test]
+fn the_line_cursor_stops_exactly_at_the_limit() {
+    let mut seen = 0;
+    let mut cursor = LineCursor {
+        max: Some(2),
+        seen: &mut seen,
+    };
+
+    assert!(!cursor.count(b"one\n"), "one line is below the limit");
+    assert!(cursor.count(b"two\n"), "the second line reaches the limit");
+    assert_eq!(seen, 2);
+}
+
+#[test]
+fn scans_wait_for_the_workspace_lock() {
+    let dir = temp_dir("scan-lock");
+    let workspace = workspace(&dir);
+    let runner = Arc::new(runner());
+    let request = request(&workspace, "ok");
+
+    let lock = workspace_lock(&workspace);
+    let guard = lock.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+    let scan = std::thread::spawn(move || runner.run_scan(&request, ScanBounds { max_lines: 10 }));
+
+    std::thread::sleep(Duration::from_millis(200));
+    assert!(
+        !scan.is_finished(),
+        "a bounded scan is a short call and must wait for the workspace lock"
+    );
+    drop(guard);
+
+    let output = scan.join().expect("scan thread").expect("scan completes");
+    assert_eq!(output.stop, ScanStop::Eof);
 }
 
 #[test]

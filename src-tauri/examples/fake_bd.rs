@@ -54,16 +54,43 @@ fn main() {
                     }
                     println!("bd version 1.3.2 (9b65b9e19)");
                 }
-                "context" => print_fixture("context.json"),
+                "context" => {
+                    if workspace.to_lowercase().contains("not-beads") {
+                        eprintln!("Error: not a beads workspace");
+                        process::exit(1);
+                    }
+                    print_fixture_with_workspace("context.json", workspace);
+                }
                 "export" => print_fixture("export-relations.json"),
                 "events" => {
-                    let workspace = workspace.to_lowercase();
-                    if workspace.contains("journal-disabled") {
+                    let lowercase = workspace.to_lowercase();
+                    let root = std::path::Path::new(workspace);
+                    if root.join("journal-argv").exists() {
+                        write_journal_argv(workspace, &args);
+                    }
+                    if lowercase.contains("journal-disabled") {
                         eprintln!("note: the events journal is disabled for this workspace");
-                    } else if workspace.contains("journal-truncated") {
+                    } else if lowercase.contains("journal-truncated") {
                         println!(
                             "{{\"code\":\"events_journal_truncated\",\"since\":1,\"floor\":5,\"head\":9}}"
                         );
+                    } else if root.join("journal-hang").exists() {
+                        stream_journal_hang(workspace);
+                    } else if root.join("journal-split").exists() {
+                        stream_journal_split();
+                    } else if let Some(contents) = journal_file(workspace) {
+                        if root.join("journal-pid").exists() {
+                            fs::write(root.join("journal.pid"), process::id().to_string())
+                                .expect("write the journal pid");
+                        }
+                        if root.join("journal-slow").exists() {
+                            stream_journal_slow(workspace, &contents);
+                        } else {
+                            io::stdout()
+                                .write_all(&contents)
+                                .expect("write journal file");
+                            io::stdout().flush().expect("flush journal file");
+                        }
                     } else {
                         print_fixture("events-writes.jsonl");
                     }
@@ -253,6 +280,105 @@ fn print_fixture(name: &str) {
         .join(name);
     let bytes = fs::read(&path).expect("read fixture");
     io::stdout().write_all(&bytes).expect("write fixture");
+    io::stdout().flush().expect("flush fixture");
+}
+
+/// Prints a fixture with every `<workspace>` placeholder replaced by the
+/// `-C` argument, so `context` reports the workspace the caller asked about.
+/// Streams a journal one line at a time; used by the backfill deadline test.
+/// The `journal-done` marker only appears when the stream runs to completion,
+/// so a killed reader leaves no marker behind.
+fn stream_journal_slow(workspace: &str, contents: &[u8]) {
+    for line in contents.split(|byte| *byte == b'\n') {
+        if line.is_empty() {
+            continue;
+        }
+        io::stdout().write_all(line).expect("write journal line");
+        io::stdout().write_all(b"\n").expect("write newline");
+        io::stdout().flush().expect("flush journal line");
+        std::thread::sleep(Duration::from_millis(25));
+    }
+    let _ = fs::write(
+        std::path::Path::new(workspace).join("journal-done"),
+        b"done",
+    );
+}
+
+/// Writes the received argv so a test can assert which flags bd was given.
+fn write_journal_argv(workspace: &str, args: &[String]) {
+    let path = std::path::Path::new(workspace).join("journal-argv.json");
+    let record = serde_json::json!({ "args": args });
+    fs::write(path, record.to_string()).expect("write argv capture");
+}
+
+/// Writes the first journal record, then holds stdout open and stays silent.
+/// A reader blocked here can only be released by terminating the process.
+fn stream_journal_hang(workspace: &str) {
+    if let Some(contents) = journal_file(workspace) {
+        if let Some(line) = contents
+            .split(|byte| *byte == b'\n')
+            .find(|line| !line.is_empty())
+        {
+            let mut stdout = io::stdout();
+            stdout
+                .write_all(line)
+                .expect("write the first journal line");
+            stdout.write_all(b"\n").expect("write the newline");
+            stdout.flush().expect("flush the first journal line");
+        }
+    }
+    sleep_ms(60_000);
+}
+
+/// Writes one record in two flushes, so the reader sees a half line first.
+fn stream_journal_split() {
+    let record = serde_json::json!({
+        "seq": 1,
+        "ts": "2026-11-01T00:00:00Z",
+        "op": "update",
+        "issue_id": "fx-split",
+        "issue": {
+            "id": "fx-split",
+            "title": "Split across reads",
+            "description": "x".repeat(10 * 1024),
+            "status": "open",
+            "priority": 2,
+            "issue_type": "task",
+            "created_at": "2026-11-01T00:00:00Z",
+            "updated_at": "2026-11-01T00:00:00Z"
+        }
+    })
+    .to_string();
+    let split = record.len() / 2;
+    let mut stdout = io::stdout();
+    stdout
+        .write_all(&record.as_bytes()[..split])
+        .expect("write the first half");
+    stdout.flush().expect("flush the first half");
+    std::thread::sleep(Duration::from_millis(150));
+    stdout
+        .write_all(&record.as_bytes()[split..])
+        .expect("write the second half");
+    stdout.write_all(b"\n").expect("write the newline");
+    stdout.flush().expect("flush the second half");
+}
+
+/// A workspace-local `journal.jsonl` stands in for bd's journal in the data
+/// plane integration test; appending a line simulates the record a write emits.
+fn journal_file(workspace: &str) -> Option<Vec<u8>> {
+    fs::read(std::path::Path::new(workspace).join("journal.jsonl")).ok()
+}
+
+fn print_fixture_with_workspace(name: &str, workspace: &str) {
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../tests/fixtures/bd")
+        .join(name);
+    let fixture = fs::read_to_string(&path).expect("read fixture");
+    let escaped = serde_json::to_string(workspace).expect("escape workspace");
+    let rendered = fixture.replace("<workspace>", escaped.trim_matches('"'));
+    io::stdout()
+        .write_all(rendered.as_bytes())
+        .expect("write fixture");
     io::stdout().flush().expect("flush fixture");
 }
 

@@ -13,7 +13,7 @@ use std::ffi::OsString;
 use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Child, ChildStderr, ChildStdout, Command, ExitStatus, Stdio};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
 use serde_json::Value;
@@ -130,11 +130,40 @@ pub struct CallRecord {
 
 type CallLog = Arc<Mutex<VecDeque<CallRecord>>>;
 
+/// Short calls on one workspace must not overlap. The lock belongs to the
+/// workspace (the external resource), not to a runner instance: every
+/// `BdBridge` created for the same path has to share it, otherwise a fresh
+/// bridge per IPC call would never serialize anything.
+type WorkspaceLocks = Mutex<HashMap<PathBuf, Arc<Mutex<()>>>>;
+
+fn workspace_lock(workspace: &Path) -> Arc<Mutex<()>> {
+    static LOCKS: OnceLock<WorkspaceLocks> = OnceLock::new();
+    LOCKS
+        .get_or_init(|| Mutex::new(HashMap::new()))
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .entry(normalize_workspace(workspace))
+        .or_insert_with(|| Arc::new(Mutex::new(())))
+        .clone()
+}
+
+fn normalize_workspace(workspace: &Path) -> PathBuf {
+    // Windows treats these as the same directory, but PathBuf equality does
+    // not: normalize before using the path as a mutex key.
+    let trimmed = workspace
+        .to_string_lossy()
+        .trim_end_matches(['\\', '/'])
+        .to_owned();
+    let canonical = std::fs::canonicalize(&trimmed).unwrap_or_else(|_| PathBuf::from(&trimmed));
+    let text = canonical.to_string_lossy();
+    let stripped = text.strip_prefix(r"\\?\").unwrap_or(&text);
+    PathBuf::from(stripped.to_lowercase())
+}
+
 /// Runs short bd calls serially per workspace and records diagnostics.
 #[derive(Debug)]
 pub struct ProcessRunner {
     bd_path: PathBuf,
-    workspace_locks: Mutex<HashMap<PathBuf, Arc<Mutex<()>>>>,
     calls: CallLog,
 }
 
@@ -142,7 +171,6 @@ impl ProcessRunner {
     pub fn new(bd_path: impl Into<PathBuf>) -> Self {
         Self {
             bd_path: bd_path.into(),
-            workspace_locks: Mutex::new(HashMap::new()),
             calls: Arc::new(Mutex::new(VecDeque::new())),
         }
     }
@@ -154,7 +182,7 @@ impl ProcessRunner {
     pub fn run(&self, request: &ProcessRequest) -> Result<ProcessOutput, BridgeError> {
         let (result, started) = match &request.workspace {
             Some(workspace) => {
-                let lock = self.workspace_lock(workspace);
+                let lock = workspace_lock(workspace);
                 let _guard = lock.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
                 let started = Instant::now();
                 (self.run_locked(request, started), started)
@@ -175,6 +203,71 @@ impl ProcessRunner {
                 Err(error)
             }
         }
+    }
+
+    /// Runs a bounded journal read: stops at `bounds.max_lines` or at the
+    /// request timeout, returning the bytes captured so far instead of failing.
+    pub fn run_scan(
+        &self,
+        request: &ProcessRequest,
+        bounds: ScanBounds,
+    ) -> Result<ScannedOutput, BridgeError> {
+        // A backfill is a short read: it joins the same workspace semaphore as
+        // `run`, so it cannot overlap a write on that workspace.
+        let (result, started) = match &request.workspace {
+            Some(workspace) => {
+                let lock = workspace_lock(workspace);
+                let _guard = lock.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+                let started = Instant::now();
+                (self.run_scan_locked(request, bounds, started), started)
+            }
+            None => {
+                let started = Instant::now();
+                (self.run_scan_locked(request, bounds, started), started)
+            }
+        };
+        match &result {
+            Ok(output) => self.record(request, started, output.exit_code, None),
+            Err(error) => self.record(request, started, None, Some(error.code)),
+        }
+        result
+    }
+
+    fn run_scan_locked(
+        &self,
+        request: &ProcessRequest,
+        bounds: ScanBounds,
+        started: Instant,
+    ) -> Result<ScannedOutput, BridgeError> {
+        let (mut child, job) = self.spawn_child(request)?;
+        let stdout = child
+            .stdout
+            .take()
+            .ok_or_else(|| internal_error("bd stdout pipe was not created"))?;
+        let stderr = child
+            .stderr
+            .take()
+            .ok_or_else(|| internal_error("bd stderr pipe was not created"))?;
+
+        let scanned = match capture(&mut child, stdout, stderr, request, started, Some(bounds)) {
+            Ok(CaptureResult::Scanned(output)) => output,
+            Ok(CaptureResult::Complete(output)) => ScannedOutput {
+                stdout: output.stdout.into_bytes(),
+                stderr: output.stderr.into_bytes(),
+                exit_code: Some(output.exit_code),
+                stop: ScanStop::Eof,
+            },
+            Err(error) => {
+                job.terminate();
+                let _ = child.wait();
+                return Err(error);
+            }
+        };
+
+        // A bounded scan can stop while the child is still writing.
+        job.terminate();
+        let _ = child.wait();
+        Ok(scanned)
     }
 
     /// Starts a long-running journal follow process. It deliberately does not
@@ -204,7 +297,7 @@ impl ProcessRunner {
 
         Ok(FollowProcess {
             child,
-            job,
+            job: Arc::new(job),
             stdout,
             stderr: stderr_buffer,
             log: Arc::clone(&self.calls),
@@ -241,8 +334,11 @@ impl ProcessRunner {
             .take()
             .ok_or_else(|| internal_error("bd stderr pipe was not created"))?;
 
-        match capture(&mut child, stdout, stderr, request, started) {
-            Ok(output) => Ok(output),
+        match capture(&mut child, stdout, stderr, request, started, None) {
+            Ok(CaptureResult::Complete(output)) => Ok(output),
+            Ok(CaptureResult::Scanned(_)) => Err(internal_error(
+                "bd returned a scanned output for a normal call",
+            )),
             Err(error) => {
                 job.terminate();
                 let _ = child.wait();
@@ -301,28 +397,6 @@ impl ProcessRunner {
         Ok((child, job))
     }
 
-    fn workspace_lock(&self, workspace: &Path) -> Arc<Mutex<()>> {
-        self.workspace_locks
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner())
-            .entry(Self::normalize_workspace(workspace))
-            .or_insert_with(|| Arc::new(Mutex::new(())))
-            .clone()
-    }
-
-    fn normalize_workspace(workspace: &Path) -> PathBuf {
-        // Windows treats these as the same directory, but PathBuf equality does
-        // not: normalize before using the path as a mutex key.
-        let trimmed = workspace
-            .to_string_lossy()
-            .trim_end_matches(['\\', '/'])
-            .to_owned();
-        let canonical = std::fs::canonicalize(&trimmed).unwrap_or_else(|_| PathBuf::from(&trimmed));
-        let text = canonical.to_string_lossy();
-        let stripped = text.strip_prefix(r"\\?\").unwrap_or(&text);
-        PathBuf::from(stripped.to_lowercase())
-    }
-
     fn record(
         &self,
         request: &ProcessRequest,
@@ -365,7 +439,7 @@ fn drain_follow_stderr(mut stderr: ChildStderr, buffer: Arc<Mutex<Vec<u8>>>) {
 /// A long-running follow process. Dropping it kills the whole process tree.
 pub struct FollowProcess {
     child: Child,
-    job: JobHandle,
+    job: Arc<JobHandle>,
     stdout: Option<ChildStdout>,
     stderr: Arc<Mutex<Vec<u8>>>,
     log: CallLog,
@@ -375,9 +449,24 @@ pub struct FollowProcess {
     finished: bool,
 }
 
+/// Ends a follow process from another thread, which unblocks its stdout read.
+#[derive(Debug, Clone)]
+pub struct FollowStop(Arc<JobHandle>);
+
+impl FollowStop {
+    pub fn stop(&self) {
+        self.0.terminate();
+    }
+}
+
 impl FollowProcess {
     pub fn take_stdout(&mut self) -> Option<ChildStdout> {
         self.stdout.take()
+    }
+
+    /// A handle another thread can use to end a blocked follow read.
+    pub fn stop_handle(&self) -> FollowStop {
+        FollowStop(Arc::clone(&self.job))
     }
 
     /// The first 2 KiB of follow stderr, drained internally so the child can
@@ -437,13 +526,44 @@ impl Drop for FollowProcess {
     }
 }
 
+enum CaptureResult {
+    Complete(ProcessOutput),
+    Scanned(ScannedOutput),
+}
+
+/// Bounds for [`ProcessRunner::run_scan`]: stop after this many stdout lines.
+#[derive(Debug, Clone, Copy)]
+pub struct ScanBounds {
+    pub max_lines: usize,
+}
+
+/// Why a bounded scan stopped.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ScanStop {
+    Eof,
+    Deadline,
+    LineLimit,
+    OutputLimit,
+    Incomplete,
+}
+
+/// The bytes captured by a bounded scan, valid even when it stopped early.
+#[derive(Debug)]
+pub struct ScannedOutput {
+    pub stdout: Vec<u8>,
+    pub stderr: Vec<u8>,
+    pub exit_code: Option<i32>,
+    pub stop: ScanStop,
+}
+
 fn capture(
     child: &mut Child,
     mut stdout: ChildStdout,
     mut stderr: ChildStderr,
     request: &ProcessRequest,
     started: Instant,
-) -> Result<ProcessOutput, BridgeError> {
+    scan: Option<ScanBounds>,
+) -> Result<CaptureResult, BridgeError> {
     let limits = request.limits;
     let deadline = started + request.timeout;
     let mut out = Vec::new();
@@ -457,6 +577,12 @@ fn capture(
     let mut stderr_eof = false;
     let mut status: Option<ExitStatus> = None;
     let mut grace_deadline: Option<Instant> = None;
+    let mut line_count = 0usize;
+    let mut lines = LineCursor {
+        max: scan.map(|bounds| bounds.max_lines),
+        seen: &mut line_count,
+    };
+    let mut stop: Option<ScanStop> = None;
 
     loop {
         let mut progressed = false;
@@ -469,11 +595,17 @@ fn capture(
                 &mut out,
                 &mut budget,
                 limits,
+                &mut lines,
             )? {
-                PipeState::Idle => {}
-                PipeState::Progress => progressed = true,
-                PipeState::Eof => stdout_eof = true,
+                PumpOutcome::State(PipeState::Idle) => {}
+                PumpOutcome::State(PipeState::Progress) => progressed = true,
+                PumpOutcome::State(PipeState::Eof) => stdout_eof = true,
+                PumpOutcome::Stop(reason) => stop = Some(reason),
             }
+        }
+
+        if stop.is_some() {
+            break;
         }
 
         if !stderr_eof {
@@ -503,19 +635,31 @@ fn capture(
         match status {
             Some(exit) => {
                 if stdout_eof && stderr_eof {
-                    return build_output(exit, out, err, started);
+                    return Ok(CaptureResult::Complete(build_output(
+                        exit, out, err, started,
+                    )?));
                 }
                 if grace_deadline.is_some_and(|grace| Instant::now() >= grace) {
                     if !stdout_eof {
+                        if scan.is_some() {
+                            stop = Some(ScanStop::Incomplete);
+                            break;
+                        }
                         // Force-closing a still-open stdout can drop the tail
                         // of a JSONL export; never return partial data as Ok.
                         return Err(partial_stdout_error(out.len(), err.len()));
                     }
-                    return build_output(exit, out, err, started);
+                    return Ok(CaptureResult::Complete(build_output(
+                        exit, out, err, started,
+                    )?));
                 }
             }
             None => {
                 if Instant::now() >= deadline {
+                    if scan.is_some() {
+                        stop = Some(ScanStop::Deadline);
+                        break;
+                    }
                     return Err(timeout_error(request));
                 }
             }
@@ -525,6 +669,16 @@ fn capture(
             std::thread::sleep(POLL_INTERVAL);
         }
     }
+
+    let Some(stop) = stop else {
+        return Err(internal_error("capture stopped without a reason"));
+    };
+    Ok(CaptureResult::Scanned(ScannedOutput {
+        stdout: out,
+        stderr: err,
+        exit_code: status.and_then(|status| status.code()),
+        stop,
+    }))
 }
 
 enum PipeState {
@@ -533,10 +687,27 @@ enum PipeState {
     Eof,
 }
 
+enum PumpOutcome {
+    State(PipeState),
+    Stop(ScanStop),
+}
+
 enum Available {
     Empty,
     Bytes(usize),
     Eof,
+}
+
+struct LineCursor<'a> {
+    max: Option<usize>,
+    seen: &'a mut usize,
+}
+
+impl LineCursor<'_> {
+    fn count(&mut self, bytes: &[u8]) -> bool {
+        *self.seen += bytes.iter().filter(|byte| **byte == 0x0A).count();
+        self.max.is_some_and(|max| *self.seen >= max)
+    }
 }
 
 fn pump_stdout(
@@ -546,20 +717,27 @@ fn pump_stdout(
     out: &mut Vec<u8>,
     budget: &mut OutputBudget,
     limits: OutputLimits,
-) -> Result<PipeState, BridgeError> {
+    lines: &mut LineCursor<'_>,
+) -> Result<PumpOutcome, BridgeError> {
     match available_bytes(handle) {
-        Available::Empty => Ok(PipeState::Idle),
-        Available::Eof => Ok(PipeState::Eof),
+        Available::Empty => Ok(PumpOutcome::State(PipeState::Idle)),
+        Available::Eof => Ok(PumpOutcome::State(PipeState::Eof)),
         Available::Bytes(available) => {
             let want = available.min(buffer.len());
             match pipe.read(&mut buffer[..want]) {
-                Ok(0) => Ok(PipeState::Eof),
+                Ok(0) => Ok(PumpOutcome::State(PipeState::Eof)),
                 Ok(read) => {
                     if !budget.push(&buffer[..read], limits) {
+                        if lines.max.is_some() {
+                            return Ok(PumpOutcome::Stop(ScanStop::OutputLimit));
+                        }
                         return Err(output_too_large(limits, budget.total()));
                     }
                     out.extend_from_slice(&buffer[..read]);
-                    Ok(PipeState::Progress)
+                    if lines.count(&buffer[..read]) {
+                        return Ok(PumpOutcome::Stop(ScanStop::LineLimit));
+                    }
+                    Ok(PumpOutcome::State(PipeState::Progress))
                 }
                 Err(error) => Err(internal_error(format!("reading bd stdout failed: {error}"))),
             }
@@ -791,7 +969,13 @@ fn push_record(log: &CallLog, record: CallRecord) {
     calls.push_back(record);
 }
 
+#[derive(Debug)]
 struct JobHandle(HANDLE);
+
+// SAFETY: a Win32 job handle may be used from any thread; it is only closed
+// in `Drop`, and the `Arc` keeps it alive for every `FollowStop`.
+unsafe impl Send for JobHandle {}
+unsafe impl Sync for JobHandle {}
 
 impl JobHandle {
     fn assign(child: &Child) -> Result<Self, BridgeError> {
