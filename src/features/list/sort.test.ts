@@ -3,7 +3,7 @@ import { expect, test } from 'vitest';
 import type { Issue } from '@/bindings/bd';
 
 import { sortIssues } from './sort';
-import type { ListSort } from './view-state';
+import type { ListSort } from '@/lib/view/state';
 
 const TS = '2026-11-01T00:00:00Z';
 

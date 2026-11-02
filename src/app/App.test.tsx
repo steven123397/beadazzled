@@ -104,6 +104,7 @@ function fakeSyncApi() {
 beforeEach(() => {
   window.location.hash = '';
   localStorage.clear();
+  sessionStorage.clear();
   document.documentElement.classList.remove('dark');
 });
 
@@ -126,7 +127,9 @@ test('redirects the root to the active workspace list', async () => {
     />
   );
 
-  expect(await screen.findByRole('heading', { name: 'List' })).toBeInTheDocument();
+  expect(
+    await screen.findByRole('heading', { name: 'List' }, { timeout: 3000 })
+  ).toBeInTheDocument();
   expect(window.location.hash).toBe('#/w/p1/list');
 });
 
@@ -953,6 +956,108 @@ test('a status conflict is visible and triggers a baseline refresh', async () =>
   await waitFor(() => expect(execute).toHaveBeenCalledTimes(1));
   expect(await screen.findByRole('alert')).toHaveTextContent(
     'This issue changed elsewhere; refreshing the view.'
+  );
+  await waitFor(() => expect(vi.mocked(sync.api.refresh)).toHaveBeenCalled());
+});
+
+test('a board move writes through App and waits for the journal echo', async () => {
+  window.location.hash = '#/w/p1/board';
+  const sync = fakeSyncApi();
+  const execute = vi.fn(async () => ({ ok: true as const, createdId: null }));
+
+  render(
+    <App
+      workspaceApi={fakeApi({
+        snapshot: async () => snapshot([entry('p1', 'alpha')], '/repo/p1'),
+      })}
+      syncEnabled
+      syncApi={sync.api}
+      writesApi={{ execute }}
+    />
+  );
+
+  await waitFor(() => expect(sync.start).toHaveBeenCalledWith('/repo/p1'));
+
+  act(() => {
+    sync.emit('state', healthy);
+    sync.emit('snapshot', {
+      issues: [issue('bza-1', 'Board ticket')],
+      since: 42,
+    } satisfies SyncSnapshot);
+  });
+
+  await screen.findByRole('heading', { name: 'Board' }, { timeout: 3000 });
+  const columnText = (id: string) =>
+    document.querySelector(`[data-column-id="${id}"] header`)?.textContent ?? '';
+  // jsdom measures zero-height scroll containers, so assert on the derived
+  // column counts rather than virtualized card nodes.
+  await waitFor(() => expect(columnText('ready')).toContain('1'));
+
+  fireEvent.keyDown(window, { key: 'ArrowRight', shiftKey: true });
+
+  await waitFor(() => expect(execute).toHaveBeenCalledTimes(1));
+  expect(execute).toHaveBeenCalledWith('/repo/p1', {
+    Update: expect.objectContaining({ id: 'bza-1', status: 'in_progress', if_status: 'open' }),
+  });
+  // Not optimistic: the ticket is still in Ready while the echo is pending.
+  expect(columnText('ready')).toContain('1');
+  expect(columnText('in-progress')).toContain('0');
+
+  act(() => {
+    sync.emit('records', [
+      {
+        seq: 43,
+        ts: '2026-11-01T00:00:00Z',
+        op: 'update',
+        issue_id: 'bza-1',
+        issue: { ...issue('bza-1', 'Board ticket'), status: 'in_progress' },
+      },
+    ]);
+  });
+
+  await waitFor(() => expect(columnText('in-progress')).toContain('1'));
+  expect(columnText('ready')).toContain('0');
+});
+
+test('a board move conflict is visible and triggers a baseline refresh', async () => {
+  window.location.hash = '#/w/p1/board';
+  const sync = fakeSyncApi();
+  const execute = vi.fn(async () => ({
+    ok: false as const,
+    error: { code: 'WRITE_CONFLICT' as const, message: 'stale' },
+  }));
+
+  render(
+    <App
+      workspaceApi={fakeApi({
+        snapshot: async () => snapshot([entry('p1', 'alpha')], '/repo/p1'),
+      })}
+      syncEnabled
+      syncApi={sync.api}
+      writesApi={{ execute }}
+    />
+  );
+
+  await waitFor(() => expect(sync.start).toHaveBeenCalledWith('/repo/p1'));
+  act(() => {
+    sync.emit('state', healthy);
+    sync.emit('snapshot', {
+      issues: [issue('bza-1', 'Board conflict')],
+      since: 42,
+    } satisfies SyncSnapshot);
+  });
+
+  await screen.findByRole('heading', { name: 'Board' }, { timeout: 3000 });
+  fireEvent.keyDown(window, { key: 'ArrowRight', shiftKey: true });
+
+  await waitFor(() => expect(execute).toHaveBeenCalledTimes(1));
+  expect(await screen.findByRole('alert')).toHaveTextContent(
+    'This issue changed elsewhere; refreshing the view.'
+  );
+  // One attempt, no retry, and the ticket has not moved.
+  expect(execute).toHaveBeenCalledTimes(1);
+  expect(document.querySelector('[data-column-id="ready"] header')?.textContent ?? '').toContain(
+    '1'
   );
   await waitFor(() => expect(vi.mocked(sync.api.refresh)).toHaveBeenCalled());
 });

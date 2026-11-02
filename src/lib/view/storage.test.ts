@@ -1,7 +1,7 @@
 import { expect, test } from 'vitest';
 
-import { LIST_VIEW_PREFIX, loadSavedView, saveSavedView } from './view-storage';
-import { createListViewState } from './view-state';
+import { LIST_VIEW_PREFIX, loadSavedView, saveSavedView } from './storage';
+import { createListViewState } from './state';
 
 function memoryStorage(): Storage {
   const values = new Map<string, string>();

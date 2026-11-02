@@ -4,14 +4,9 @@ import { useVirtualizer } from '@tanstack/react-virtual';
 
 import type { Issue, SyncState } from '@/bindings/bd';
 import { isEditableTarget, isOverlayOpen } from '@/app/keyboard/resolve';
+import { FilterBar } from '@/components/filter-bar';
 import { useI18n } from '@/lib/i18n/I18nProvider';
-
-import { FilterBar } from './FilterBar';
-import { buildSearchIndex, hasActiveFilters, selectVisibleIssues } from './filter';
-import { GROUP_HEIGHT, GroupHeader } from './GroupHeader';
-import { groupIssues } from './group';
-import { loadListPosition, saveListPosition } from './position';
-import { Row, rowId } from './Row';
+import { buildSearchIndex, hasActiveFilters } from '@/lib/view/filter';
 import {
   createListViewState,
   hasViewParams,
@@ -19,8 +14,14 @@ import {
   serializeListViewState,
   type GroupBy,
   type ListViewState,
-} from './view-state';
-import { loadSavedView, saveSavedView } from './view-storage';
+} from '@/lib/view/state';
+import { loadSavedView, saveSavedView } from '@/lib/view/storage';
+
+import { selectVisibleIssues } from './filter';
+import { GROUP_HEIGHT, GroupHeader } from './GroupHeader';
+import { groupIssues } from './group';
+import { loadListPosition, saveListPosition } from './position';
+import { Row, rowId } from './Row';
 
 /** Must match `--row-height` in tokens.css. */
 const ROW_HEIGHT = 36;

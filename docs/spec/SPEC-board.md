@@ -76,12 +76,14 @@ export function columnOf(issue: Issue, blockers: string[]): ColumnId {
    - In Progress → `bd update <id> -s in_progress --if-status <源状态>`
    - Done → `bd close <id>`（bd 会检查未完成子票；拒绝时原样显示）
    - 源是 Done、目标是其它列：先 `bd reopen <id>`；目标不是 `open` 时再发 `-s <目标>`（两条按序执行）
+   - **已知不对称**：`bd close` 没有 `--if-status` 之类的并发守卫（CLI 未提供），Done 目标的关闭是按看板快照无条件执行的；update 路径有守卫。不加前端预检——预检本身会竞态，失败时按第 6 条显示 bd 原因。
 4. **投放前的二维校验**：
    - `canChangeStatus`（见 `SPEC-writes`）：有未完成阻塞依赖时，禁止目标 `in_progress` / `closed`；
    - **Ready 目标额外要求 `blockingDeps` 为空**——否则写入后卡片仍会落在 Blocked，视觉上「拖了没动」，必须在落下前拒绝并提示。
    - 被拒绝：卡片不动、无 bd 调用、提示列出阻塞票。
 5. **不做乐观移动**：卡片停留在原列并显示 pending 标记，直到 journal 回声到达后才移动。
 6. 失败：卡片不动，显示错误；冲突（exit 13）提示「已在别处修改」并刷新。
+   回声超时或 journal 禁用同样视为未确认：停止后续命令、提示并刷新，不播报成功。
 7. pending 期间该卡片不可再次拖动。
 
 依赖被清除（journal 更新）后，卡片按派生规则自动从 Blocked 移到 Ready，无需用户操作。
@@ -137,7 +139,10 @@ src/features/board/
   columns.ts          columnOf 与列定义（纯函数）
   move.ts             目标列 → WriteCommand 的纯函数映射
   keyboard.ts         键盘移动（跳过不可投放列）
+  position.ts         每工作区记住列滚动偏移与焦点卡（详情返回恢复）
 ```
+
+筛选状态与控件来自 `src/lib/view` 与 `src/components/filter-bar.tsx`，与 list 共用。
 
 ## Module Code Style
 

@@ -1,10 +1,11 @@
 import { expect, test } from 'vitest';
 
 import type { Dependency, Issue } from '@/bindings/bd';
+import { buildSearchIndex, hasActiveFilters, matchesFilter } from '@/lib/view/filter';
+import { createListViewState, type ListFilter } from '@/lib/view/state';
 
-import { buildSearchIndex, hasActiveFilters, matchesFilter, selectVisibleIssues } from './filter';
+import { selectVisibleIssues } from './filter';
 import { groupIssues } from './group';
-import { createListViewState, type ListFilter } from './view-state';
 
 const TS = '2026-11-01T00:00:00Z';
 

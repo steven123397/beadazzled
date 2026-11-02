@@ -1,7 +1,7 @@
 import { useI18n } from '@/lib/i18n/I18nProvider';
 
 import { statusText } from '@/lib/status';
-import type { GroupBy } from './view-state';
+import type { GroupBy } from '@/lib/view/state';
 
 export const GROUP_HEIGHT = 32;
 

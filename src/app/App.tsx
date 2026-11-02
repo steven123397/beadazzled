@@ -59,6 +59,14 @@ const DetailRoute = lazy(() =>
 );
 
 /**
+ * The board is a second-screen view; loading it as a route chunk keeps it and
+ * (from phase 6's drag task on) dnd-kit out of the first-screen budget.
+ */
+const BoardRoute = lazy(() =>
+  import('@/features/board/BoardView').then((module) => ({ default: module.BoardRoute }))
+);
+
+/**
  * The sync worker never starts while bd is not ready, so it cannot produce a
  * `bd-unavailable` state on its own. Map a resolved non-ready bd status here;
  * otherwise the list would show its loading skeleton forever.
@@ -212,7 +220,25 @@ function AppFrame({
                       />
                     }
                   />
-                  <Route path="board" element={<Placeholder titleKey="nav.board" />} />
+                  <Route
+                    path="board"
+                    element={
+                      <Suspense
+                        fallback={
+                          <p role="status" className="px-6 py-10 text-sm text-muted-foreground">
+                            {t('board.loading')}
+                          </p>
+                        }
+                      >
+                        <BoardRoute
+                          issues={shellIssues}
+                          syncState={shellSyncState}
+                          onRefresh={refresh}
+                          writes={syncEnabled ? writeState : undefined}
+                        />
+                      </Suspense>
+                    }
+                  />
                   <Route
                     path="issue/:issueId"
                     element={

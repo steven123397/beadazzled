@@ -21,6 +21,7 @@ test('placeholders are declared and always substituted', () => {
   const known = new Set([
     '{id}',
     '{attempt}',
+    '{column}',
     '{found}',
     '{min}',
     '{count}',

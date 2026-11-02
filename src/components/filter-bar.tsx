@@ -8,8 +8,8 @@ import { Select } from '@/components/ui/select';
 import type { MessageKey } from '@/lib/i18n';
 import { useI18n } from '@/lib/i18n/I18nProvider';
 
-import { collator } from './collator';
-import { hasActiveFilters } from './filter';
+import { collator } from '@/lib/view/collator';
+import { hasActiveFilters } from '@/lib/view/filter';
 import { STATUS_ORDER, statusText } from '@/lib/status';
 import {
   DEFAULT_SORT_DIRECTION,
@@ -19,7 +19,7 @@ import {
   type ListFilter,
   type ListViewState,
   type SortField,
-} from './view-state';
+} from '@/lib/view/state';
 
 const GROUP_LABELS: Record<GroupBy, MessageKey> = {
   none: 'list.group.none',
@@ -44,6 +44,13 @@ export type FilterBarProps = {
   totalCount: number;
   onChange: (view: ListViewState) => void;
   onClear: () => void;
+  /**
+   * Board mode hides the status, grouping and sorting controls: its columns
+   * express status and its order is fixed by SPEC-board.
+   */
+  mode?: 'list' | 'board';
+  /** Overrides the default `hasActiveFilters`; the board ignores status. */
+  activeFilters?: boolean;
 };
 
 type Option = {
@@ -62,8 +69,12 @@ export const FilterBar = memo(function FilterBar({
   totalCount,
   onChange,
   onClear,
+  mode = 'list',
+  activeFilters,
 }: FilterBarProps) {
   const { t } = useI18n();
+  const listMode = mode === 'list';
+  const filtersActive = activeFilters ?? hasActiveFilters(view.filter);
   const searchRef = useRef<HTMLInputElement>(null);
   // The input is driven by this draft, not by the URL: every keystroke would
   // otherwise round-trip through router state, and a character typed during
@@ -105,13 +116,17 @@ export const FilterBar = memo(function FilterBar({
   }, []);
 
   const statusOptions = useMemo(() => {
+    if (!listMode) {
+      // The board hides the status control; do not build options it never shows.
+      return [];
+    }
     const present = new Set(issues.map((issue) => issue.status));
     const extra = [...present].filter((status) => !STATUS_ORDER.includes(status)).sort();
     return withSelected([...STATUS_ORDER, ...extra], view.filter.status).map((value) => ({
       value,
       label: statusText(value, t),
     }));
-  }, [issues, view.filter.status, t]);
+  }, [issues, listMode, view.filter.status, t]);
 
   const priorityOptions = useMemo(
     () =>
@@ -166,12 +181,14 @@ export const FilterBar = memo(function FilterBar({
         onChange={(event) => changeQuery(event.target.value)}
         className="w-64"
       />
-      <MultiSelect
-        label={t('list.filter.status')}
-        options={statusOptions}
-        selected={view.filter.status}
-        onChange={(status) => updateFilter({ status })}
-      />
+      {listMode ? (
+        <MultiSelect
+          label={t('list.filter.status')}
+          options={statusOptions}
+          selected={view.filter.status}
+          onChange={(status) => updateFilter({ status })}
+        />
+      ) : null}
       <MultiSelect
         label={t('list.filter.priority')}
         options={priorityOptions}
@@ -204,49 +221,53 @@ export const FilterBar = memo(function FilterBar({
         />
         {t('list.filter.ready')}
       </label>
-      <Select
-        aria-label={t('list.filter.groupBy')}
-        value={view.group}
-        onChange={(event) => onChange({ ...view, group: event.target.value as GroupBy })}
-      >
-        {GROUP_VALUES.map((value) => (
-          <option key={value} value={value}>
-            {t(GROUP_LABELS[value])}
-          </option>
-        ))}
-      </Select>
-      <Select
-        aria-label={t('list.filter.sortBy')}
-        value={view.sort.by}
-        onChange={(event) => {
-          const by = event.target.value as SortField;
-          onChange({ ...view, sort: { by, direction: DEFAULT_SORT_DIRECTION[by] } });
-        }}
-      >
-        {SORT_FIELDS.map((value) => (
-          <option key={value} value={value}>
-            {t(SORT_LABELS[value])}
-          </option>
-        ))}
-      </Select>
-      <Button
-        variant="secondary"
-        size="sm"
-        aria-label={t('list.sort.reverse')}
-        onClick={() =>
-          onChange({
-            ...view,
-            sort: {
-              ...view.sort,
-              direction: view.sort.direction === 'asc' ? 'desc' : 'asc',
-            },
-          })
-        }
-        className="text-muted-foreground"
-      >
-        {view.sort.direction === 'asc' ? '↑' : '↓'}
-      </Button>
-      {hasActiveFilters(view.filter) ? (
+      {listMode ? (
+        <>
+          <Select
+            aria-label={t('list.filter.groupBy')}
+            value={view.group}
+            onChange={(event) => onChange({ ...view, group: event.target.value as GroupBy })}
+          >
+            {GROUP_VALUES.map((value) => (
+              <option key={value} value={value}>
+                {t(GROUP_LABELS[value])}
+              </option>
+            ))}
+          </Select>
+          <Select
+            aria-label={t('list.filter.sortBy')}
+            value={view.sort.by}
+            onChange={(event) => {
+              const by = event.target.value as SortField;
+              onChange({ ...view, sort: { by, direction: DEFAULT_SORT_DIRECTION[by] } });
+            }}
+          >
+            {SORT_FIELDS.map((value) => (
+              <option key={value} value={value}>
+                {t(SORT_LABELS[value])}
+              </option>
+            ))}
+          </Select>
+          <Button
+            variant="secondary"
+            size="sm"
+            aria-label={t('list.sort.reverse')}
+            onClick={() =>
+              onChange({
+                ...view,
+                sort: {
+                  ...view.sort,
+                  direction: view.sort.direction === 'asc' ? 'desc' : 'asc',
+                },
+              })
+            }
+            className="text-muted-foreground"
+          >
+            {view.sort.direction === 'asc' ? '↑' : '↓'}
+          </Button>
+        </>
+      ) : null}
+      {filtersActive ? (
         <Button variant="ghost" size="sm" onClick={clearAll} className="text-muted-foreground">
           {t('list.filter.clear')}
         </Button>

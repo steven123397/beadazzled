@@ -54,6 +54,14 @@ test('blockingDeps includes blocks, conditional-blocks and waits-for targets', (
   ]);
 });
 
+test('two edges to the same open target count once', () => {
+  const subject = issue('subject', {
+    dependencies: [dependency('a', 'blocks'), dependency('a', 'waits-for')],
+  });
+
+  expect(blockingDeps(subject, lookup([issue('a')]))).toEqual(['a']);
+});
+
 test('a closed dependency target does not block', () => {
   const subject = issue('subject', {
     dependencies: [dependency('done'), dependency('still-open')],

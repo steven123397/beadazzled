@@ -32,12 +32,12 @@
 | 关键 E2E | 3 条全绿 | `npm run e2e` | CI | block | 装→列表→详情→改状态 | 待接线 |
 | 依赖高危漏洞 | 0；unknown 未豁免即为失败 | `npm run check:deps` | CI | block | 会随安装包分发出去；无 severity 的记录无法自动判级 | 可运行 |
 | 安装包体积 | ≤ 15 MB | `npm run build:app && npm run check:size` | CI | block | Tauri 空壳 5–10MB；超过即说明选型错了 | 可运行（需先 `build:app`） |
-| 首屏 JS（index.html 及其 preload） | ≤ 150 KB gzip | `npm run check:bundle`（`check:size` 会先跑它） | CI | block | 启动时间随首屏解析量线性增长；当前 142.5 KB（设计基座接入后），余量约 5% | 可运行（需先 `build`） |
+| 首屏 JS（index.html 及其 preload） | ≤ 150 KB gzip | `npm run check:bundle`（`check:size` 会先跑它） | CI | block | 启动时间随首屏解析量线性增长；当前 143.2 KB，余量约 4.5% | 可运行（需先 `build`） |
 | 冷启动→可交互 | ≤ 2.0s（P95） | `npm run measure:startup` | CI | warn | WebView2 冷启动实测量级 | 可运行（未接 CI） |
 | 热启动→可交互 | ≤ 800ms | 同上 | CI | warn | 双击即开是核心卖点 | 可运行（未接 CI） |
 | 常驻内存（1000 条票） | ≤ 150 MB | `npm run measure:memory` | CI | warn | WebView2 常见占用 | 待接线 |
 | 详情页切换 | ≤ 50ms | `npm run measure:navigation` | CI | warn | 纯内存读取，只受渲染限制 | 脚本就绪（`docs/measurements/2026-11-02-navigation.md`）；CI 接线随 bza-bee |
-| 列表滚动（1000 条） | 60fps 不掉帧 | `npm run measure:scroll` | CI | warn | 虚拟滚动的基本盘 | 待接线 |
+| 列表滚动（1000 条） | 60fps 不掉帧 | `npm run measure:scroll`（看板加 `--view=board`） | CI | warn | 虚拟滚动的基本盘 | 脚本就绪（`docs/measurements/2026-11-02-list-scroll.md`、`2026-11-02-board-scroll.md`）；CI 接线随 bza-bee |
 | 正文对比度 | ≥ 4.5:1；大字号 ≥ 3:1 | axe（待有可运行 UI） | 交还前 | block | WCAG AA | 待接线 |
 | 核心流程无鼠标可达 | 必须 | E2E + 手动 | 交还前 | block | 产品定位是键盘优先 | 待接线 |
 
