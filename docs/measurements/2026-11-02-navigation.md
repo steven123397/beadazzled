@@ -1,6 +1,6 @@
 # 详情导航与长文预算测量（2026-11-02）
 
-状态：bza-mxv 初测，bza-ryr.50.5 统一判定口径后重测；不改变任何阈值。
+状态：bza-mxv 初测，bza-ryr.50.5 统一判定口径，bza-ryr.50.10 收口时复测；不改变任何阈值。
 对应预算：[CONSTRAINTS.md](../../CONSTRAINTS.md) 详情页切换 ≤50ms（P95）；`SPEC-detail` AC10 64 KiB 首次渲染 ≤100ms（P50）。
 
 ## 环境
@@ -30,25 +30,26 @@
 ## 结果
 
 ```
-run 1: open 27.8, 31.5, 31.9, 29.4, 29.1ms; 64 KiB first 78.1ms, steady 64.9, 47.7, 48.0ms
-run 2: open 29.0, 34.4, 38.8, 31.2, 32.5ms; 64 KiB first 82.9ms, steady 49.7, 50.1, 61.0ms
-run 3: open 30.3, 30.9, 31.7, 30.3, 32.5ms; 64 KiB first 76.6ms, steady 53.1, 51.3, 49.0ms
-run 4: open 30.3, 31.8, 31.2, 32.4, 18.6ms; 64 KiB first 57.4ms, steady 65.0, 66.1, 56.7ms
-run 5: open 30.3, 32.5, 31.7, 31.9, 31.7ms; 64 KiB first 131.7ms, steady 47.9, 52.9, 47.7ms
+run 1: open 33.1, 29.7, 30.1, 31.7, 31.9ms; 64 KiB first 155.2ms, steady 64.9, 49.0, 63.7ms
+run 2: open 29.6, 29.6, 30.7, 30.0, 31.5ms; 64 KiB first 87.1ms, steady 65.6, 80.2, 50.3ms
+run 3: open 42.5, 31.7, 30.0, 29.8, 31.7ms; 64 KiB first 85.6ms, steady 112.8, 67.6, 53.7ms
+run 4: open 28.9, 30.5, 31.2, 33.6, 30.2ms; 64 KiB first 72.3ms, steady 62.9, 69.3, 70.9ms
+run 5: open 28.6, 32.0, 31.0, 26.9, 27.7ms; 64 KiB first 90.4ms, steady 69.5, 55.1, 65.6ms
 ```
 
 | 指标 | n | P50 | P95 | max | 预算 | 结论 |
 |---|---:|---:|---:|---:|---:|---|
-| 打开详情 | 25 | 31.5ms | **34.4ms** | 38.8ms | 50ms（P95） | PASS |
-| 64 KiB 首次渲染（AC10） | 5 | **78.1ms** | 131.7ms | 131.7ms | 100ms（P50） | PASS |
-| 64 KiB 稳态（参考） | 15 | **51.3ms** | 66.1ms | 66.1ms | 100ms（P50，参考） | PASS |
+| 打开详情 | 25 | 30.5ms | **33.6ms** | 42.5ms | 50ms（P95） | PASS |
+| 64 KiB 首次渲染（AC10） | 5 | **87.1ms** | 155.2ms | 155.2ms | 100ms（P50） | PASS |
+| 64 KiB 稳态（参考） | 15 | **65.6ms** | 112.8ms | 112.8ms | 100ms（P50，参考） | PASS |
 
 打开详情的 bd 调用：**0**。
 
 ## 解释
 
-- first render 的波动来自 V8 对 Markdown 管道的首次编译：本次 5 个样本落在 57.4–131.7ms，其中一个超过 100ms。判定按 AC10 的 P50（78.1ms）执行，P95/max 原样报告，不隐藏单次超预算。
-- 稳态 P50 51.3ms、P95 66.1ms，说明同一长文在预热后稳定落在预算内；该口径不作为 AC10 的证据。
+- first render 的波动来自 V8 对 Markdown 管道的首次编译：本次 5 个样本落在 72.3–155.2ms，其中一个超过 100ms。判定按 AC10 的 P50（87.1ms）执行，P95/max 原样报告，不隐藏单次超预算。
+- 稳态 P50 65.6ms、P95 112.8ms，说明同一长文在预热后通常落在预算内；该口径不作为 AC10 的证据。
+- 同一脚本不同轮次之间这两个数会移动十几毫秒（此前一次收口前测量为打开 P95 45.2ms、first render P50 85.2ms、稳态 P50 64.3ms），判定按各自统计量执行，不做跨轮挑数。
 - `tests/e2e/detail.spec.ts` 跑在 Vite dev server 上，只断言「打开详情能渲染且零 bd 调用」；50ms 与 100ms 都只由本脚本在生产包上判定。
 - 任务列表复选框补了 `aria-label`（axe 的 “form elements must have labels”），对渲染耗时没有可测影响。
 - 详情路由仍为懒加载 chunk（约 57 KB gzip），首屏 JS 保持在 150 KB 预算内。
