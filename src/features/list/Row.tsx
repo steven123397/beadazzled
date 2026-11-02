@@ -2,6 +2,7 @@ import { memo, useMemo } from 'react';
 
 import type { Issue } from '@/bindings/bd';
 import { useI18n } from '@/lib/i18n/I18nProvider';
+import { formatAbsoluteTime, formatRelativeTime } from '@/lib/time';
 
 import { STATUS_ICONS, statusText } from './status';
 
@@ -99,59 +100,3 @@ export const Row = memo(function Row({ issue, start, focused, onOpen, onFocus }:
     </div>
   );
 });
-
-function formatRelativeTime(value: string, language: 'en' | 'zh-CN'): string {
-  const timestamp = Date.parse(value);
-  if (Number.isNaN(timestamp)) {
-    return value;
-  }
-
-  const seconds = Math.round((timestamp - Date.now()) / 1000);
-  const magnitude = Math.abs(seconds);
-  const formatter = relativeFormatter(language);
-
-  if (magnitude < 60) {
-    return formatter.format(seconds, 'second');
-  }
-  if (magnitude < 3600) {
-    return formatter.format(Math.round(seconds / 60), 'minute');
-  }
-  if (magnitude < 86_400) {
-    return formatter.format(Math.round(seconds / 3600), 'hour');
-  }
-  if (magnitude < 2_592_000) {
-    return formatter.format(Math.round(seconds / 86_400), 'day');
-  }
-  if (magnitude < 31_536_000) {
-    return formatter.format(Math.round(seconds / 2_592_000), 'month');
-  }
-  return formatter.format(Math.round(seconds / 31_536_000), 'year');
-}
-
-function formatAbsoluteTime(value: string, language: 'en' | 'zh-CN'): string {
-  const timestamp = Date.parse(value);
-  return Number.isNaN(timestamp) ? value : absoluteFormatter(language).format(timestamp);
-}
-
-// Constructing Intl objects is comparatively expensive; scrolling mounts rows
-// every frame, so the formatters live for the life of the page.
-const relativeFormatters = new Map<string, Intl.RelativeTimeFormat>();
-const absoluteFormatters = new Map<string, Intl.DateTimeFormat>();
-
-function relativeFormatter(language: 'en' | 'zh-CN'): Intl.RelativeTimeFormat {
-  let formatter = relativeFormatters.get(language);
-  if (formatter === undefined) {
-    formatter = new Intl.RelativeTimeFormat(language, { numeric: 'auto' });
-    relativeFormatters.set(language, formatter);
-  }
-  return formatter;
-}
-
-function absoluteFormatter(language: 'en' | 'zh-CN'): Intl.DateTimeFormat {
-  let formatter = absoluteFormatters.get(language);
-  if (formatter === undefined) {
-    formatter = new Intl.DateTimeFormat(language);
-    absoluteFormatters.set(language, formatter);
-  }
-  return formatter;
-}
