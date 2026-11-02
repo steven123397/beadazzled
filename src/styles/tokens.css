@@ -26,6 +26,8 @@
   --control-sm: 26px;
   --control-md: 30px;
   --row-height: 36px;
+  /* Fixed so each board column can virtualize without measuring cards. */
+  --card-height: 120px;
 
   /* Type scale. `--ui-font` and `--doc-font` stay the anchors. */
   --ui-font: 13px;

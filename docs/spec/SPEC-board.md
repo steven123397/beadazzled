@@ -139,6 +139,8 @@ src/features/board/
   keyboard.ts         键盘移动（跳过不可投放列）
 ```
 
+筛选状态与控件来自 `src/lib/view` 与 `src/components/filter-bar.tsx`，与 list 共用。
+
 ## Module Code Style
 
 - 列归属与「列 → 命令」都是纯函数，拖动与键盘共用；不在事件处理器里拼命令。
