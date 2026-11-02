@@ -7,6 +7,8 @@
   --muted: #f1f0f2;
   --muted-foreground: #6f6e77;
   --border: #e9e8ea;
+  --border-subtle: #f0eff1;
+  --border-strong: #d7d6d9;
   --input: #dcdbdd;
   --primary: #5e6ad2;
   --primary-foreground: #ffffff;
@@ -14,13 +16,31 @@
   --destructive: #c4362f;
   --warning: #9a6400;
   --success: #1d7a4a;
+  /* Interaction surfaces: hover on chrome rows, selected/current items. */
+  --hover: #efeff1;
+  --selected: #e8e8ec;
+  --selected-foreground: #282a30;
 
-  --radius: 8px;
+  /* Density: control heights for the compact UI, row height for lists. */
+  --control-xs: 22px;
+  --control-sm: 26px;
+  --control-md: 30px;
   --row-height: 36px;
+
+  /* Type scale. `--ui-font` and `--doc-font` stay the anchors. */
   --ui-font: 13px;
   --doc-font: 15px;
   --doc-leading: 1.65;
   --doc-measure: 72ch;
+
+  --radius-sm: 6px;
+  --radius: 8px;
+  --radius-lg: 10px;
+
+  --shadow-xs: 0 1px 2px rgb(16 17 20 / 0.05);
+  --shadow-sm: 0 1px 3px rgb(16 17 20 / 0.07), 0 1px 2px rgb(16 17 20 / 0.04);
+  --shadow-md: 0 8px 24px rgb(16 17 20 / 0.1), 0 2px 6px rgb(16 17 20 / 0.06);
+  --shadow-popover: 0 12px 32px rgb(16 17 20 / 0.16), 0 2px 8px rgb(16 17 20 / 0.08);
 }
 
 .dark {
@@ -32,6 +52,8 @@
   --muted: #1c1c1f;
   --muted-foreground: #8a8f98;
   --border: #23252a;
+  --border-subtle: #191a1c;
+  --border-strong: #3a3b40;
   --input: #34343a;
   --primary: #5e6ad2;
   --ring: #7170ff;
@@ -40,6 +62,14 @@
   /* The light warning/success tones are ~4.0/3.7:1 on #08090a. */
   --warning: #e5b567;
   --success: #56d364;
+  --hover: #1c1c1f;
+  --selected: #232428;
+  --selected-foreground: #f7f8f8;
+
+  --shadow-xs: 0 1px 2px rgb(0 0 0 / 0.4);
+  --shadow-sm: 0 1px 3px rgb(0 0 0 / 0.5), 0 1px 2px rgb(0 0 0 / 0.3);
+  --shadow-md: 0 8px 24px rgb(0 0 0 / 0.5), 0 2px 6px rgb(0 0 0 / 0.4);
+  --shadow-popover: 0 12px 32px rgb(0 0 0 / 0.6), 0 2px 8px rgb(0 0 0 / 0.45);
 }
 
 /* Tailwind v4 reads these to expose bg-background, text-muted-foreground, ... */
@@ -50,6 +80,8 @@
   --color-muted: var(--muted);
   --color-muted-foreground: var(--muted-foreground);
   --color-border: var(--border);
+  --color-border-subtle: var(--border-subtle);
+  --color-border-strong: var(--border-strong);
   --color-input: var(--input);
   --color-primary: var(--primary);
   --color-primary-foreground: var(--primary-foreground);
@@ -57,4 +89,29 @@
   --color-destructive: var(--destructive);
   --color-warning: var(--warning);
   --color-success: var(--success);
+  --color-hover: var(--hover);
+  --color-selected: var(--selected);
+  --color-selected-foreground: var(--selected-foreground);
+
+  --spacing-control-xs: var(--control-xs);
+  --spacing-control-sm: var(--control-sm);
+  --spacing-control-md: var(--control-md);
+  --spacing-row: var(--row-height);
+
+  --text-2xs: 11px;
+  --text-xs: 12px;
+  --text-sm: var(--ui-font);
+  --text-base: 14px;
+  --text-lg: var(--doc-font);
+  --text-xl: 18px;
+  --text-2xl: 22px;
+
+  --radius-sm: var(--radius-sm);
+  --radius-md: var(--radius);
+  --radius-lg: var(--radius-lg);
+
+  --shadow-xs: var(--shadow-xs);
+  --shadow-sm: var(--shadow-sm);
+  --shadow-md: var(--shadow-md);
+  --shadow-popover: var(--shadow-popover);
 }

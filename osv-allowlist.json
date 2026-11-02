@@ -10,6 +10,21 @@
       "id": "RUSTSEC-2024-0429",
       "reason": "The RUSTSEC record carries no severity; the same advisory's GHSA-wrw7-89jp-8q8g record is MODERATE (medium, non-blocking). glib is reached only through the Linux GTK path, not the Windows build.",
       "expires": "2027-01-31"
+    },
+    {
+      "id": "RUSTSEC-2026-0370",
+      "reason": "zvariant is flagged as unmaintained; the RUSTSEC record has no severity or CVSS vector. It enters through zbus, which tauri-plugin-opener declares only for Linux/BSD targets, so the Windows build never compiles it.",
+      "expires": "2027-01-31"
+    },
+    {
+      "id": "RUSTSEC-2026-0371",
+      "reason": "zbus_names is flagged as unmaintained; the RUSTSEC record has no severity or CVSS vector. It enters through zbus, which tauri-plugin-opener declares only for Linux/BSD targets, so the Windows build never compiles it.",
+      "expires": "2027-01-31"
+    },
+    {
+      "id": "RUSTSEC-2026-0372",
+      "reason": "zvariant_derive is flagged as unmaintained; the RUSTSEC record has no severity or CVSS vector. It enters through zbus, which tauri-plugin-opener declares only for Linux/BSD targets, so the Windows build never compiles it.",
+      "expires": "2027-01-31"
     }
   ]
 }

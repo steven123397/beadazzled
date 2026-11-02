@@ -2,8 +2,12 @@ import { memo, useMemo } from 'react';
 
 import type { Issue } from '@/bindings/bd';
 import { useI18n } from '@/lib/i18n/I18nProvider';
+import { formatAbsoluteTime, formatRelativeTime } from '@/lib/time';
 
-import { STATUS_ICONS, statusText } from './status';
+import { Badge } from '@/components/ui/badge';
+import { PriorityIcon } from '@/components/ui/priority-icon';
+import { StatusIcon } from '@/components/ui/status-icon';
+import { statusText } from '@/lib/status';
 
 export type RowProps = {
   issue: Issue;
@@ -25,7 +29,6 @@ export function rowId(issueId: string): string {
 export const Row = memo(function Row({ issue, start, focused, onOpen, onFocus }: RowProps) {
   const { t, language } = useI18n();
   const statusLabel = statusText(issue.status, t);
-  const statusIcon = STATUS_ICONS[issue.status] ?? '?';
   const visibleLabels = issue.labels.slice(0, 2);
   const extraLabels = issue.labels.length - visibleLabels.length;
   const moreLabels = extraLabels > 0 ? t('list.moreLabels', { count: extraLabels }) : '';
@@ -48,22 +51,22 @@ export const Row = memo(function Row({ issue, start, focused, onOpen, onFocus }:
       tabIndex={focused ? 0 : -1}
       onClick={() => onOpen(issue)}
       onFocus={() => onFocus(issue.id)}
-      className={`absolute left-0 top-0 flex w-full items-center gap-2 border-b border-border px-3 text-xs ${
-        focused ? 'bg-muted' : 'hover:bg-muted/60'
+      className={`absolute left-0 top-0 flex w-full items-center gap-2 border-b border-border-subtle px-3 text-xs transition-colors ${
+        focused ? 'bg-selected text-selected-foreground' : 'hover:bg-hover'
       }`}
       style={{ height: 'var(--row-height)', transform: `translateY(${start}px)` }}
     >
       <span className="flex w-28 shrink-0 items-center gap-1.5">
-        <span aria-hidden="true" className="w-4 text-center text-muted-foreground">
-          {statusIcon}
-        </span>
+        <StatusIcon status={issue.status} />
         <span className="truncate">{statusLabel}</span>
       </span>
       <span className="w-20 shrink-0 truncate font-mono text-muted-foreground">{issue.id}</span>
       <span className="min-w-0 flex-1 truncate" title={issue.title}>
         {issue.title}
       </span>
-      <span className="w-8 shrink-0 text-center tabular-nums">P{issue.priority}</span>
+      <span className="flex w-10 shrink-0 items-center justify-end gap-1 tabular-nums">
+        <PriorityIcon priority={issue.priority} />P{issue.priority}
+      </span>
       <span className="hidden w-16 shrink-0 truncate text-muted-foreground lg:block">
         {issue.issue_type}
       </span>
@@ -79,12 +82,9 @@ export const Row = memo(function Row({ issue, start, focused, onOpen, onFocus }:
         title={issue.labels.join(', ')}
       >
         {visibleLabels.map((label, index) => (
-          <span
-            key={`${label}-${index}`}
-            className="truncate rounded bg-muted px-1 py-0.5 text-[11px]"
-          >
+          <Badge key={`${label}-${index}`} className="min-w-0 truncate">
             {label}
-          </span>
+          </Badge>
         ))}
         {extraLabels > 0 ? (
           <span className="shrink-0 text-muted-foreground">{moreLabels}</span>
@@ -99,59 +99,3 @@ export const Row = memo(function Row({ issue, start, focused, onOpen, onFocus }:
     </div>
   );
 });
-
-function formatRelativeTime(value: string, language: 'en' | 'zh-CN'): string {
-  const timestamp = Date.parse(value);
-  if (Number.isNaN(timestamp)) {
-    return value;
-  }
-
-  const seconds = Math.round((timestamp - Date.now()) / 1000);
-  const magnitude = Math.abs(seconds);
-  const formatter = relativeFormatter(language);
-
-  if (magnitude < 60) {
-    return formatter.format(seconds, 'second');
-  }
-  if (magnitude < 3600) {
-    return formatter.format(Math.round(seconds / 60), 'minute');
-  }
-  if (magnitude < 86_400) {
-    return formatter.format(Math.round(seconds / 3600), 'hour');
-  }
-  if (magnitude < 2_592_000) {
-    return formatter.format(Math.round(seconds / 86_400), 'day');
-  }
-  if (magnitude < 31_536_000) {
-    return formatter.format(Math.round(seconds / 2_592_000), 'month');
-  }
-  return formatter.format(Math.round(seconds / 31_536_000), 'year');
-}
-
-function formatAbsoluteTime(value: string, language: 'en' | 'zh-CN'): string {
-  const timestamp = Date.parse(value);
-  return Number.isNaN(timestamp) ? value : absoluteFormatter(language).format(timestamp);
-}
-
-// Constructing Intl objects is comparatively expensive; scrolling mounts rows
-// every frame, so the formatters live for the life of the page.
-const relativeFormatters = new Map<string, Intl.RelativeTimeFormat>();
-const absoluteFormatters = new Map<string, Intl.DateTimeFormat>();
-
-function relativeFormatter(language: 'en' | 'zh-CN'): Intl.RelativeTimeFormat {
-  let formatter = relativeFormatters.get(language);
-  if (formatter === undefined) {
-    formatter = new Intl.RelativeTimeFormat(language, { numeric: 'auto' });
-    relativeFormatters.set(language, formatter);
-  }
-  return formatter;
-}
-
-function absoluteFormatter(language: 'en' | 'zh-CN'): Intl.DateTimeFormat {
-  let formatter = absoluteFormatters.get(language);
-  if (formatter === undefined) {
-    formatter = new Intl.DateTimeFormat(language);
-    absoluteFormatters.set(language, formatter);
-  }
-  return formatter;
-}

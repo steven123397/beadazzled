@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { HashRouter, Navigate, Outlet, Route, Routes, useParams } from 'react-router-dom';
 
 import type { BdStatus, Issue, SyncState } from '@/bindings/bd';
@@ -11,9 +11,12 @@ import type { SyncApi } from '@/lib/sync/api';
 import { useSync } from '@/lib/sync/useSync';
 import { ThemeProvider } from '@/lib/theme/ThemeProvider';
 import type { Theme } from '@/lib/theme/theme';
+import { writesApi as defaultWritesApi, type WritesApi } from '@/lib/writes/api';
+import { createWriteFlow } from '@/lib/writes/flow';
+import { useWrite } from '@/lib/writes/useWrite';
 
 import { ErrorBoundary } from './shell/ErrorBoundary';
-import { IssuePlaceholder, Placeholder } from './shell/Placeholder';
+import { Placeholder } from './shell/Placeholder';
 import { Shell } from './shell/Shell';
 import { SkeletonScreen } from './shell/SkeletonScreen';
 import { SyncStatusProvider } from './shell/SyncStatus';
@@ -39,11 +42,21 @@ export type AppProps = {
    */
   syncEnabled?: boolean;
   syncApi?: SyncApi;
+  /** Injected by tests; production talks to the Tauri command layer. */
+  writesApi?: WritesApi;
 };
 
 /** Stable defaults: a fresh array/object per render would invalidate memos. */
 const NO_ISSUES: readonly Issue[] = [];
 const LOADING: SyncState = { kind: 'loading', step: 'export' };
+
+/**
+ * The detail screen owns the Markdown pipeline, which is large; loading it as
+ * a route chunk keeps it out of the first-screen JavaScript budget.
+ */
+const DetailRoute = lazy(() =>
+  import('@/features/detail/DetailView').then((module) => ({ default: module.DetailRoute }))
+);
 
 /**
  * The sync worker never starts while bd is not ready, so it cannot produce a
@@ -81,6 +94,7 @@ export function App({
   initialTheme,
   syncEnabled = false,
   syncApi,
+  writesApi,
 }: AppProps) {
   return (
     <I18nProvider initialLanguage={initialLanguage}>
@@ -91,6 +105,7 @@ export function App({
           issues={issues}
           syncEnabled={syncEnabled}
           syncApi={syncApi}
+          writesApi={writesApi}
         />
       </ThemeProvider>
     </I18nProvider>
@@ -103,12 +118,14 @@ function AppFrame({
   issues,
   syncEnabled,
   syncApi,
+  writesApi,
 }: {
   workspaceApi: WorkspaceApi;
   syncState: SyncState;
   issues: readonly Issue[];
   syncEnabled: boolean;
   syncApi?: SyncApi;
+  writesApi?: WritesApi;
 }) {
   const { t } = useI18n();
   const workspace = useWorkspace(workspaceApi);
@@ -132,6 +149,40 @@ function AppFrame({
     void reload();
     sync.refresh();
   }, [reload, sync.refresh]);
+
+  // The queue must outlive render-time state changes (a journal state flip
+  // mid-write would otherwise drop queued tasks), so the flow reads the latest
+  // values through one ref and is rebuilt only when the store or API changes.
+  const writesApiRef = useRef(writesApi ?? defaultWritesApi);
+  const latestWriteContext = useRef({
+    workspace: project?.path ?? '',
+    stateKind: shellSyncState.kind,
+    sync,
+    reload,
+  });
+  writesApiRef.current = writesApi ?? defaultWritesApi;
+  latestWriteContext.current = {
+    workspace: project?.path ?? '',
+    stateKind: shellSyncState.kind,
+    sync,
+    reload,
+  };
+
+  const writeFlow = useMemo(
+    () =>
+      createWriteFlow({
+        store: sync.store,
+        workspace: () => latestWriteContext.current.workspace,
+        execute: (workspace, command) => writesApiRef.current.execute(workspace, command),
+        refresh: () => {
+          void latestWriteContext.current.reload();
+          latestWriteContext.current.sync.refresh();
+        },
+        isJournalDisabled: () => latestWriteContext.current.stateKind === 'journal-disabled',
+      }),
+    [sync.store]
+  );
+  const writeState = useWrite(writeFlow, bd);
 
   return (
     <ErrorBoundary
@@ -162,7 +213,24 @@ function AppFrame({
                     }
                   />
                   <Route path="board" element={<Placeholder titleKey="nav.board" />} />
-                  <Route path="issue/:issueId" element={<IssuePlaceholder />} />
+                  <Route
+                    path="issue/:issueId"
+                    element={
+                      <Suspense
+                        fallback={
+                          <p role="status" className="px-6 py-10 text-sm text-muted-foreground">
+                            {t('detail.loading')}
+                          </p>
+                        }
+                      >
+                        <DetailRoute
+                          issues={shellIssues}
+                          loading={shellSyncState.kind === 'loading'}
+                          writes={syncEnabled ? writeState : undefined}
+                        />
+                      </Suspense>
+                    }
+                  />
                 </Route>
                 <Route path="settings" element={<Placeholder titleKey="nav.settings" />} />
                 <Route path="*" element={<Navigate to="/welcome" replace />} />

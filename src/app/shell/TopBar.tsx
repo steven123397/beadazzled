@@ -1,3 +1,8 @@
+import { RefreshCw } from 'lucide-react';
+
+import { Button } from '@/components/ui/button';
+import { IconButton } from '@/components/ui/icon-button';
+import { Select } from '@/components/ui/select';
 import type { WorkspaceEntry } from '@/bindings/bd';
 import { useI18n } from '@/lib/i18n/I18nProvider';
 
@@ -25,12 +30,15 @@ export function TopBar({
   const { t } = useI18n();
 
   return (
-    <header className="flex items-center gap-3 border-b border-border px-3 py-2">
-      <h1 className="text-sm font-semibold tracking-tight">{t('app.name')}</h1>
+    <header className="flex items-center gap-2 border-b border-border-subtle px-3 py-1.5">
+      <h1 className="text-xs font-semibold tracking-tight text-foreground">{t('app.name')}</h1>
+      <span aria-hidden="true" className="text-border-strong">
+        /
+      </span>
       {workspaces.length === 0 ? (
-        <span className="text-sm text-muted-foreground">{t('shell.workspace.none')}</span>
+        <span className="text-xs text-muted-foreground">{t('shell.workspace.none')}</span>
       ) : (
-        <select
+        <Select
           aria-label={t('topbar.workspace')}
           value={project?.path ?? ''}
           onChange={(event) => {
@@ -38,7 +46,6 @@ export function TopBar({
               onSwitch(event.target.value);
             }
           }}
-          className="rounded border border-border bg-background px-2 py-1 text-xs text-foreground"
         >
           {project === null ? (
             <option value="" disabled>
@@ -52,24 +59,24 @@ export function TopBar({
                 : workspace.name}
             </option>
           ))}
-        </select>
+        </Select>
       )}
       <div className="flex-1" />
-      <button
-        type="button"
+      <Button
+        variant="ghost"
+        size="sm"
         onClick={onOpenPalette}
         aria-keyshortcuts="Control+K"
-        className="rounded border border-border px-2 py-1 text-xs text-muted-foreground"
+        className="text-muted-foreground"
       >
         {t('topbar.commandPalette')}
-      </button>
-      <button
-        type="button"
-        onClick={onRefresh}
-        className="rounded border border-border px-2 py-1 text-xs text-muted-foreground"
-      >
-        {t('shell.refresh')}
-      </button>
+        <kbd className="rounded-sm border border-border px-1 py-px font-mono text-2xs text-muted-foreground">
+          Ctrl K
+        </kbd>
+      </Button>
+      <IconButton label={t('shell.refresh')} onClick={onRefresh} variant="ghost">
+        <RefreshCw aria-hidden="true" className="size-3.5" />
+      </IconButton>
     </header>
   );
 }

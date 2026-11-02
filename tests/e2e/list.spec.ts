@@ -49,7 +49,7 @@ test('a 1000-issue list virtualizes, navigates with J/K and restores focus', asy
 
   await page.keyboard.press('Enter');
   await expect(page).toHaveURL(/#\/w\/p1\/issue\/bza-19$/);
-  await expect(page.getByRole('heading', { name: /bza-19/ })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Issue 19' })).toBeVisible();
 
   await page.keyboard.press('Escape');
   await expect(page).toHaveURL(/#\/w\/p1\/list$/);

@@ -2,6 +2,7 @@ import { act, fireEvent, render, screen, waitFor, within } from '@testing-librar
 import { beforeEach, expect, test, vi } from 'vitest';
 
 import type { BdStatus, Issue, SyncState, WorkspaceEntry, WorkspaceSnapshot } from '@/bindings/bd';
+import { setDraftGuard } from '@/lib/draft-guard';
 import type { SyncApi, SyncEvent, SyncSnapshot } from '@/lib/sync/api';
 import type { WorkspaceApi } from '@/lib/workspace/api';
 
@@ -137,11 +138,14 @@ test('restores a deep link and shows the sync state in the status bar', async ()
       workspaceApi={fakeApi({
         snapshot: async () => snapshot([entry('p1', 'alpha')], '/repo/p1'),
       })}
+      issues={[issue('bza-1', 'Deep linked')]}
       syncState={healthy}
     />
   );
 
-  expect(await screen.findByRole('heading', { name: /bza-1/ })).toBeInTheDocument();
+  expect(
+    await screen.findByRole('heading', { name: 'Deep linked' }, { timeout: 3000 })
+  ).toBeInTheDocument();
   expect(screen.getByLabelText('Status bar')).toHaveTextContent('Live');
 });
 
@@ -221,9 +225,10 @@ test('escape returns from an issue route to the list', async () => {
       workspaceApi={fakeApi({
         snapshot: async () => snapshot([entry('p1', 'alpha')], '/repo/p1'),
       })}
+      issues={[issue('bza-1', 'Deep linked')]}
     />
   );
-  await screen.findByRole('heading', { name: /bza-1/ });
+  await screen.findByRole('heading', { name: 'Deep linked' }, { timeout: 3000 });
 
   fireEvent.keyDown(window, { key: 'Escape' });
 
@@ -239,9 +244,10 @@ test('escape closes an overlay without leaving the issue route', async () => {
       workspaceApi={fakeApi({
         snapshot: async () => snapshot([entry('p1', 'alpha')], '/repo/p1'),
       })}
+      issues={[issue('bza-1', 'Deep linked')]}
     />
   );
-  await screen.findByRole('heading', { name: /bza-1/ });
+  await screen.findByRole('heading', { name: 'Deep linked' }, { timeout: 3000 });
 
   fireEvent.keyDown(window, { key: 'k', ctrlKey: true });
   expect(screen.getByRole('dialog', { name: 'Command palette' })).toBeInTheDocument();
@@ -249,7 +255,7 @@ test('escape closes an overlay without leaving the issue route', async () => {
   fireEvent.keyDown(window, { key: 'Escape' });
 
   expect(screen.queryByRole('dialog', { name: 'Command palette' })).not.toBeInTheDocument();
-  expect(screen.getByRole('heading', { name: /bza-1/ })).toBeInTheDocument();
+  expect(screen.getByRole('heading', { name: 'Deep linked' })).toBeInTheDocument();
   expect(window.location.hash).toBe('#/w/p1/issue/bza-1');
 });
 
@@ -621,6 +627,60 @@ test('escape and the backdrop both close the diagnostics dialog', async () => {
   expect(screen.queryByRole('dialog', { name: 'Diagnostics' })).not.toBeInTheDocument();
 });
 
+test('an overlay closes with escape while a draft is open behind it', async () => {
+  window.location.hash = '#/w/p1/list';
+
+  render(
+    <App
+      workspaceApi={fakeApi({
+        snapshot: async () => snapshot([entry('p1', 'alpha')], '/repo/p1'),
+      })}
+    />
+  );
+  await screen.findByRole('heading', { name: 'List' });
+
+  // The detail editor arms this guard while a draft is open; single-key
+  // shortcuts are suppressed then, but Escape must still reach the overlay.
+  setDraftGuard(() => true);
+  try {
+    await openDiagnostics();
+    fireEvent.keyDown(window, { key: 'Escape' });
+
+    expect(screen.queryByRole('dialog', { name: 'Diagnostics' })).not.toBeInTheDocument();
+  } finally {
+    setDraftGuard(null);
+  }
+});
+
+test('browser back with a draft open asks and keeps the page', async () => {
+  window.location.hash = '#/w/p1/issue/bza-1';
+
+  render(
+    <App
+      workspaceApi={fakeApi({
+        snapshot: async () => snapshot([entry('p1', 'alpha')], '/repo/p1'),
+      })}
+      issues={[issue('bza-1', 'Deep linked')]}
+    />
+  );
+  await screen.findByRole('heading', { name: 'Deep linked' }, { timeout: 3000 });
+
+  const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+  // The detail page arms this while an editor holds an unsaved draft.
+  setDraftGuard(() => window.confirm('Discard the unsaved draft?'));
+  try {
+    window.location.hash = '#/w/p1/list';
+    window.dispatchEvent(new PopStateEvent('popstate'));
+
+    expect(confirm).toHaveBeenCalledTimes(1);
+    expect(window.location.hash).toBe('#/w/p1/issue/bza-1');
+    expect(screen.getByRole('heading', { name: 'Deep linked' })).toBeInTheDocument();
+  } finally {
+    setDraftGuard(null);
+    confirm.mockRestore();
+  }
+});
+
 test('opening diagnostics never calls bd again', async () => {
   window.location.hash = '#/w/p1/list';
   const bdStatus = vi.fn(async () => bdReady);
@@ -789,4 +849,110 @@ test('the palette shortcut does not stack on top of diagnostics', async () => {
 
   expect(screen.queryByRole('dialog', { name: 'Command palette' })).not.toBeInTheDocument();
   expect(screen.getByRole('dialog', { name: 'Diagnostics' })).toBeInTheDocument();
+});
+
+test('a title edit waits for the journal echo before the page changes', async () => {
+  window.location.hash = '#/w/p1/issue/bza-1';
+  const sync = fakeSyncApi();
+  const execute = vi.fn(async () => ({ ok: true as const, createdId: null }));
+
+  render(
+    <App
+      workspaceApi={fakeApi({
+        snapshot: async () => snapshot([entry('p1', 'alpha')], '/repo/p1'),
+      })}
+      syncEnabled
+      syncApi={sync.api}
+      writesApi={{ execute }}
+    />
+  );
+
+  await waitFor(() => expect(sync.start).toHaveBeenCalledWith('/repo/p1'));
+
+  act(() => {
+    sync.emit('state', healthy);
+    sync.emit('snapshot', {
+      issues: [issue('bza-1', 'Old title')],
+      since: 42,
+    } satisfies SyncSnapshot);
+  });
+
+  const heading = await screen.findByRole(
+    'heading',
+    { level: 1, name: 'Old title' },
+    { timeout: 3000 }
+  );
+  expect(heading).toBeInTheDocument();
+
+  fireEvent.click(screen.getByRole('button', { name: 'Old title' }));
+  fireEvent.change(screen.getByRole('textbox', { name: 'Title' }), {
+    target: { value: 'New title' },
+  });
+  fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+  await waitFor(() => expect(execute).toHaveBeenCalledTimes(1));
+  expect(execute).toHaveBeenCalledWith('/repo/p1', {
+    Update: expect.objectContaining({ id: 'bza-1', title: 'New title' }),
+  });
+  // Saved but not echoed: the editor is still pending and the old title is
+  // not replaced optimistically.
+  expect(screen.getByRole('button', { name: 'Saving…' })).toBeDisabled();
+
+  act(() => {
+    sync.emit('records', [
+      {
+        seq: 43,
+        ts: '2026-11-01T00:00:00Z',
+        op: 'update',
+        issue_id: 'bza-1',
+        issue: issue('bza-1', 'New title'),
+      },
+    ]);
+  });
+
+  expect(
+    await screen.findByRole('heading', { level: 1, name: 'New title' }, { timeout: 3000 })
+  ).toBeInTheDocument();
+  expect(screen.queryByRole('textbox', { name: 'Title' })).toBeNull();
+});
+
+test('a status conflict is visible and triggers a baseline refresh', async () => {
+  window.location.hash = '#/w/p1/issue/bza-1';
+  const sync = fakeSyncApi();
+  const execute = vi.fn(async () => ({
+    ok: false as const,
+    error: { code: 'WRITE_CONFLICT' as const, message: 'stale' },
+  }));
+
+  render(
+    <App
+      workspaceApi={fakeApi({
+        snapshot: async () => snapshot([entry('p1', 'alpha')], '/repo/p1'),
+      })}
+      syncEnabled
+      syncApi={sync.api}
+      writesApi={{ execute }}
+    />
+  );
+
+  await waitFor(() => expect(sync.start).toHaveBeenCalledWith('/repo/p1'));
+  act(() => {
+    sync.emit('state', healthy);
+    sync.emit('snapshot', {
+      issues: [issue('bza-1', 'Conflict target')],
+      since: 42,
+    } satisfies SyncSnapshot);
+  });
+
+  await screen.findByRole('heading', { level: 1, name: 'Conflict target' }, { timeout: 3000 });
+
+  fireEvent.change(screen.getByRole('combobox', { name: 'Status' }), {
+    target: { value: 'in_progress' },
+  });
+
+  await waitFor(() => expect(execute).toHaveBeenCalledTimes(1));
+  expect(await screen.findByRole('alert')).toHaveTextContent(
+    'This issue changed elsewhere; refreshing the view.'
+  );
+  await waitFor(() => expect(vi.mocked(sync.api.refresh)).toHaveBeenCalled());
 });

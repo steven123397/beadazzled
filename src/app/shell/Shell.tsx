@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Outlet, useLocation, useNavigate } from 'react-router-dom';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Outlet, useLocation, useNavigate, type NavigateOptions } from 'react-router-dom';
 
 import type { Issue } from '@/bindings/bd';
 import { HelpPanel } from '@/app/keyboard/HelpPanel';
@@ -10,6 +10,7 @@ import { buildCommands } from '@/app/palette/commands';
 import { useI18n } from '@/lib/i18n/I18nProvider';
 import { copyText, type CopyResult } from '@/lib/clipboard';
 import { formatDiagnostics } from '@/lib/diagnostics';
+import { confirmLeaveDraft } from '@/lib/draft-guard';
 import { loadSidebarCollapsed, saveSidebarCollapsed } from '@/lib/shell/layout';
 import { useTheme } from '@/lib/theme/ThemeProvider';
 
@@ -37,8 +38,22 @@ export function Shell({
   const { preference, setPreference } = useTheme();
   const { snapshot, bd, error, reload } = useWorkspaceContext();
   const syncState = useSyncState();
-  const navigate = useNavigate();
+  const routerNavigate = useNavigate();
+  // Every shell-initiated view change goes through the draft guard; links in
+  // the sidebar use the same helper on their own click handler.
+  const navigate = useCallback(
+    (path: string, options?: NavigateOptions) => {
+      if (confirmLeaveDraft()) {
+        routerNavigate(path, options);
+      }
+    },
+    [routerNavigate]
+  );
   const location = useLocation();
+  // The route on screen right now, for the traversal guard below: React Router
+  // has already moved to the popped entry when the popstate listener runs.
+  const locationRef = useRef(location);
+  locationRef.current = location;
   const project = activeWorkspace(snapshot);
   const onIssueRoute = /^\/w\/[^/]+\/issue\//.test(location.pathname);
   const [paletteOpen, setPaletteOpen] = useState(false);
@@ -58,6 +73,21 @@ export function Shell({
   useEffect(() => {
     saveSidebarCollapsed(sidebarCollapsed);
   }, [sidebarCollapsed]);
+
+  // Back/forward gestures reach the browser history directly, so navigate()
+  // never sees them. The traversal is already applied when popstate fires;
+  // an unconfirmed draft puts the route that was on screen back.
+  useEffect(() => {
+    const handler = () => {
+      if (confirmLeaveDraft()) {
+        return;
+      }
+      const previous = locationRef.current;
+      routerNavigate(`${previous.pathname}${previous.search}${previous.hash}`, { replace: true });
+    };
+    window.addEventListener('popstate', handler);
+    return () => window.removeEventListener('popstate', handler);
+  }, [routerNavigate]);
 
   const closeOverlay = useCallback(() => {
     setPaletteOpen(false);
@@ -136,6 +166,9 @@ export function Shell({
         keys: 'escape',
         labelKey: 'shortcut.closeOverlay',
         group: 'General',
+        // Escape is the way out of a modal even when a draft guard suppresses
+        // the other single-key shortcuts; `when` keeps it scoped to overlays.
+        allowInInput: true,
         when: () => overlayOpen,
         run: (ctx) => ctx.closeOverlay(),
       },

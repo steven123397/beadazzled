@@ -1,7 +1,7 @@
 import type { Issue } from '@/bindings/bd';
 
 import { collator } from './collator';
-import { STATUS_ORDER } from './status';
+import { STATUS_ORDER } from '@/lib/status';
 import type { GroupBy } from './view-state';
 
 export type IssueGroup = {

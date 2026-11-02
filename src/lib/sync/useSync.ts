@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore
 import type { BridgeError, Issue, JournalRecord, SyncState } from '@/bindings/bd';
 
 import { syncApi, type SyncApi, type SyncSnapshot } from './api';
-import { createTicketStore } from './store';
+import { createTicketStore, type TicketStore } from './store';
 
 const LOADING: SyncState = { kind: 'loading', step: 'export' };
 
@@ -23,6 +23,8 @@ export type SyncControl = {
   /** Highest journal seq applied to the store; 0 before the first snapshot. */
   lastSeq: number;
   refresh: () => void;
+  /** The live store behind `issues`; writes wait on its echo cursor. */
+  store: TicketStore;
 };
 
 /**
@@ -128,7 +130,7 @@ export function useSync({
     });
   }, [api, enabled, ready, workspace]);
 
-  return { issues, state, lastSeq: ticketState.lastSeq, refresh };
+  return { issues, state, lastSeq: ticketState.lastSeq, refresh, store };
 }
 
 function unavailable(error: unknown): SyncState {
