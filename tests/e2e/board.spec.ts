@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 
 import { clearInvokeLog, installFakeBridge, invokeLog } from './fakeBridge';
 
@@ -22,11 +22,29 @@ function issue(id: string, overrides: Record<string, unknown> = {}) {
   };
 }
 
-async function dragTo(
-  page: import('@playwright/test').Page,
-  id: string,
-  columnId: string
-): Promise<void> {
+const FIXTURE = [
+  issue('bza-1'),
+  issue('bza-2', { status: 'in_progress' }),
+  issue('bza-3', { status: 'blocked' }),
+];
+
+function thousandIssues() {
+  return Array.from({ length: 1000 }, (_, index) =>
+    issue(`bza-${index}`, {
+      title: `Issue ${index}`,
+      status: index % 7 === 0 ? 'closed' : index % 5 === 0 ? 'in_progress' : 'open',
+      priority: index % 5,
+    })
+  );
+}
+
+async function openBoard(page: Page, issues: readonly Record<string, unknown>[]): Promise<void> {
+  await installFakeBridge(page, { issues });
+  await page.goto('/#/w/p1/board');
+  await expect(page.getByRole('heading', { name: 'Board' })).toBeVisible();
+}
+
+async function dragTo(page: Page, id: string, columnId: string): Promise<void> {
   const source = page.locator(`[data-issue-id="${id}"]`);
   const start = await source.boundingBox();
   const target = await page.locator(`[data-column-id="${columnId}"]`).boundingBox();
@@ -40,19 +58,8 @@ async function dragTo(
   await page.mouse.up();
 }
 
-test.beforeEach(async ({ page }) => {
-  await installFakeBridge(page, {
-    issues: [
-      issue('bza-1'),
-      issue('bza-2', { status: 'in_progress' }),
-      issue('bza-3', { status: 'blocked' }),
-    ],
-  });
-  await page.goto('/#/w/p1/board');
-  await expect(page.getByRole('heading', { name: 'Board' })).toBeVisible();
-});
-
 test('drag to a real column reaches the write gate', async ({ page }) => {
+  await openBoard(page, FIXTURE);
   await dragTo(page, 'bza-1', 'in-progress');
   await expect(page.getByRole('alert')).toContainText('bd is not available');
   await expect(page.locator('[data-issue-id="bza-1"]')).toHaveAttribute(
@@ -62,16 +69,19 @@ test('drag to a real column reaches the write gate', async ({ page }) => {
 });
 
 test('drag onto Blocked is refused before any write', async ({ page }) => {
+  await openBoard(page, FIXTURE);
   await dragTo(page, 'bza-1', 'blocked');
   await expect(page.getByRole('alert')).toContainText('does not accept drops');
 });
 
 test('drag out of Blocked is refused', async ({ page }) => {
+  await openBoard(page, FIXTURE);
   await dragTo(page, 'bza-3', 'ready');
   await expect(page.getByRole('alert')).toContainText('Blocked cards cannot move out');
 });
 
 test('H/L/J/K move focus and Enter opens the card, without bd', async ({ page }) => {
+  await openBoard(page, FIXTURE);
   await clearInvokeLog(page);
   await expect(page.locator('[data-issue-id="bza-1"]')).toHaveAttribute('data-focused', 'true');
 
@@ -91,6 +101,7 @@ test('H/L/J/K move focus and Enter opens the card, without bd', async ({ page })
 });
 
 test('dragging and refusing a move never calls bd', async ({ page }) => {
+  await openBoard(page, FIXTURE);
   await clearInvokeLog(page);
 
   await dragTo(page, 'bza-1', 'blocked');
@@ -102,6 +113,7 @@ test('dragging and refusing a move never calls bd', async ({ page }) => {
 });
 
 test('the drag handle activates the keyboard sensor', async ({ page }) => {
+  await openBoard(page, FIXTURE);
   await page.getByRole('button', { name: 'Drag bza-1' }).focus();
   await page.keyboard.press('Space');
 
@@ -115,4 +127,33 @@ test('the drag handle activates the keyboard sensor', async ({ page }) => {
     'data-dragging',
     'true'
   );
+});
+
+test('a 1000-card board virtualizes and calls no bd while scrolling or filtering', async ({
+  page,
+}) => {
+  test.setTimeout(60_000);
+  await openBoard(page, thousandIssues());
+  const cards = page.locator('[data-issue-id]');
+  expect(await cards.count()).toBeLessThan(100);
+  await clearInvokeLog(page);
+
+  const ready = page.locator('[data-column-id="ready"] [role="list"]');
+  await ready.evaluate((element) => {
+    element.scrollTop = element.scrollHeight;
+  });
+  await expect(page.locator('[data-issue-id="bza-999"]')).toBeVisible();
+  expect(await cards.count()).toBeLessThan(100);
+
+  for (const key of ['j', 'j', 'k', 'l', 'h']) {
+    await page.keyboard.press(key);
+  }
+
+  const search = page.getByRole('searchbox', { name: 'Search tickets' });
+  await search.fill('Issue 999');
+  await expect(page.getByText('1 / 1000')).toBeVisible();
+  await expect(page.locator('[data-issue-id="bza-999"]')).toBeVisible();
+
+  // Scrolling, focusing and filtering are all derived in memory.
+  expect(await invokeLog(page)).toEqual([]);
 });

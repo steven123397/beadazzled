@@ -1,9 +1,10 @@
 import { expect, test } from 'vitest';
 
 import type { Issue } from '@/bindings/bd';
+import { selectVisibleIssues } from '@/features/list/filter';
+import { createListViewState, type ListFilter } from '@/lib/view/state';
 
 import { buildBoard, columnOf, filterForBoard, hasBoardFilters } from './columns';
-import { createListViewState } from '@/lib/view/state';
 
 const TS = '2026-11-01T00:00:00Z';
 
@@ -174,4 +175,39 @@ test('partitions a 1000-card board without dropping tickets', () => {
   const total = board.columns.reduce((sum, column) => sum + column.cards.length, 0);
   expect(board.count).toBe(1000);
   expect(total).toBe(1000);
+});
+
+test('board and list select the same tickets for the same non-status filter', () => {
+  const issues = [
+    issue('bza-1', { title: 'Alpha one', priority: 1, labels: ['ui'] }),
+    issue('bza-2', { title: 'Alpha two', priority: 1, labels: ['api'], status: 'closed' }),
+    issue('bza-3', { title: 'Beta', priority: 3, labels: ['ui'] }),
+    issue('bza-4', {
+      title: 'Alpha blocked',
+      priority: 1,
+      labels: ['ui'],
+      dependencies: blocks('bza-4', 'bza-3'),
+    }),
+  ];
+  const filters: ListFilter[] = [
+    { ...createListViewState().filter, query: 'alpha' },
+    { ...createListViewState().filter, priority: [1] },
+    { ...createListViewState().filter, label: ['ui'], priority: [1] },
+    { ...createListViewState().filter, ready: true },
+  ];
+  const index = byId(issues);
+
+  for (const filter of filters) {
+    const boardIds = filterForBoard(issues, filter, { issuesById: index })
+      .map((entry) => entry.id)
+      .sort();
+    const listIds = selectVisibleIssues(
+      issues,
+      { ...createListViewState(), filter: { ...filter, status: [] } },
+      { issuesById: index }
+    )
+      .map((entry) => entry.id)
+      .sort();
+    expect(boardIds).toEqual(listIds);
+  }
 });

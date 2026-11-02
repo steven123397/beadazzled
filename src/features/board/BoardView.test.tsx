@@ -77,6 +77,21 @@ function fakeWrites(overrides: Partial<UseWrite> = {}): UseWrite {
   };
 }
 
+function BoardHarness({ issues, writes }: { issues: readonly Issue[]; writes?: UseWrite }) {
+  return (
+    <I18nProvider initialLanguage="en">
+      <MemoryRouter initialEntries={['/w/p1/board']}>
+        <Routes>
+          <Route
+            path="/w/:projectId/board"
+            element={<BoardView projectId="p1" issues={issues} writes={writes} />}
+          />
+        </Routes>
+      </MemoryRouter>
+    </I18nProvider>
+  );
+}
+
 function renderBoard({
   issues,
   entry = '/w/p1/board',
@@ -278,7 +293,8 @@ test('Shift+Right produces the same command sequence as a drag', async () => {
   expect(command).toMatchObject({
     Update: { id: 'bza-1', status: 'in_progress', if_status: 'open' },
   });
-  await screen.findByText('Moved bza-1 to In Progress');
+  const moved = await screen.findByText('Moved bza-1 to In Progress');
+  expect(moved.closest('[role="status"]')).toHaveAttribute('aria-live', 'polite');
 });
 
 test('a move is not optimistic: the card stays put with a pending marker', async () => {
@@ -296,6 +312,11 @@ test('a move is not optimistic: the card stays put with a pending marker', async
 
   await waitFor(() => expect(card('bza-1')).toHaveAttribute('data-pending', 'true'));
   expect(card('bza-1').closest('[data-column-id="ready"]')).not.toBeNull();
+  // Pending disables the keyboard drag activator too.
+  expect(screen.getByRole('button', { name: 'Drag bza-1' })).toHaveAttribute(
+    'aria-disabled',
+    'true'
+  );
 
   await act(async () => settle({ status: 'ok' }));
   await waitFor(() => expect(card('bza-1')).not.toHaveAttribute('data-pending'));
@@ -308,9 +329,9 @@ test('Blocked cards refuse keyboard moves and explain why', () => {
   fireEvent.keyDown(window, { key: 'ArrowRight', shiftKey: true });
 
   expect(writes.submit).not.toHaveBeenCalled();
-  expect(screen.getByRole('alert')).toHaveTextContent(
-    'Blocked cards cannot move out of this column'
-  );
+  const alert = screen.getByRole('alert');
+  expect(alert).toHaveTextContent('Blocked cards cannot move out of this column');
+  expect(alert).toHaveAttribute('aria-live', 'assertive');
   expect(card('bza-1').closest('[data-column-id="blocked"]')).not.toBeNull();
 });
 
@@ -373,4 +394,35 @@ test('without a write flow a move is refused visibly and never reaches bd', () =
 
   expect(screen.getByRole('alert')).toHaveTextContent('bd is not available; moving is disabled');
   expect(card('bza-1').closest('[data-column-id="ready"]')).not.toBeNull();
+});
+
+test('clearing the last blocker moves the card from Blocked to Ready', () => {
+  const dependent = issue('bza-1', {
+    dependencies: [{ issue_id: 'bza-1', depends_on_id: 'bza-2', type: 'blocks', created_at: TS }],
+  });
+  const blocker = issue('bza-2');
+  const { rerender } = render(<BoardHarness issues={[dependent, blocker]} />);
+
+  expect(card('bza-1').closest('[data-column-id="blocked"]')).not.toBeNull();
+
+  // The journal closing the blocker arrives as a new issue list; the derived
+  // column changes without any user action.
+  rerender(<BoardHarness issues={[dependent, { ...blocker, status: 'closed' }]} />);
+
+  expect(card('bza-1').closest('[data-column-id="ready"]')).not.toBeNull();
+});
+
+test('a blocked-by target outside the current filter still keeps the card Blocked', () => {
+  const blocker = issue('bza-2', { labels: ['infra'] });
+  const dependent = issue('bza-1', {
+    labels: ['ui'],
+    dependencies: [{ issue_id: 'bza-1', depends_on_id: 'bza-2', type: 'blocks', created_at: TS }],
+  });
+  renderBoard({
+    issues: [blocker, dependent],
+    entry: '/w/p1/board?label=ui',
+  });
+
+  expect(within(column('blocked')).queryAllByRole('listitem')).toHaveLength(1);
+  expect(within(column('ready')).queryAllByRole('listitem')).toHaveLength(0);
 });
