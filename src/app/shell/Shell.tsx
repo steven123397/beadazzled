@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Outlet, useLocation, useNavigate } from 'react-router-dom';
+import { Outlet, useLocation, useNavigate, type NavigateOptions } from 'react-router-dom';
 
 import type { Issue } from '@/bindings/bd';
 import { HelpPanel } from '@/app/keyboard/HelpPanel';
@@ -10,6 +10,7 @@ import { buildCommands } from '@/app/palette/commands';
 import { useI18n } from '@/lib/i18n/I18nProvider';
 import { copyText, type CopyResult } from '@/lib/clipboard';
 import { formatDiagnostics } from '@/lib/diagnostics';
+import { confirmLeaveDraft } from '@/lib/draft-guard';
 import { loadSidebarCollapsed, saveSidebarCollapsed } from '@/lib/shell/layout';
 import { useTheme } from '@/lib/theme/ThemeProvider';
 
@@ -37,7 +38,17 @@ export function Shell({
   const { preference, setPreference } = useTheme();
   const { snapshot, bd, error, reload } = useWorkspaceContext();
   const syncState = useSyncState();
-  const navigate = useNavigate();
+  const routerNavigate = useNavigate();
+  // Every shell-initiated view change goes through the draft guard; links in
+  // the sidebar use the same helper on their own click handler.
+  const navigate = useCallback(
+    (path: string, options?: NavigateOptions) => {
+      if (confirmLeaveDraft()) {
+        routerNavigate(path, options);
+      }
+    },
+    [routerNavigate]
+  );
   const location = useLocation();
   const project = activeWorkspace(snapshot);
   const onIssueRoute = /^\/w\/[^/]+\/issue\//.test(location.pathname);

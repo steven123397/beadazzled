@@ -1,11 +1,19 @@
 import { NavLink } from 'react-router-dom';
 
 import type { WorkspaceEntry } from '@/bindings/bd';
+import { confirmLeaveDraft } from '@/lib/draft-guard';
 import { useI18n } from '@/lib/i18n/I18nProvider';
 
 const LINK_CLASS = 'flex items-center gap-2 rounded px-2 py-1.5 text-sm';
 const ACTIVE_CLASS = 'bg-muted text-foreground';
 const IDLE_CLASS = 'text-muted-foreground';
+
+/** Never unmount an open detail draft without asking first. */
+function guardDraft(event: React.MouseEvent<HTMLAnchorElement>): void {
+  if (!confirmLeaveDraft()) {
+    event.preventDefault();
+  }
+}
 
 type IconName = 'list' | 'board' | 'settings' | 'collapse' | 'expand';
 
@@ -83,6 +91,7 @@ export function Sidebar({
         <nav aria-label={t('shell.views')} className="space-y-0.5">
           <NavLink
             to={`/w/${project.projectId}/list`}
+            onClick={guardDraft}
             className={({ isActive }) => `${LINK_CLASS} ${isActive ? ACTIVE_CLASS : IDLE_CLASS}`}
             title={t('nav.list')}
           >
@@ -91,6 +100,7 @@ export function Sidebar({
           </NavLink>
           <NavLink
             to={`/w/${project.projectId}/board`}
+            onClick={guardDraft}
             className={({ isActive }) => `${LINK_CLASS} ${isActive ? ACTIVE_CLASS : IDLE_CLASS}`}
             title={t('nav.board')}
           >
@@ -102,6 +112,7 @@ export function Sidebar({
       <nav aria-label={t('shell.app')} className="mt-2 space-y-0.5 border-t border-border pt-2">
         <NavLink
           to="/settings"
+          onClick={guardDraft}
           className={({ isActive }) => `${LINK_CLASS} ${isActive ? ACTIVE_CLASS : IDLE_CLASS}`}
           title={t('nav.settings')}
         >

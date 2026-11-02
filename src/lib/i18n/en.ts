@@ -144,6 +144,7 @@ export const en = {
   'detail.edit.titleEmpty': 'The title cannot be empty.',
   'detail.edit.blockedByDependencies': 'Blocked by {ids}; resolve the dependency in the CLI first.',
   'detail.edit.updatedElsewhere': 'Updated elsewhere while you were editing; your draft is kept.',
+  'detail.edit.discard': 'Discard the unsaved draft?',
   'detail.write.unavailable': 'bd is not available; editing is disabled.',
   'detail.comment.placeholder': 'Write a comment…',
   'detail.comment.submit': 'Comment',

@@ -145,6 +145,7 @@ export const zhCN: Record<keyof typeof en, string> = {
   'detail.edit.titleEmpty': '标题不能为空。',
   'detail.edit.blockedByDependencies': '被 {ids} 阻塞；v0.1.0 需先在 CLI 解除依赖。',
   'detail.edit.updatedElsewhere': '编辑期间这条票已在别处更新，草稿已保留。',
+  'detail.edit.discard': '放弃未保存的草稿？',
   'detail.write.unavailable': 'bd 不可用，编辑已禁用。',
   'detail.comment.placeholder': '写一条评论…',
   'detail.comment.submit': '评论',

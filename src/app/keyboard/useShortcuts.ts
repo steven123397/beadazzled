@@ -19,6 +19,11 @@ export function useShortcuts(shortcuts: readonly Shortcut[], context: ShortcutCo
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent): void {
+      // A capture-phase handler (for example the detail editor cancelling a
+      // draft with Escape) gets the first say.
+      if (event.defaultPrevented) {
+        return;
+      }
       const options: ResolveOptions = {
         now: performance.now(),
         pending: pendingRef.current,

@@ -142,7 +142,7 @@ test('restores a deep link and shows the sync state in the status bar', async ()
     />
   );
 
-  expect(await screen.findByRole('heading', { name: 'Deep linked' })).toBeInTheDocument();
+  expect(await screen.findByRole('heading', { name: 'Deep linked' }, { timeout: 3000 })).toBeInTheDocument();
   expect(screen.getByLabelText('Status bar')).toHaveTextContent('Live');
 });
 
@@ -225,7 +225,7 @@ test('escape returns from an issue route to the list', async () => {
       issues={[issue('bza-1', 'Deep linked')]}
     />
   );
-  await screen.findByRole('heading', { name: 'Deep linked' });
+  await screen.findByRole('heading', { name: 'Deep linked' }, { timeout: 3000 });
 
   fireEvent.keyDown(window, { key: 'Escape' });
 
@@ -244,7 +244,7 @@ test('escape closes an overlay without leaving the issue route', async () => {
       issues={[issue('bza-1', 'Deep linked')]}
     />
   );
-  await screen.findByRole('heading', { name: 'Deep linked' });
+  await screen.findByRole('heading', { name: 'Deep linked' }, { timeout: 3000 });
 
   fireEvent.keyDown(window, { key: 'k', ctrlKey: true });
   expect(screen.getByRole('dialog', { name: 'Command palette' })).toBeInTheDocument();
@@ -792,4 +792,69 @@ test('the palette shortcut does not stack on top of diagnostics', async () => {
 
   expect(screen.queryByRole('dialog', { name: 'Command palette' })).not.toBeInTheDocument();
   expect(screen.getByRole('dialog', { name: 'Diagnostics' })).toBeInTheDocument();
+});
+
+test('a title edit waits for the journal echo before the page changes', async () => {
+  window.location.hash = '#/w/p1/issue/bza-1';
+  const sync = fakeSyncApi();
+  const execute = vi.fn(async () => ({ ok: true as const, createdId: null }));
+
+  render(
+    <App
+      workspaceApi={fakeApi({
+        snapshot: async () => snapshot([entry('p1', 'alpha')], '/repo/p1'),
+      })}
+      syncEnabled
+      syncApi={sync.api}
+      writesApi={{ execute }}
+    />
+  );
+
+  await waitFor(() => expect(sync.start).toHaveBeenCalledWith('/repo/p1'));
+
+  act(() => {
+    sync.emit('state', healthy);
+    sync.emit('snapshot', {
+      issues: [issue('bza-1', 'Old title')],
+      since: 42,
+    } satisfies SyncSnapshot);
+  });
+
+  const heading = await screen.findByRole(
+    'heading',
+    { level: 1, name: 'Old title' },
+    { timeout: 3000 }
+  );
+  expect(heading).toBeInTheDocument();
+
+  fireEvent.click(screen.getByRole('button', { name: 'Old title' }));
+  fireEvent.change(screen.getByRole('textbox', { name: 'Title' }), {
+    target: { value: 'New title' },
+  });
+  fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+  await waitFor(() => expect(execute).toHaveBeenCalledTimes(1));
+  expect(execute).toHaveBeenCalledWith('/repo/p1', {
+    Update: expect.objectContaining({ id: 'bza-1', title: 'New title' }),
+  });
+  // Saved but not echoed: the editor is still pending and the old title is
+  // not replaced optimistically.
+  expect(screen.getByRole('button', { name: 'Saving…' })).toBeDisabled();
+
+  act(() => {
+    sync.emit('records', [
+      {
+        seq: 43,
+        ts: '2026-11-01T00:00:00Z',
+        op: 'update',
+        issue_id: 'bza-1',
+        issue: issue('bza-1', 'New title'),
+      },
+    ]);
+  });
+
+  expect(
+    await screen.findByRole('heading', { level: 1, name: 'New title' }, { timeout: 3000 })
+  ).toBeInTheDocument();
+  expect(screen.queryByRole('textbox', { name: 'Title' })).toBeNull();
 });

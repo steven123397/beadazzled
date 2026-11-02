@@ -3,6 +3,7 @@ import { useLocation, useNavigate, useParams } from 'react-router-dom';
 
 import { isEditableTarget, isOverlayOpen } from '@/app/keyboard/resolve';
 import type { Issue } from '@/bindings/bd';
+import { confirmLeaveDraft, setDraftGuard } from '@/lib/draft-guard';
 import { useI18n } from '@/lib/i18n/I18nProvider';
 import { getIssue, indexIssues } from '@/lib/store/selectors';
 import { commentIssue, updateIssue, type UpdateInput } from '@/lib/writes/commands';
@@ -68,6 +69,38 @@ export function DetailView({
     setEditing(null);
   }, [writes]);
 
+  const requestBack = useCallback(() => {
+    if (!confirmLeaveDraft()) {
+      return;
+    }
+    onBack();
+  }, [onBack]);
+
+  // Shell navigation (sidebar, palette, workspace switch) consults the same
+  // guard before it unmounts this page.
+  useEffect(() => {
+    if (editing === null) {
+      setDraftGuard(null);
+      return undefined;
+    }
+    setDraftGuard(() => window.confirm(t('detail.edit.discard')));
+    return () => setDraftGuard(null);
+  }, [editing, t]);
+
+  // A browser reload or window close is the one navigation React Router
+  // cannot intercept; ask the platform to confirm while a draft is open.
+  useEffect(() => {
+    if (editing === null) {
+      return undefined;
+    }
+    const handler = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = '';
+    };
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
+  }, [editing]);
+
   // A ticket that was on screen and then vanished was deleted; one that never
   // appeared may simply still be deep-linked from another workspace.
   useEffect(() => {
@@ -87,11 +120,21 @@ export function DetailView({
   // Detail single-key shortcuts. Inputs and open overlays are excluded by the
   // same helpers the shell uses, so typing never triggers them.
   useEffect(() => {
-    if (issue === undefined || !canEdit || editing !== null) {
+    if (issue === undefined || !canEdit) {
       return undefined;
     }
     const handler = (event: KeyboardEvent) => {
       if (event.defaultPrevented || event.ctrlKey || event.metaKey || event.altKey) {
+        return;
+      }
+      if (editing !== null) {
+        // Escape leaves the editor instead of the page; the input itself also
+        // handles this when focused and stops propagation.
+        if (event.key === 'Escape') {
+          event.preventDefault();
+          event.stopPropagation();
+          cancelEdit();
+        }
         return;
       }
       if (isEditableTarget(event.target) || isOverlayOpen()) {
@@ -122,9 +165,9 @@ export function DetailView({
           break;
       }
     };
-    window.addEventListener('keydown', handler);
-    return () => window.removeEventListener('keydown', handler);
-  }, [beginEdit, canEdit, editing, issue]);
+    window.addEventListener('keydown', handler, true);
+    return () => window.removeEventListener('keydown', handler, true);
+  }, [beginEdit, canEdit, cancelEdit, editing, issue]);
 
   if (issue === undefined) {
     if (loading === true) {
@@ -143,7 +186,7 @@ export function DetailView({
           <button
             type="button"
             aria-label={t('detail.back')}
-            onClick={onBack}
+            onClick={requestBack}
             className="mt-3 rounded border border-border px-2 py-1 text-xs text-foreground hover:bg-muted"
           >
             ← {t('detail.back')}
@@ -156,7 +199,7 @@ export function DetailView({
         <button
           type="button"
           aria-label={t('detail.back')}
-          onClick={onBack}
+          onClick={requestBack}
           className="rounded border border-border px-2 py-1 text-xs text-foreground hover:bg-muted"
         >
           ← {t('detail.back')}
@@ -240,7 +283,7 @@ export function DetailView({
     <article className="mx-auto w-full max-w-[1100px] px-6 py-6">
       <Header
         issue={issue}
-        onBack={onBack}
+        onBack={requestBack}
         hideTitle={editing === 'title'}
         onEditTitle={canEdit ? () => beginEdit('title') : undefined}
       />
@@ -391,7 +434,12 @@ export function DetailRoute({
   }, [location.key, navigate, projectId]);
 
   const openIssue = useCallback(
-    (id: string) => navigate(`/w/${projectId}/issue/${encodeURIComponent(id)}`),
+    (id: string) => {
+      if (!confirmLeaveDraft()) {
+        return;
+      }
+      navigate(`/w/${projectId}/issue/${encodeURIComponent(id)}`);
+    },
     [navigate, projectId]
   );
 

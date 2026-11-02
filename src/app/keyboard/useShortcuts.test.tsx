@@ -33,6 +33,23 @@ test('runs a registered shortcut on keydown', () => {
   expect(run).toHaveBeenCalledTimes(1);
 });
 
+test('does not run a shortcut after another handler claimed the key', () => {
+  const run = vi.fn();
+  render(
+    <Harness
+      shortcuts={[{ id: 'help', keys: '?', labelKey: 'shortcut.help', group: 'Help', run }]}
+      ctx={context()}
+    />
+  );
+
+  const capture = (event: KeyboardEvent) => event.preventDefault();
+  window.addEventListener('keydown', capture, true);
+  fireEvent.keyDown(window, { key: '?' });
+  window.removeEventListener('keydown', capture, true);
+
+  expect(run).not.toHaveBeenCalled();
+});
+
 test('does not run a single-key shortcut while an input has focus', () => {
   const run = vi.fn();
   render(

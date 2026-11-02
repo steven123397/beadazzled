@@ -370,3 +370,66 @@ test('detail single-key shortcuts open editors and focus controls', () => {
   fireEvent.keyDown(window, { key: 'p' });
   expect(screen.getByRole('combobox', { name: 'Priority' })).toHaveFocus();
 });
+test('a saved title stays old until the journal echo updates the store', async () => {
+  const writes = fakeWrites();
+  const target = issue('bza-b', { title: 'Old title' });
+  const { rerender } = render(
+    <I18nProvider initialLanguage="en">
+      <DetailView issueId="bza-b" issues={[target]} onBack={vi.fn()} writes={writes} />
+    </I18nProvider>
+  );
+
+  fireEvent.click(screen.getByRole('button', { name: 'Old title' }));
+  fireEvent.change(screen.getByRole('textbox', { name: 'Title' }), {
+    target: { value: 'New title' },
+  });
+  fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+  await vi.waitFor(() =>
+    expect(screen.queryByRole('textbox', { name: 'Title' })).toBeNull()
+  );
+  expect(screen.getByRole('heading', { level: 1, name: 'Old title' })).toBeInTheDocument();
+
+  rerender(
+    <I18nProvider initialLanguage="en">
+      <DetailView
+        issueId="bza-b"
+        issues={[issue('bza-b', { title: 'New title', updated_at: '2026-11-02T00:00:00Z' })]}
+        onBack={vi.fn()}
+        writes={writes}
+      />
+    </I18nProvider>
+  );
+
+  expect(screen.getByRole('heading', { level: 1, name: 'New title' })).toBeInTheDocument();
+});
+
+test('leaving with an open draft asks before discarding it', () => {
+  const writes = fakeWrites();
+  const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+  const { onBack } = renderDetail(issue('bza-b', { title: 'Old title' }), undefined, writes);
+
+  fireEvent.click(screen.getByRole('button', { name: 'Old title' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Back to list' }));
+
+  expect(confirm).toHaveBeenCalledWith('Discard the unsaved draft?');
+  expect(onBack).not.toHaveBeenCalled();
+
+  confirm.mockReturnValue(true);
+  fireEvent.click(screen.getByRole('button', { name: 'Back to list' }));
+
+  expect(onBack).toHaveBeenCalledTimes(1);
+  confirm.mockRestore();
+});
+
+test('escape outside the input cancels the draft instead of leaving the page', () => {
+  const { onBack } = renderDetail(issue('bza-b'), undefined, fakeWrites());
+
+  fireEvent.keyDown(window, { key: 'e' });
+  expect(screen.getByRole('textbox', { name: 'Title' })).toBeInTheDocument();
+
+  fireEvent.keyDown(window, { key: 'Escape' });
+
+  expect(screen.queryByRole('textbox', { name: 'Title' })).toBeNull();
+  expect(onBack).not.toHaveBeenCalled();
+});
