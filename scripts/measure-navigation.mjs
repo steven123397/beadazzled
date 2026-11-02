@@ -16,6 +16,15 @@
  * call bd; a non-empty invoke log is a hard failure, while an over-budget
  * sample is reported as OVER (measurement-only, like the startup budgets).
  *
+ * The 64 KiB body is judged twice, and the output labels both:
+ * - first render (AC10): the first open of the long ticket in each fresh page,
+ *   i.e. the cost a person actually pays the first time, JIT included;
+ * - steady state: the same body reopened after that warm-up, which is what the
+ *   renderer costs once nothing else is compiling.
+ * AC10's ≤100ms budget is applied to the first-render p50; the steady-state
+ * figure is reported against the same number as a reference, not as the
+ * criterion.
+ *
  * Usage: npm run measure:navigation -- [--runs=5] [--json]
  */
 import { spawn, spawnSync } from 'node:child_process';
@@ -29,7 +38,7 @@ import { chromium } from '@playwright/test';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const outDir = path.join(root, 'dist-e2e');
 const viteBin = path.join(root, 'node_modules', 'vite', 'bin', 'vite.js');
-const budgets = { openP95: 50, markdownP50: 100 };
+const budgets = { openP95: 50, markdownFirstRenderP50: 100, markdownSteadyStateP50: 100 };
 const TS = '2026-11-01T00:00:00Z';
 const SENTINEL = '64KIB-SENTINEL';
 let port = 1432;
@@ -358,32 +367,44 @@ async function main() {
     }
 
     const open = summary(runs.flatMap((entry) => entry.openSamples));
-    const markdown = summary(runs.flatMap((entry) => entry.markdownSamples));
-    const coldMarkdown = summary(runs.map((entry) => entry.coldMarkdown));
+    const steadyState = summary(runs.flatMap((entry) => entry.markdownSamples));
+    const firstRender = summary(runs.map((entry) => entry.coldMarkdown));
     const ipcCalls = runs.flatMap((entry) => entry.ipcCalls);
+    const verdict = {
+      open: open.p95 <= budgets.openP95 ? 'PASS' : 'OVER',
+      firstRender: firstRender.p50 <= budgets.markdownFirstRenderP50 ? 'PASS' : 'OVER',
+      steadyState: steadyState.p50 <= budgets.markdownSteadyStateP50 ? 'PASS' : 'OVER',
+    };
     const result = {
       measuredAt: new Date().toISOString(),
       fixture: { issues: 1000, markdownBytes: 64 * 1024 },
       method: 'click -> first animation frame after the detail content is painted',
       budgets,
+      criteria: {
+        open: 'P95 of opening a ticket from the list',
+        firstRender: 'P50 of the first 64 KiB render in a fresh page (AC10)',
+        steadyState: 'P50 of reopening the 64 KiB body after its warm-up (reference)',
+      },
       runs: runs.map((entry) => ({
         run: entry.run,
         open: entry.openSamples.map(round),
-        coldMarkdown: round(entry.coldMarkdown),
-        markdown: entry.markdownSamples.map(round),
+        firstRender: round(entry.coldMarkdown),
+        steadyState: entry.markdownSamples.map(round),
       })),
       open: { ...open, p50: round(open.p50), p95: round(open.p95), max: round(open.max) },
-      markdown: {
-        ...markdown,
-        p50: round(markdown.p50),
-        p95: round(markdown.p95),
-        max: round(markdown.max),
+      firstRender: {
+        ...firstRender,
+        p50: round(firstRender.p50),
+        p95: round(firstRender.p95),
+        max: round(firstRender.max),
       },
-      coldMarkdown: {
-        ...coldMarkdown,
-        p50: round(coldMarkdown.p50),
-        max: round(coldMarkdown.max),
+      steadyState: {
+        ...steadyState,
+        p50: round(steadyState.p50),
+        p95: round(steadyState.p95),
+        max: round(steadyState.max),
       },
+      verdict,
       ipcCalls,
       passed: ipcCalls.length === 0,
     };
@@ -395,27 +416,29 @@ async function main() {
       for (const run of result.runs) {
         console.log(
           `  run ${run.run}: open ${run.open.map((value) => value.toFixed(1)).join(', ')}ms; ` +
-            `64 KiB cold ${run.coldMarkdown.toFixed(1)}ms, warm ${run.markdown
-              .map((value) => value.toFixed(1))
-              .join(', ')}ms`
+            `64 KiB first render ${run.firstRender.toFixed(1)}ms, ` +
+            `steady state ${run.steadyState.map((value) => value.toFixed(1)).join(', ')}ms`
         );
       }
       console.log(
         `  open: n=${open.count} p50=${result.open.p50.toFixed(1)}ms ` +
           `p95=${result.open.p95.toFixed(1)}ms max=${result.open.max.toFixed(
             1
-          )}ms budget=${budgets.openP95}ms ${open.p95 <= budgets.openP95 ? 'PASS' : 'OVER'}`
+          )}ms budget=${budgets.openP95}ms (p95) ${verdict.open}`
       );
       console.log(
-        `  64 KiB markdown (warm): n=${markdown.count} p50=${result.markdown.p50.toFixed(1)}ms ` +
-          `p95=${result.markdown.p95.toFixed(1)}ms max=${result.markdown.max.toFixed(
-            1
-          )}ms budget=${budgets.markdownP50}ms (p50) ${
-            markdown.p50 <= budgets.markdownP50 ? 'PASS' : 'OVER'
-          }`
+        `  64 KiB first render (AC10): n=${firstRender.count} p50=${result.firstRender.p50.toFixed(
+          1
+        )}ms p95=${result.firstRender.p95.toFixed(1)}ms max=${result.firstRender.max.toFixed(
+          1
+        )}ms budget=${budgets.markdownFirstRenderP50}ms (p50) ${verdict.firstRender}`
       );
       console.log(
-        `  64 KiB markdown (first open): p50=${result.coldMarkdown.p50.toFixed(1)}ms max=${result.coldMarkdown.max.toFixed(1)}ms`
+        `  64 KiB steady state: n=${steadyState.count} p50=${result.steadyState.p50.toFixed(
+          1
+        )}ms p95=${result.steadyState.p95.toFixed(1)}ms max=${result.steadyState.max.toFixed(
+          1
+        )}ms budget=${budgets.markdownSteadyStateP50}ms (p50, reference) ${verdict.steadyState}`
       );
       console.log(
         `  bd calls while opening: ${ipcCalls.length === 0 ? '0 (PASS)' : ipcCalls.join(', ')}`
