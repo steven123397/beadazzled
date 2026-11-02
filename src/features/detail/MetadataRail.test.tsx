@@ -180,6 +180,46 @@ test('reopen submits the reopen command for a closed ticket', async () => {
   expect(submitted(writes)[0]).toEqual({ Reopen: { id: 'bza-b' } });
 });
 
+test('a failed status write reports the error and leaves the control usable', async () => {
+  const writes = fakeWrites({
+    submit: vi.fn(async () => ({
+      status: 'failed' as const,
+      error: { code: 'BD_LOCKED' as const, message: 'the database is busy' },
+    })),
+  });
+  renderRail(issue('bza-b'), undefined, writes);
+
+  const status = screen.getByRole('combobox', { name: 'Status' });
+  fireEvent.change(status, { target: { value: 'in_progress' } });
+
+  expect(await screen.findByRole('alert')).toHaveTextContent(
+    'The beads database is busy; try again in a moment.'
+  );
+  expect(status).toBeEnabled();
+
+  fireEvent.change(status, { target: { value: 'deferred' } });
+  await vi.waitFor(() => expect(writes.submit).toHaveBeenCalledTimes(2));
+});
+
+test('a conflict while adding a label keeps the typed label', async () => {
+  const writes = fakeWrites({
+    submit: vi.fn(async () => ({
+      status: 'conflict' as const,
+      error: { code: 'WRITE_CONFLICT' as const, message: 'stale snapshot' },
+    })),
+  });
+  renderRail(issue('bza-b'), undefined, writes);
+
+  const input = screen.getByRole('textbox', { name: 'New label' });
+  fireEvent.change(input, { target: { value: 'backend' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Add' }));
+
+  expect(await screen.findByRole('alert')).toHaveTextContent(
+    'This issue changed elsewhere; refreshing the view.'
+  );
+  expect(input).toHaveValue('backend');
+});
+
 test('pending writes disable every metadata control', () => {
   const writes = fakeWrites({ isPending: () => true, pending: ['bza-b'] });
   renderRail(issue('bza-b', { assignee: 'ada', labels: ['ui'] }), undefined, writes);

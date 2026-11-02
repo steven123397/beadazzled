@@ -3,6 +3,7 @@ import { expect, test, vi } from 'vitest';
 
 import type { Comment, Dependency, Issue } from '@/bindings/bd';
 import { I18nProvider } from '@/lib/i18n/I18nProvider';
+import { MAX_ACCEPTANCE_BYTES } from '@/lib/writes/commands';
 import type { UseWrite } from '@/lib/writes/useWrite';
 
 import { DetailView } from './DetailView';
@@ -542,6 +543,56 @@ test('a half-typed label asks before the page is left', () => {
   expect(onBack).not.toHaveBeenCalled();
 
   confirm.mockRestore();
+});
+
+test('a failed comment shows the error and keeps the text', async () => {
+  const writes = fakeWrites({
+    submit: vi.fn(async () => ({
+      status: 'failed' as const,
+      error: { code: 'BD_TIMEOUT' as const, message: 'bd hung' },
+    })),
+  });
+  renderDetail(issue('bza-b'), undefined, writes);
+
+  const composer = screen.getByRole('textbox', { name: 'Write a comment…' });
+  fireEvent.change(composer, { target: { value: 'Do not lose me' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Comment' }));
+
+  expect(await screen.findByRole('alert')).toHaveTextContent('Saving timed out');
+  expect(composer).toHaveValue('Do not lose me');
+  expect(screen.getByRole('button', { name: 'Comment' })).toBeEnabled();
+});
+
+test('an acceptance draft over the 16 KiB limit is rejected before any write', () => {
+  const writes = fakeWrites();
+  const tooLong = 'x'.repeat(MAX_ACCEPTANCE_BYTES + 1);
+  renderDetail(issue('bza-b', { acceptance_criteria: 'Old acceptance' }), undefined, writes);
+
+  const acceptance = screen.getByRole('region', { name: 'Acceptance criteria' });
+  fireEvent.click(within(acceptance).getByRole('button', { name: 'Edit' }));
+  fireEvent.change(screen.getByRole('textbox', { name: 'Acceptance criteria' }), {
+    target: { value: tooLong },
+  });
+  fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+  expect(screen.getByRole('alert')).toHaveTextContent(`${MAX_ACCEPTANCE_BYTES} bytes`);
+  expect(writes.submit).not.toHaveBeenCalled();
+  expect(screen.getByRole('textbox', { name: 'Acceptance criteria' })).toHaveValue(tooLong);
+});
+
+test('an acceptance draft exactly at the limit is submitted', async () => {
+  const writes = fakeWrites();
+  renderDetail(issue('bza-b', { acceptance_criteria: 'Old acceptance' }), undefined, writes);
+
+  const acceptance = screen.getByRole('region', { name: 'Acceptance criteria' });
+  fireEvent.click(within(acceptance).getByRole('button', { name: 'Edit' }));
+  fireEvent.change(screen.getByRole('textbox', { name: 'Acceptance criteria' }), {
+    target: { value: 'x'.repeat(MAX_ACCEPTANCE_BYTES) },
+  });
+  fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+  await vi.waitFor(() => expect(writes.submit).toHaveBeenCalledTimes(1));
+  expect(screen.queryByRole('alert')).toBeNull();
 });
 
 test('a write that misses its echo says the view was refreshed', async () => {
