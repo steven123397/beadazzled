@@ -161,12 +161,15 @@ export const Card = memo(function Card({
       onClick={() => onOpen(issue)}
       onFocus={() => onFocus(issue.id)}
       onPointerDown={listeners?.onPointerDown as PointerEventHandler<HTMLDivElement> | undefined}
-      className={`absolute left-0 top-0 w-full cursor-grab rounded-md border bg-card p-2 text-xs shadow-xs transition-colors ${
+      className={`absolute left-0 w-full cursor-grab rounded-md border bg-card p-2 text-xs shadow-xs transition-colors ${
         focused
           ? 'border-ring bg-selected text-selected-foreground'
           : 'border-border hover:bg-hover'
       } ${pending ? 'opacity-70' : ''} ${isDragging ? 'opacity-30' : ''}`}
-      style={{ height: 'var(--card-height)', transform: `translateY(${start}px)` }}
+      // Position with `top` rather than a translate: dnd-kit measures the
+      // draggable rect with transforms ignored, and a translate would make it
+      // think every virtualized card sits at the top of its column.
+      style={{ height: 'var(--card-height)', top: start }}
     >
       <CardBody
         card={card}

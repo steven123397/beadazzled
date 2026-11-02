@@ -28,6 +28,9 @@ const FIXTURE = [
   issue('bza-3', { status: 'blocked' }),
 ];
 
+/** Enough cards that the dragged one is not the first virtual row. */
+const MANY = Array.from({ length: 13 }, (_, index) => issue(`bza-${index}`));
+
 function thousandIssues() {
   return Array.from({ length: 1000 }, (_, index) =>
     issue(`bza-${index}`, {
@@ -127,6 +130,32 @@ test('the drag handle activates the keyboard sensor', async ({ page }) => {
     'data-dragging',
     'true'
   );
+});
+
+test('the drag overlay starts at the grabbed card and follows the pointer', async ({ page }) => {
+  await openBoard(page, MANY);
+  const card = page.locator('[data-issue-id="bza-2"]');
+  const source = await card.boundingBox();
+  if (source === null) {
+    throw new Error('missing card geometry');
+  }
+
+  const startX = source.x + 40;
+  const startY = source.y + 20;
+  await page.mouse.move(startX, startY);
+  await page.mouse.down();
+  await page.mouse.move(startX + 120, startY + 180, { steps: 10 });
+  await page.waitForTimeout(100);
+
+  const overlay = await page.getByTestId('board-drag-overlay').boundingBox();
+  expect(overlay).not.toBeNull();
+  // The virtualized card is positioned with `top`, not a translate, so dnd-kit
+  // measures its real rect. A regression here puts the overlay at the column
+  // top instead of under the grabbed card.
+  expect(Math.abs((overlay?.x ?? 0) - (source.x + 120))).toBeLessThan(15);
+  expect(Math.abs((overlay?.y ?? 0) - (source.y + 180))).toBeLessThan(20);
+
+  await page.mouse.up();
 });
 
 test('a 1000-card board virtualizes and calls no bd while scrolling or filtering', async ({

@@ -11,7 +11,11 @@ export function BoardDragOverlay({ card }: { card: BoardCard | null }) {
   return (
     <DragOverlay dropAnimation={null}>
       {card === null ? null : (
-        <div className="w-72 rotate-1 rounded-md border border-border bg-card p-2 text-xs opacity-95 shadow-md">
+        <div
+          data-testid="board-drag-overlay"
+          className="w-72 rotate-1 rounded-md border border-border bg-card p-2 text-xs opacity-95 shadow-md"
+          style={{ height: 'var(--card-height)' }}
+        >
           <CardBody card={card} />
         </div>
       )}
