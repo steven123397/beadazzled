@@ -26,7 +26,7 @@
 
 ## 复测结果（2026-11-02，修复审查发现后）
 
-- 单测：527 passed（board 75 条）
+- 单测：530 passed（board 78 条）
 - E2E：40 passed（board 10 条，含 1000 卡片、真实指针拖动、筛选控件 Enter 与详情返回位置恢复）
 - `measure:scroll --view=board`：board-steady p50 16.7ms / p95 18.9ms；
   board-fling p50 16.6ms / p95 18.8ms，均 PASS

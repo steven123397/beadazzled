@@ -83,6 +83,7 @@ export function columnOf(issue: Issue, blockers: string[]): ColumnId {
    - 被拒绝：卡片不动、无 bd 调用、提示列出阻塞票。
 5. **不做乐观移动**：卡片停留在原列并显示 pending 标记，直到 journal 回声到达后才移动。
 6. 失败：卡片不动，显示错误；冲突（exit 13）提示「已在别处修改」并刷新。
+   回声超时或 journal 禁用同样视为未确认：停止后续命令、提示并刷新，不播报成功。
 7. pending 期间该卡片不可再次拖动。
 
 依赖被清除（journal 更新）后，卡片按派生规则自动从 Blocked 移到 Ready，无需用户操作。

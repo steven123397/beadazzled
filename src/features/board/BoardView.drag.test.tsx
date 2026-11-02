@@ -83,7 +83,7 @@ function fakeWrites(overrides: Partial<UseWrite> = {}): UseWrite {
     canWrite: true,
     disabledReason: null,
     isPending: () => false,
-    submit: vi.fn(async () => ({ status: 'ok' as const })),
+    submit: vi.fn(async () => ({ status: 'ok' as const, echo: 'echoed' as const })),
     clearError: vi.fn(),
     ...overrides,
   };

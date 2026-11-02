@@ -71,7 +71,10 @@ export function Column({
   const virtualItems = virtualizer.getVirtualItems();
 
   // Restore the offset captured before the board unmounted. An empty column
-  // renders no scroll container, so wait until one exists before giving up.
+  // renders no scroll container, so wait until one exists. Apply after the
+  // virtualizer's layout pass; if the list is still too short for the saved
+  // offset the browser clamps it and the flag stays unset, so the next data
+  // change retries.
   const restoredRef = useRef(false);
   useLayoutEffect(() => {
     if (restoredRef.current) {
@@ -81,13 +84,22 @@ export function Column({
     if (element === null) {
       return;
     }
-    restoredRef.current = true;
-    if (initialScrollTop === undefined || initialScrollTop <= 0) {
+    const offset = initialScrollTop ?? 0;
+    if (offset <= 0) {
+      restoredRef.current = true;
       return;
     }
-    element.scrollTop = initialScrollTop;
-    virtualizer.scrollToOffset(initialScrollTop);
-    onScrollTop?.(column.id, initialScrollTop);
+    const frame = requestAnimationFrame(() => {
+      if (!element.isConnected) {
+        return;
+      }
+      element.scrollTop = offset;
+      virtualizer.scrollToOffset(offset);
+      const applied = element.scrollTop;
+      onScrollTop?.(column.id, applied);
+      restoredRef.current = applied > 0;
+    });
+    return () => cancelAnimationFrame(frame);
   }, [column.cards.length, column.id, initialScrollTop, onScrollTop, virtualizer]);
 
   // Only an explicit keyboard focus request scrolls and focuses; a filter

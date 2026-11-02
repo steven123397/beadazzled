@@ -33,6 +33,7 @@ export const en = {
   'board.card.drag': 'Drag {id}',
   'board.move.pending': 'Saving {id}…',
   'board.move.moved': 'Moved {id} to {column}',
+  'board.move.unconfirmed': 'Move {id} was sent but not confirmed; the board is refreshing.',
   'board.move.blockedColumn':
     'Blocked cards cannot move out of this column. Resolve the dependency in the CLI.',
   'board.move.notDroppable': 'This column does not accept drops.',

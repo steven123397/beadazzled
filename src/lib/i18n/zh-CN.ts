@@ -35,6 +35,7 @@ export const zhCN: Record<keyof typeof en, string> = {
   'board.card.drag': '拖动 {id}',
   'board.move.pending': '正在保存 {id}…',
   'board.move.moved': '已将 {id} 移到{column}',
+  'board.move.unconfirmed': '移动 {id} 已提交但未确认；看板正在刷新。',
   'board.move.blockedColumn': 'Blocked 列不可移动；依赖需在 CLI 解除。',
   'board.move.notDroppable': '该列不接受投放。',
   'board.move.readyBlocked': '无法移到 Ready：仍被 {ids} 阻塞。',

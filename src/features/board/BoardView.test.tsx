@@ -71,7 +71,7 @@ function fakeWrites(overrides: Partial<UseWrite> = {}): UseWrite {
     canWrite: true,
     disabledReason: null,
     isPending: () => false,
-    submit: vi.fn(async () => ({ status: 'ok' as const })),
+    submit: vi.fn(async () => ({ status: 'ok' as const, echo: 'echoed' as const })),
     clearError: vi.fn(),
     ...overrides,
   };
@@ -299,10 +299,10 @@ test('Shift+Right produces the same command sequence as a drag', async () => {
 });
 
 test('a move is not optimistic: the card stays put with a pending marker', async () => {
-  let settle!: (result: { status: 'ok' }) => void;
+  let settle!: (result: { status: 'ok'; echo: 'echoed' }) => void;
   const submit = vi.fn(
     () =>
-      new Promise<{ status: 'ok' }>((resolve) => {
+      new Promise<{ status: 'ok'; echo: 'echoed' }>((resolve) => {
         settle = resolve;
       })
   );
@@ -319,7 +319,7 @@ test('a move is not optimistic: the card stays put with a pending marker', async
     'true'
   );
 
-  await act(async () => settle({ status: 'ok' }));
+  await act(async () => settle({ status: 'ok', echo: 'echoed' }));
   await waitFor(() => expect(card('bza-1')).not.toHaveAttribute('data-pending'));
 });
 
@@ -391,7 +391,7 @@ test('a Done card reopens before taking the target status', async () => {
 test('a failure in the second command stops the sequence and is reported once', async () => {
   const submit = vi
     .fn()
-    .mockResolvedValueOnce({ status: 'ok' as const })
+    .mockResolvedValueOnce({ status: 'ok' as const, echo: 'echoed' as const })
     .mockResolvedValueOnce({
       status: 'conflict' as const,
       error: { code: 'WRITE_CONFLICT' as const, message: '' },
@@ -408,6 +408,23 @@ test('a failure in the second command stops the sequence and is reported once', 
   );
   expect(submit).toHaveBeenCalledTimes(2);
   expect(card('bza-1').closest('[data-column-id="done"]')).not.toBeNull();
+});
+
+test('an echo timeout is reported and stops a two-command move', async () => {
+  const submit = vi.fn(async () => ({ status: 'ok' as const, echo: 'timeout' as const }));
+  const writes = fakeWrites({ submit: submit as UseWrite['submit'] });
+  renderBoard({ issues: [issue('bza-1', { status: 'closed' })], writes });
+
+  // Done -> In Progress: the reopen is not confirmed, so the guarded update
+  // must never be sent and the move must not be announced as done.
+  fireEvent.keyDown(window, { key: 'ArrowLeft', shiftKey: true });
+
+  await waitFor(() =>
+    expect(screen.getByRole('alert')).toHaveTextContent('was sent but not confirmed')
+  );
+  expect(submit).toHaveBeenCalledTimes(1);
+  expect(card('bza-1').closest('[data-column-id="done"]')).not.toBeNull();
+  expect(screen.queryByText(/^Moved /)).not.toBeInTheDocument();
 });
 
 test('without a write flow a move is refused visibly and never reaches bd', () => {
@@ -471,6 +488,31 @@ test('Enter on Clear keeps the control native and does not open a card', () => {
   expect(screen.getByTestId('location')).not.toHaveTextContent('/issue/');
 });
 
+test('Shift+Arrow on a filter control does not move a card', () => {
+  const writes = fakeWrites();
+  renderBoard({ issues: [issue('bza-1')], writes });
+  const summary = document.querySelector<HTMLElement>('details[aria-label="Priority"] summary');
+  expect(summary).not.toBeNull();
+  summary?.focus();
+
+  fireEvent.keyDown(summary!, { key: 'ArrowRight', shiftKey: true });
+
+  expect(writes.submit).not.toHaveBeenCalled();
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+});
+
+test('a stale focused card is replaced so the board stays tabbable', async () => {
+  const { rerender } = render(<BoardHarness issues={[issue('bza-1'), issue('bza-2')]} />);
+
+  fireEvent.keyDown(window, { key: 'j' });
+  await waitFor(() => expect(card('bza-2')).toHaveAttribute('data-focused', 'true'));
+
+  rerender(<BoardHarness issues={[issue('bza-1')]} />);
+
+  await waitFor(() => expect(card('bza-1')).toHaveAttribute('data-focused', 'true'));
+  expect(card('bza-1')).toHaveAttribute('tabindex', '0');
+});
+
 test('clearing board filters keeps the hidden status parameter', () => {
   renderBoard({
     issues: [issue('bza-1'), issue('bza-2', { status: 'closed' })],
@@ -484,10 +526,10 @@ test('clearing board filters keeps the hidden status parameter', () => {
 });
 
 test('a second move is ignored while the first is still pending', async () => {
-  let settle!: (result: { status: 'ok' }) => void;
+  let settle!: (result: { status: 'ok'; echo: 'echoed' }) => void;
   const submit = vi.fn(
     () =>
-      new Promise<{ status: 'ok' }>((resolve) => {
+      new Promise<{ status: 'ok'; echo: 'echoed' }>((resolve) => {
         settle = resolve;
       })
   );
@@ -500,7 +542,7 @@ test('a second move is ignored while the first is still pending', async () => {
   fireEvent.keyDown(window, { key: 'ArrowRight', shiftKey: true });
   expect(submit).toHaveBeenCalledTimes(1);
 
-  await act(async () => settle({ status: 'ok' }));
+  await act(async () => settle({ status: 'ok', echo: 'echoed' }));
 });
 
 test('a card with a write in flight from elsewhere refuses a move', () => {

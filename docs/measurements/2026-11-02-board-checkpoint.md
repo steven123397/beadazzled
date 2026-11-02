@@ -41,7 +41,7 @@ npm run e2e
 
 | 项目 | 结果 |
 |---|---|
-| 单测 | 527 passed（board 75） |
+| 单测 | 530 passed（board 78） |
 | E2E | 40 passed（board 10） |
 | 滚动 | `measure:scroll --view=board` p50 16.6–16.7ms / p95 18.8–18.9ms，PASS |
 | axe | Board 路由 0 serious/critical |

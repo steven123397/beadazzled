@@ -193,16 +193,18 @@ export function BoardView({
     [projectId]
   );
 
-  // Keep one card tabbable even before the first H/L/J/K press.
+  // Keep exactly one card tabbable, and drop a ghost id: a focused card that
+  // was filtered out, closed elsewhere or restored from an earlier visit would
+  // otherwise leave every card at tabIndex -1 and make Tab skip the board.
   useEffect(() => {
-    if (focusedId !== null) {
+    if (focusedId !== null && layout.cards.has(focusedId)) {
       return;
     }
     const first = firstCardId(board.columns);
-    if (first !== null) {
+    if (first !== focusedId) {
       setFocusedId(first);
     }
-  }, [board, focusedId]);
+  }, [board.columns, focusedId, layout]);
 
   const requestFocus = useCallback((id: string) => {
     setFocusedId(id);
@@ -265,6 +267,13 @@ export function BoardView({
             });
             if (outcome.status !== 'ok') {
               failure = describeError(outcome.error).message;
+              break;
+            }
+            // A write can succeed and still miss its journal echo. Do not
+            // announce the move or continue a two-command sequence as if the
+            // store already reflected the first one.
+            if (outcome.echo !== 'echoed') {
+              failure = t('board.move.unconfirmed', { id: issue.id });
               break;
             }
           }
@@ -351,6 +360,11 @@ export function BoardView({
       }
 
       if (event.shiftKey && (event.key === 'ArrowLeft' || event.key === 'ArrowRight')) {
+        // A move is a write: only start one when focus is on the board itself,
+        // not on a filter control or the sidebar.
+        if (!isBoardTarget(event.target)) {
+          return;
+        }
         const current = focusedCard(board.columns, focusedId);
         if (current === null) {
           return;
