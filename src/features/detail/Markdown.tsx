@@ -73,7 +73,10 @@ export const Markdown = memo(function Markdown({
         // Remote images are never fetched: no <img> element reaches the DOM.
         // The address stays available as a link the user can open deliberately.
         const address = typeof src === 'string' ? src : '';
-        const label = alt === undefined || alt === '' ? 'Image' : `Image: ${alt}`;
+        const label =
+          alt === undefined || alt === ''
+            ? t('markdown.image')
+            : t('markdown.imageWithAlt', { alt });
         return (
           <span className="inline-flex max-w-full items-baseline gap-1 rounded border border-border bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
             <span>{label}</span>

@@ -2,7 +2,7 @@ import type { Issue } from '@/bindings/bd';
 import { useI18n } from '@/lib/i18n/I18nProvider';
 import { getBlockedBy, getBlocks, type IssueIndex, type IssueRef } from '@/lib/store/selectors';
 
-import { statusText } from '@/features/list/status';
+import { statusText } from '@/lib/status';
 
 export function Dependencies({
   issue,

@@ -57,8 +57,18 @@ test('a deduplicated caller gets the journal position read at dispatch', async (
   let seq = 3;
   const queue = createWriteQueue(async () => success);
 
-  const first = queue.submit('same', 'ws', () => reopen('x'), () => seq);
-  const second = queue.submit('same', 'ws', () => reopen('x'), () => seq);
+  const first = queue.submit(
+    'same',
+    'ws',
+    () => reopen('x'),
+    () => seq
+  );
+  const second = queue.submit(
+    'same',
+    'ws',
+    () => reopen('x'),
+    () => seq
+  );
   // Both are still queued: the position is read once, when the shared write
   // is dispatched.
   seq = 7;
@@ -121,7 +131,10 @@ test('a timeout fails once and is never retried', async () => {
 
   const result = await queue.submit('timeout', 'ws', () => reopen('x'));
 
-  expect(result).toEqual({ status: 'failed', error: { code: 'BD_TIMEOUT', message: 'BD_TIMEOUT' } });
+  expect(result).toEqual({
+    status: 'failed',
+    error: { code: 'BD_TIMEOUT', message: 'BD_TIMEOUT' },
+  });
   expect(calls).toBe(1);
 });
 

@@ -32,7 +32,11 @@ function flow(
           const error: BridgeError = { code: 'BD_EXIT_NONZERO', message: 'nope' };
           return { status: 'failed', error };
         }
-        return { status: 'ok', createdId: issueId, ...(seq === undefined ? {} : { afterSeq: seq }) };
+        return {
+          status: 'ok',
+          createdId: issueId,
+          ...(seq === undefined ? {} : { afterSeq: seq }),
+        };
       },
       pendingCount: () => 0,
     },

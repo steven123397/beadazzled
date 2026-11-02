@@ -2,7 +2,7 @@ import { useEffect, useState, type KeyboardEvent } from 'react';
 
 import type { Comment } from '@/bindings/bd';
 import { useI18n } from '@/lib/i18n/I18nProvider';
-import { formatAbsoluteTime, formatRelativeTime } from '@/lib/time';
+import { formatAbsoluteTime, formatRelativeTime, timeOrder } from '@/lib/time';
 
 export type CommentsProps = {
   comments?: readonly Comment[];
@@ -27,7 +27,7 @@ export function Comments({
   const [draft, setDraft] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const ordered = [...(comments ?? [])].sort(
-    (left, right) => Date.parse(left.created_at) - Date.parse(right.created_at)
+    (left, right) => timeOrder(left.created_at) - timeOrder(right.created_at)
   );
   const busy = pending || submitting;
   const canSubmit = !busy && !disabled && draft.trim() !== '';

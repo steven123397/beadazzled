@@ -9,7 +9,7 @@ import { closeIssue, reopenIssue, updateIssue, type UpdateInput } from '@/lib/wr
 import { blockingDeps, canChangeStatus } from '@/lib/writes/guard';
 import type { UseWrite } from '@/lib/writes/useWrite';
 
-import { STATUS_ORDER, statusText } from '@/features/list/status';
+import { STATUS_ORDER, statusText } from '@/lib/status';
 import type { DraftField } from './changes';
 import { Dependencies } from './Dependencies';
 import { Editor } from './Editor';
@@ -262,9 +262,9 @@ export function MetadataRail({
             {issue.labels.length === 0 ? (
               <span className="text-muted-foreground">{t('detail.metadata.none')}</span>
             ) : (
-              issue.labels.map((label) => (
+              issue.labels.map((label, position) => (
                 <span
-                  key={label}
+                  key={`${label}:${position}`}
                   className="inline-flex items-center gap-1 rounded bg-muted px-1.5 py-0.5"
                 >
                   {label}
@@ -274,7 +274,9 @@ export function MetadataRail({
                       aria-label={t('detail.edit.removeLabel', { label })}
                       disabled={disabled}
                       onClick={() =>
-                        void submitUpdate({ removeLabels: [label] }, `label:remove:${label}`, ['labels'])
+                        void submitUpdate({ removeLabels: [label] }, `label:remove:${label}`, [
+                          'labels',
+                        ])
                       }
                       className="text-muted-foreground disabled:opacity-50"
                     >

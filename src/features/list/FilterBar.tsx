@@ -7,7 +7,7 @@ import { useI18n } from '@/lib/i18n/I18nProvider';
 
 import { collator } from './collator';
 import { hasActiveFilters } from './filter';
-import { STATUS_ORDER, statusText } from './status';
+import { STATUS_ORDER, statusText } from '@/lib/status';
 import {
   DEFAULT_SORT_DIRECTION,
   GROUP_VALUES,

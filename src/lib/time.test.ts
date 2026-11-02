@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 
-import { formatAbsoluteTime, formatRelativeTime } from './time';
+import { formatAbsoluteTime, formatRelativeTime, timeOrder } from './time';
 
 beforeEach(() => {
   vi.useFakeTimers();
@@ -32,5 +32,13 @@ test('an unparseable timestamp is shown verbatim', () => {
 test('absolute time delegates to the locale formatter', () => {
   const value = '2026-11-01T12:00:00Z';
 
-  expect(formatAbsoluteTime(value, 'en')).toBe(new Intl.DateTimeFormat('en').format(Date.parse(value)));
+  expect(formatAbsoluteTime(value, 'en')).toBe(
+    new Intl.DateTimeFormat('en').format(Date.parse(value))
+  );
+});
+
+test('an unparseable timestamp sorts as the epoch instead of emitting NaN', () => {
+  expect(timeOrder('not a date')).toBe(0);
+  expect(timeOrder('')).toBe(0);
+  expect(timeOrder('2026-11-01T00:00:00Z')).toBe(Date.parse('2026-11-01T00:00:00Z'));
 });

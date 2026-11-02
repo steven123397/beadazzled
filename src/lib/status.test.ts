@@ -1,6 +1,6 @@
 import { expect, test } from 'vitest';
 
-import { STATUS_ORDER, statusText } from './status';
+import { STATUS_ORDER, statusText } from '@/lib/status';
 
 const translate = (key: string): string => `translated:${key}`;
 

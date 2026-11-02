@@ -4,7 +4,7 @@ import type { Issue } from '@/bindings/bd';
 import { copyText } from '@/lib/clipboard';
 import { useI18n } from '@/lib/i18n/I18nProvider';
 
-import { statusText } from '@/features/list/status';
+import { statusText } from '@/lib/status';
 
 export function Header({
   issue,

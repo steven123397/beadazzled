@@ -187,6 +187,23 @@ test('design and notes are folded away when present', () => {
   expect(screen.getByText('Design')).toBeInTheDocument();
   expect(screen.getByText('Design body')).toBeInTheDocument();
   expect(screen.getByText('Note body')).toBeInTheDocument();
+  for (const summary of ['Design', 'Notes']) {
+    const details = screen.getByText(summary).closest('details');
+    expect(details).not.toBeNull();
+    expect(details).not.toHaveAttribute('open');
+  }
+});
+
+test('the page follows the language setting', () => {
+  render(
+    <I18nProvider initialLanguage="zh-CN">
+      <DetailView issueId="bza-b" issues={[issue('bza-b')]} onBack={vi.fn()} />
+    </I18nProvider>
+  );
+
+  expect(screen.getByText('正文')).toBeInTheDocument();
+  expect(screen.getByText('验收条件')).toBeInTheDocument();
+  expect(screen.getByText('评论')).toBeInTheDocument();
 });
 
 test('a missing id while the baseline is loading is not reported as deleted', () => {
@@ -219,9 +236,7 @@ test('editing the title submits one update and closes the editor after success',
   fireEvent.click(screen.getByRole('button', { name: 'Save' }));
 
   await vi.waitFor(() => expect(writes.submit).toHaveBeenCalledTimes(1));
-  await vi.waitFor(() =>
-    expect(screen.queryByRole('textbox', { name: 'Title' })).toBeNull()
-  );
+  await vi.waitFor(() => expect(screen.queryByRole('textbox', { name: 'Title' })).toBeNull());
 
   const submission = vi.mocked(writes.submit).mock.calls[0][0];
   expect(submission.issueId).toBe('bza-b');
@@ -277,9 +292,7 @@ test('the body and acceptance editors submit their own fields', async () => {
   fireEvent.click(screen.getByRole('button', { name: 'Save' }));
 
   await vi.waitFor(() => expect(writes.submit).toHaveBeenCalledTimes(1));
-  await vi.waitFor(() =>
-    expect(screen.queryByRole('textbox', { name: 'Description' })).toBeNull()
-  );
+  await vi.waitFor(() => expect(screen.queryByRole('textbox', { name: 'Description' })).toBeNull());
   expect(vi.mocked(writes.submit).mock.calls[0][0].build()).toMatchObject({
     Update: { description: 'New body' },
   });
@@ -362,7 +375,9 @@ test('an update from elsewhere is announced without overwriting the draft', () =
     <I18nProvider initialLanguage="en">
       <DetailView
         issueId="bza-b"
-        issues={[issue('bza-b', { title: 'Changed elsewhere', updated_at: '2026-11-02T00:00:00Z' })]}
+        issues={[
+          issue('bza-b', { title: 'Changed elsewhere', updated_at: '2026-11-02T00:00:00Z' }),
+        ]}
         onBack={vi.fn()}
         writes={writes}
       />
@@ -413,9 +428,7 @@ test('a saved title stays old until the journal echo updates the store', async (
   });
   fireEvent.click(screen.getByRole('button', { name: 'Save' }));
 
-  await vi.waitFor(() =>
-    expect(screen.queryByRole('textbox', { name: 'Title' })).toBeNull()
-  );
+  await vi.waitFor(() => expect(screen.queryByRole('textbox', { name: 'Title' })).toBeNull());
   expect(screen.getByRole('heading', { level: 1, name: 'Old title' })).toBeInTheDocument();
 
   rerender(
@@ -732,7 +745,5 @@ test('a write that misses its echo says the view was refreshed', async () => {
   });
   fireEvent.click(screen.getByRole('button', { name: 'Save' }));
 
-  expect(
-    await screen.findByText(/the view did not confirm in time/)
-  ).toBeInTheDocument();
+  expect(await screen.findByText(/the view did not confirm in time/)).toBeInTheDocument();
 });

@@ -4,7 +4,7 @@ import type { Issue } from '@/bindings/bd';
 import { useI18n } from '@/lib/i18n/I18nProvider';
 import { formatAbsoluteTime, formatRelativeTime } from '@/lib/time';
 
-import { STATUS_ICONS, statusText } from './status';
+import { STATUS_ICONS, statusText } from '@/lib/status';
 
 export type RowProps = {
   issue: Issue;

@@ -52,6 +52,24 @@ test('a failed comment keeps the text and shows the error', async () => {
   expect(input).toHaveValue('Do not lose me');
 });
 
+test('each comment is stamped with a machine-readable time', () => {
+  renderComments({
+    comments: [
+      {
+        id: 'c1',
+        issue_id: 'bza-b',
+        author: 'ada',
+        text: 'First thought',
+        created_at: '2026-11-01T01:00:00Z',
+      },
+    ],
+  });
+
+  const time = document.querySelector('time');
+  expect(time).toHaveAttribute('datetime', '2026-11-01T01:00:00Z');
+  expect(time?.getAttribute('title')).toBeTruthy();
+});
+
 test('an empty draft cannot be submitted', () => {
   const { onSubmit } = renderComments();
 

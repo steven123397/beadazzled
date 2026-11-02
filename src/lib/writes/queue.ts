@@ -4,8 +4,7 @@ import type { EchoOutcome } from '../sync/echo';
 
 /** What the IPC layer reports for one `bd` write. */
 export type WriteOutcome =
-  | { ok: true; createdId: string | null }
-  | { ok: false; error: BridgeError };
+  { ok: true; createdId: string | null } | { ok: false; error: BridgeError };
 
 export type WriteResult =
   | { status: 'ok'; createdId?: string; echo?: EchoOutcome; afterSeq?: number }

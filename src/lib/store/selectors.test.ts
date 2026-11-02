@@ -91,6 +91,17 @@ test('duplicate edges are listed once per target', () => {
   expect(getBlocks(index, 'a').map((ref) => ref.id)).toEqual(['b']);
 });
 
+test('blocks is sorted by id, not by the order the store was scanned', () => {
+  const index = indexIssues([
+    issue('z', { dependencies: dependsOn('a') }),
+    issue('a'),
+    issue('c', { dependencies: dependsOn('a') }),
+    issue('m', { dependencies: dependsOn('a') }),
+  ]);
+
+  expect(getBlocks(index, 'a').map((ref) => ref.id)).toEqual(['c', 'm', 'z']);
+});
+
 test('only blocking relations appear in blocked by', () => {
   const index = indexIssues([
     issue('a'),

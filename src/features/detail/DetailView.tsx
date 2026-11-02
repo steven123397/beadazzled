@@ -273,7 +273,6 @@ export function DetailView({
   const design = textField(issue, 'design');
   const notes = textField(issue, 'notes');
   const pending = writes?.isPending(issue.id) ?? false;
-  const editorError = validationError;
   const updatedElsewhere = editing !== null && externalUpdate;
 
   const saveField = async (field: EditableField, next: string): Promise<boolean> => {
@@ -366,7 +365,7 @@ export function DetailView({
             value={issue.title}
             pending={pending}
             disabled={!canEdit}
-            error={editorError}
+            error={validationError}
             onDirtyChange={setFieldDirty}
             onSave={(next) => saveField('title', next)}
             onCancel={cancelEdit}
@@ -410,7 +409,7 @@ export function DetailView({
                   previewable
                   pending={pending}
                   disabled={!canEdit}
-                  error={editorError}
+                  error={validationError}
                   onDirtyChange={setFieldDirty}
                   onOpenLink={openLink}
                   onSave={(next) => saveField('description', next)}
@@ -439,7 +438,7 @@ export function DetailView({
                   multiline
                   pending={pending}
                   disabled={!canEdit}
-                  error={editorError}
+                  error={validationError}
                   onDirtyChange={setFieldDirty}
                   onOpenLink={openLink}
                   onSave={(next) => saveField('acceptance', next)}

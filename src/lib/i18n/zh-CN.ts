@@ -155,6 +155,8 @@ export const zhCN: Record<keyof typeof en, string> = {
   'detail.deleted': '这条票已被删除。',
   'detail.link.failed': '无法在浏览器中打开该链接。',
 
+  'markdown.image': '图片',
+  'markdown.imageWithAlt': '图片：{alt}',
   'markdown.taskDone': '已完成任务',
   'markdown.taskOpen': '未完成任务',
 

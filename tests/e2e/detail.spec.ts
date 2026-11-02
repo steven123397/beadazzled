@@ -64,9 +64,7 @@ test('detail renders markdown, metadata, dependencies and comments from memory',
   await expect(page.getByRole('link', { name: 'https://example.com/pic.png' })).toBeVisible();
 });
 
-test('opening a ticket from the list renders from memory without calling bd', async ({
-  page,
-}) => {
+test('opening a ticket from the list renders from memory without calling bd', async ({ page }) => {
   // This is a smoke test: the dev server's timings say nothing about the
   // production bundle, so the 50ms budget is judged by
   // `npm run measure:navigation` against `dist-e2e`. Here we only pin that a

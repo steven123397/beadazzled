@@ -5,8 +5,7 @@ import { isBlockingDependency } from '@/lib/dependencies';
 const BLOCKED_TARGETS = new Set(['in_progress', 'closed']);
 
 export type StatusChangeDecision =
-  | { allowed: true }
-  | { allowed: false; reason: 'blocked-by-dependencies'; blockers: string[] };
+  { allowed: true } | { allowed: false; reason: 'blocked-by-dependencies'; blockers: string[] };
 
 /**
  * The unresolved blockers of an issue, from the dependency edges plus the

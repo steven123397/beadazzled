@@ -1,6 +1,16 @@
 import type { Language } from '@/lib/i18n';
 
 /**
+ * Sort key for an ISO timestamp. An unparseable value sorts as the epoch:
+ * `NaN` comparisons are all false, which leaves `Array.sort` free to order the
+ * rest arbitrarily.
+ */
+export function timeOrder(value: string): number {
+  const timestamp = Date.parse(value);
+  return Number.isNaN(timestamp) ? 0 : timestamp;
+}
+
+/**
  * Relative time for lists and comments. Constructing Intl objects is
  * comparatively expensive, so the formatters live for the life of the page.
  */

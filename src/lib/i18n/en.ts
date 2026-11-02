@@ -154,6 +154,8 @@ export const en = {
   'detail.deleted': 'This ticket was deleted.',
   'detail.link.failed': 'The link could not be opened in your browser.',
 
+  'markdown.image': 'Image',
+  'markdown.imageWithAlt': 'Image: {alt}',
   'markdown.taskDone': 'Completed task',
   'markdown.taskOpen': 'Incomplete task',
 

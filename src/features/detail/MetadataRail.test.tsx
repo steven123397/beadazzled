@@ -124,9 +124,7 @@ test('assignee edits set and clear with the expected-assignee guard', async () =
   fireEvent.click(screen.getByRole('button', { name: 'Save' }));
 
   await vi.waitFor(() => expect(writes.submit).toHaveBeenCalledTimes(1));
-  await vi.waitFor(() =>
-    expect(screen.queryByRole('textbox', { name: 'Assignee' })).toBeNull()
-  );
+  await vi.waitFor(() => expect(screen.queryByRole('textbox', { name: 'Assignee' })).toBeNull());
   expect(submitted(writes)[0]).toMatchObject({
     Update: { assignee: { Set: 'lin' }, if_assignee: 'ada' },
   });
@@ -218,6 +216,19 @@ test('a conflict while adding a label keeps the typed label', async () => {
     'This issue changed elsewhere; refreshing the view.'
   );
   expect(input).toHaveValue('backend');
+});
+
+test('a status and priority from a newer bd stay visible and selectable', () => {
+  renderRail(issue('bza-b', { status: 'review', priority: 7 }), undefined, fakeWrites());
+
+  const status = screen.getByRole('combobox', { name: 'Status' });
+  expect(status).toHaveValue('review');
+  expect(within(status).getByRole('option', { name: 'review' })).toBeInTheDocument();
+  expect(within(status).getByRole('option', { name: 'Open' })).toBeInTheDocument();
+
+  const priority = screen.getByRole('combobox', { name: 'Priority' });
+  expect(priority).toHaveValue('7');
+  expect(within(priority).getByRole('option', { name: 'P7' })).toBeInTheDocument();
 });
 
 test('pending writes disable every metadata control', () => {
