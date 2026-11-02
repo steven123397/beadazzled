@@ -1,10 +1,6 @@
 import type { Dependency, Issue } from '@/bindings/bd';
 
-/**
- * Only these dependency kinds block work. `related`, `discovered-from`,
- * `parent-child` and the rest are informational.
- */
-export const BLOCKING_DEPENDENCY_TYPES = ['blocks', 'conditional-blocks', 'waits-for'] as const;
+import { isBlockingDependency } from '@/lib/dependencies';
 
 const BLOCKED_TARGETS = new Set(['in_progress', 'closed']);
 
@@ -23,7 +19,7 @@ export function blockingDeps(
 ): string[] {
   const blockers: string[] = [];
   for (const dependency of dependencies ?? []) {
-    if (!isBlockingType(dependency.type)) {
+    if (!isBlockingDependency(dependency.type)) {
       continue;
     }
     if (statusOf(dependency.depends_on_id) === 'closed') {
@@ -57,8 +53,4 @@ export function canChangeStatus(
     reason: 'blocked-by-dependencies',
     blockers: [...unresolvedBlockers],
   };
-}
-
-function isBlockingType(type: string): boolean {
-  return (BLOCKING_DEPENDENCY_TYPES as readonly string[]).includes(type);
 }

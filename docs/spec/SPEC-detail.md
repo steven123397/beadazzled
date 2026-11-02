@@ -38,10 +38,11 @@
 | 设计/备注 | `design` / `notes`（存在于 `extra` 时展示，折叠） |
 | 元数据 | `status` / `priority` / `issue_type` / `assignee` / `labels` / `created_at` / `updated_at` / `closed_at` |
 | 评论 | `comments[]`（按 `created_at` 升序） |
-| 阻塞（blocked by） | 本票 `dependencies[]`，解析 `depends_on_id` |
-| 阻塞了（blocks） | 扫描 store 中所有票的 `dependencies`，反查指向本票的边 |
+| 阻塞（blocked by） | 本票 `dependencies[]` 中类型为 `blocks` / `conditional-blocks` / `waits-for` 的边，解析 `depends_on_id` |
+| 阻塞了（blocks） | 扫描 store 中所有票的 `dependencies`，反查指向本票的同类边 |
 
 - 依赖只读展示，可点击跳转到目标票；**v0.1.0 不提供依赖编辑**。
+- 两组只计入三种阻塞类型：`parent-child`、`related` 等关系不在详情页出现，与 `canChangeStatus` 的阻塞判定一致。
 - 目标票不在 store（已删除/不可见）→ 显示 id 并标注「未找到」。
 - 每组关系显示计数与状态摘要（例如 `2 blocked by · 1 closed`）。
 
@@ -91,7 +92,7 @@
 3. **安全**：注入 `<script>`、`<img onerror>`、`<iframe>`、`javascript:` 链接的样本渲染后不产生可执行节点（DOM 断言 + 无控制台执行）。
 4. **链接**：http(s) 链接调用系统浏览器；相对链接不触发应用内导航。
 5. **评论**：按时间升序；作者、相对时间、正文完整；`Ctrl+Enter` 提交；失败保留文本。
-6. **依赖阅读**：给定 fixture（A blocks B、C blocks B），B 的页面显示 blocked by = [A, C]；A 页面 blocks = [B]；已删除目标标注「未找到」。
+6. **依赖阅读**：给定 fixture（A blocks B、C blocks B），B 的页面显示 blocked by = [A, C]；A 页面 blocks = [B]；已删除目标标注「未找到」；`parent-child` / `related` 边不出现在任一组。
 7. **编辑闭环**：改标题/正文/验收 → 环境回声后界面更新；fake 环境失败时草稿保留且错误可见。
 8. **冲突**：看板/详情同时改状态，守卫失败返回 exit 13 → 提示「已在别处修改」并刷新，不覆盖。
 9. **删除处理**：详情打开时注入 delete 事件 → 提示可见，界面不崩溃。

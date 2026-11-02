@@ -123,6 +123,21 @@ test('blocked by and blocks both resolve from the dependency edges', () => {
   expect(within(blocks).getByText('bza-b')).toBeInTheDocument();
 });
 
+test('a parent-child or related edge is not shown as a blocker', () => {
+  const parent = issue('bza-a');
+  const child = issue('bza-b', {
+    dependencies: [
+      { issue_id: 'bza-b', depends_on_id: 'bza-a', type: 'parent-child', created_at: TS },
+      { issue_id: 'bza-b', depends_on_id: 'bza-c', type: 'related', created_at: TS },
+    ],
+  });
+
+  renderDetail(child, [parent, child]);
+
+  expect(screen.queryByRole('region', { name: 'Blocked by' })).toBeNull();
+  expect(screen.getByText('No dependencies.')).toBeInTheDocument();
+});
+
 test('a dependency target outside the store is shown and marked not found', () => {
   const target = issue('bza-b', { dependencies: [edge('bza-b', 'bza-gone')] });
 

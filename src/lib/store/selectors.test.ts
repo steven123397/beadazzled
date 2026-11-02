@@ -33,6 +33,10 @@ function dependsOn(...ids: string[]): Dependency[] {
   }));
 }
 
+function relation(issueId: string, dependsOnId: string, type: string): Dependency {
+  return { issue_id: issueId, depends_on_id: dependsOnId, type, created_at: TS };
+}
+
 test('getIssue returns the issue and undefined for an id that is gone', () => {
   const index = indexIssues([issue('a')]);
 
@@ -85,4 +89,31 @@ test('duplicate edges are listed once per target', () => {
 
   expect(getBlockedBy(index, 'b').map((ref) => ref.id)).toEqual(['a']);
   expect(getBlocks(index, 'a').map((ref) => ref.id)).toEqual(['b']);
+});
+
+test('only blocking relations appear in blocked by', () => {
+  const index = indexIssues([
+    issue('a'),
+    issue('b', {
+      dependencies: [
+        relation('b', 'a', 'parent-child'),
+        relation('b', 'c', 'related'),
+        relation('b', 'd', 'blocks'),
+        relation('b', 'e', 'waits-for'),
+      ],
+    }),
+  ]);
+
+  expect(getBlockedBy(index, 'b').map((ref) => ref.id)).toEqual(['d', 'e']);
+});
+
+test('only blocking relations appear in the blocks list', () => {
+  const index = indexIssues([
+    issue('a'),
+    issue('b', { dependencies: [relation('b', 'a', 'parent-child')] }),
+    issue('c', { dependencies: [relation('c', 'a', 'related')] }),
+    issue('d', { dependencies: [relation('d', 'a', 'conditional-blocks')] }),
+  ]);
+
+  expect(getBlocks(index, 'a').map((ref) => ref.id)).toEqual(['d']);
 });
