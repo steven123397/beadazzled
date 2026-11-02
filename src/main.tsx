@@ -10,8 +10,9 @@ if (container === null) {
   throw new Error('index.html is missing the #root element');
 }
 
-// Dev-only hook for Playwright; production builds drop this branch.
-const e2e = import.meta.env.DEV ? readE2EState() : undefined;
+// Dev-only hook for Playwright; production builds drop this branch unless a
+// benchmark build explicitly opts in with VITE_E2E=1.
+const e2e = import.meta.env.DEV || import.meta.env.VITE_E2E === '1' ? readE2EState() : undefined;
 // The browser e2e/dev pages have no Tauri IPC; only the real shell may start
 // the sync worker. The fake bridge also sets `__BEADAZZLED_E2E__`, so it is
 // excluded by the first check.

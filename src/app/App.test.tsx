@@ -406,6 +406,29 @@ test('production sync wiring feeds the status bar and ticket search', async () =
   expect(screen.getByText('Detail reading')).toBeInTheDocument();
 });
 
+test('a workspace whose bd is missing shows the list unavailable state', async () => {
+  window.location.hash = '#/w/p1/list';
+  const sync = fakeSyncApi();
+
+  render(
+    <App
+      workspaceApi={fakeApi({
+        snapshot: async () => snapshot([entry('p1', 'alpha')], '/repo/p1'),
+        bdStatus: async () => ({ kind: 'not-found', searched: [] }),
+      })}
+      syncEnabled
+      syncApi={sync.api}
+    />
+  );
+
+  await waitFor(() =>
+    expect(screen.getByTestId('list-view')).toHaveAttribute('data-state', 'bd-unavailable')
+  );
+  expect(screen.getByRole('alert')).toHaveTextContent('bd is unavailable');
+  expect(screen.getByText('bd was not found on PATH.')).toBeInTheDocument();
+  expect(sync.start).not.toHaveBeenCalled();
+});
+
 test('a workspace whose directory is gone never renders its list', async () => {
   window.location.hash = '#/';
 

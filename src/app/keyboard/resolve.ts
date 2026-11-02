@@ -53,6 +53,11 @@ export function keyToken(event: KeyEventLike): string | null {
   return token;
 }
 
+/** True when a modal dialog is open; single-key shortcuts must stay inside it. */
+export function isOverlayOpen(): boolean {
+  return document.querySelector('[aria-modal="true"]') !== null;
+}
+
 export function isEditableTarget(target: EventTarget | null): boolean {
   if (target === null || typeof target !== 'object') {
     return false;

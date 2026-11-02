@@ -52,7 +52,7 @@ export function selectVisibleIssues(issues: Issue[], view: ListViewState): Issue
 
 - 先过滤 → 再分组 → 再排序；每步纯函数，便于单测。
 - Ready 判定：`status === 'open'` 且 `blockingDeps(issue)` 为空（定义见 `SPEC-writes`）；依赖目标不在 store 中视为未完成。
-- 文本索引在 store 更新时增量维护，避免每次输入全量扫描。
+- 文本索引在 store 更新时重建（v0.1.0 实现为数据变化时全量重建），避免每次输入全量扫描。
 
 ## 性能
 

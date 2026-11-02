@@ -1,0 +1,189 @@
+import { fireEvent, render, screen, within } from '@testing-library/react';
+import { expect, test, vi } from 'vitest';
+
+import type { Issue } from '@/bindings/bd';
+import { I18nProvider } from '@/lib/i18n/I18nProvider';
+
+import { FilterBar } from './FilterBar';
+import { createListViewState, type ListViewState } from './view-state';
+
+const TS = '2026-11-01T00:00:00Z';
+
+function issue(id: string, overrides: Partial<Issue> = {}): Issue {
+  return {
+    id,
+    title: `Issue ${id}`,
+    description: '',
+    status: 'open',
+    priority: 2,
+    issue_type: 'task',
+    created_at: TS,
+    updated_at: TS,
+    labels: [],
+    dependency_count: 0,
+    dependent_count: 0,
+    comment_count: 0,
+    ...overrides,
+  };
+}
+
+function renderBar({
+  view = createListViewState(),
+  issues = [
+    issue('a', { status: 'open', priority: 1, issue_type: 'bug', assignee: 'ada', labels: ['ui'] }),
+    issue('b', { status: 'closed', priority: 2, issue_type: 'task', labels: ['backend'] }),
+  ],
+  visibleCount = 1,
+}: {
+  view?: ListViewState;
+  issues?: Issue[];
+  visibleCount?: number;
+} = {}) {
+  const onChange = vi.fn();
+  const onClear = vi.fn();
+  render(
+    <I18nProvider initialLanguage="en">
+      <FilterBar
+        view={view}
+        issues={issues}
+        visibleCount={visibleCount}
+        totalCount={issues.length}
+        onChange={onChange}
+        onClear={onClear}
+      />
+    </I18nProvider>
+  );
+  return { onChange, onClear };
+}
+
+test('shows the visible and total counts', () => {
+  renderBar({ visibleCount: 1 });
+
+  expect(screen.getByText('1 / 2')).toBeInTheDocument();
+});
+
+test('editing the search box reports the new query', () => {
+  const { onChange } = renderBar();
+
+  fireEvent.change(screen.getByRole('searchbox', { name: 'Search tickets' }), {
+    target: { value: 'scroll' },
+  });
+
+  expect(onChange).toHaveBeenCalledWith(
+    expect.objectContaining({
+      filter: expect.objectContaining({ query: 'scroll' }),
+    })
+  );
+});
+
+test('/ focuses the search box', () => {
+  renderBar();
+
+  fireEvent.keyDown(window, { key: '/' });
+
+  expect(screen.getByRole('searchbox', { name: 'Search tickets' })).toHaveFocus();
+});
+
+test('status, priority, type, assignee and label checkboxes update their dimensions', () => {
+  const { onChange } = renderBar();
+
+  fireEvent.click(screen.getByRole('checkbox', { name: 'Open' }));
+  expect(onChange).toHaveBeenLastCalledWith(
+    expect.objectContaining({
+      filter: expect.objectContaining({ status: ['open'] }),
+    })
+  );
+
+  fireEvent.click(screen.getByRole('checkbox', { name: 'P1' }));
+  expect(onChange).toHaveBeenLastCalledWith(
+    expect.objectContaining({
+      filter: expect.objectContaining({ priority: [1] }),
+    })
+  );
+
+  fireEvent.click(screen.getByRole('checkbox', { name: 'bug' }));
+  expect(onChange).toHaveBeenLastCalledWith(
+    expect.objectContaining({
+      filter: expect.objectContaining({ type: ['bug'] }),
+    })
+  );
+
+  fireEvent.click(screen.getByRole('checkbox', { name: 'ada' }));
+  expect(onChange).toHaveBeenLastCalledWith(
+    expect.objectContaining({
+      filter: expect.objectContaining({ assignee: ['ada'] }),
+    })
+  );
+
+  fireEvent.click(screen.getByRole('checkbox', { name: 'ui' }));
+  expect(onChange).toHaveBeenLastCalledWith(
+    expect.objectContaining({
+      filter: expect.objectContaining({ label: ['ui'] }),
+    })
+  );
+});
+
+test('the Ready toggle updates the ready filter', () => {
+  const { onChange } = renderBar();
+
+  fireEvent.click(screen.getByRole('checkbox', { name: 'Ready' }));
+
+  expect(onChange).toHaveBeenCalledWith(
+    expect.objectContaining({
+      filter: expect.objectContaining({ ready: true }),
+    })
+  );
+});
+
+test('changing the group and sort controls reports the new grouping and direction', () => {
+  const { onChange } = renderBar();
+
+  fireEvent.change(screen.getByRole('combobox', { name: 'Group by' }), {
+    target: { value: 'status' },
+  });
+  expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({ group: 'status' }));
+
+  fireEvent.change(screen.getByRole('combobox', { name: 'Sort by' }), {
+    target: { value: 'priority' },
+  });
+  expect(onChange).toHaveBeenLastCalledWith(
+    expect.objectContaining({ sort: { by: 'priority', direction: 'asc' } })
+  );
+
+  fireEvent.click(screen.getByRole('button', { name: 'Reverse sort direction' }));
+  expect(onChange).toHaveBeenLastCalledWith(
+    expect.objectContaining({ sort: { by: 'updated', direction: 'asc' } })
+  );
+});
+
+test('a selected value that is absent from the current data is still removable', () => {
+  const view = createListViewState();
+  view.filter.type = ['legacy'];
+  renderBar({ view });
+
+  expect(screen.getByRole('checkbox', { name: 'legacy' })).toBeChecked();
+});
+
+test('clear filters is not offered without an active filter', () => {
+  renderBar();
+
+  expect(screen.queryByRole('button', { name: 'Clear filters' })).not.toBeInTheDocument();
+});
+
+test('clear filters is offered while a filter is active', () => {
+  const view = createListViewState();
+  view.filter.query = 'scroll';
+  const { onClear } = renderBar({ view });
+
+  fireEvent.click(screen.getByRole('button', { name: 'Clear filters' }));
+  expect(onClear).toHaveBeenCalledTimes(1);
+});
+
+test('the multi-select panel lists the options found in the data', () => {
+  renderBar();
+
+  const statusPanel = screen.getByRole('group', { name: 'Status' });
+  fireEvent.click(within(statusPanel).getByText('Status'));
+  expect(within(statusPanel).getByRole('checkbox', { name: 'Open' })).toBeVisible();
+  expect(within(statusPanel).getByRole('checkbox', { name: 'Closed' })).toBeVisible();
+});

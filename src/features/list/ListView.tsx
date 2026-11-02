@@ -1,0 +1,564 @@
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { useVirtualizer } from '@tanstack/react-virtual';
+
+import type { Issue, SyncState } from '@/bindings/bd';
+import { isEditableTarget, isOverlayOpen } from '@/app/keyboard/resolve';
+import { useI18n } from '@/lib/i18n/I18nProvider';
+
+import { FilterBar } from './FilterBar';
+import { buildSearchIndex, hasActiveFilters, selectVisibleIssues } from './filter';
+import { GROUP_HEIGHT, GroupHeader } from './GroupHeader';
+import { groupIssues } from './group';
+import { loadListPosition, saveListPosition } from './position';
+import { Row, rowId } from './Row';
+import {
+  createListViewState,
+  hasViewParams,
+  parseListViewState,
+  serializeListViewState,
+  type GroupBy,
+  type ListViewState,
+} from './view-state';
+import { loadSavedView, saveSavedView } from './view-storage';
+
+/** Must match `--row-height` in tokens.css. */
+const ROW_HEIGHT = 36;
+const OVERSCAN = 10;
+const INITIAL_RECT = { width: 0, height: 600 };
+
+const HEALTHY: SyncState = { kind: 'healthy', lastSeq: 0, lastEventAt: null };
+
+type ListItem = { kind: 'header'; key: string; count: number } | { kind: 'row'; issue: Issue };
+
+type ListState = 'loading' | 'empty' | 'no-match' | 'bd-unavailable' | 'ready';
+
+export type ListViewProps = {
+  projectId: string;
+  issues: readonly Issue[];
+  syncState?: SyncState;
+  onRefresh?: () => void;
+};
+
+export type ListRouteProps = {
+  issues: readonly Issue[];
+  syncState?: SyncState;
+  onRefresh?: () => void;
+};
+
+/** Reads the route param and remounts the list when the workspace changes. */
+export function ListRoute({ issues, syncState, onRefresh }: ListRouteProps) {
+  const { projectId = '' } = useParams<{ projectId: string }>();
+  return (
+    <ListView
+      key={projectId}
+      projectId={projectId}
+      issues={issues}
+      syncState={syncState}
+      onRefresh={onRefresh}
+    />
+  );
+}
+
+export function ListView({ projectId, issues, syncState = HEALTHY, onRefresh }: ListViewProps) {
+  const { t } = useI18n();
+  const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const search = searchParams.toString();
+  const hasParams = useMemo(() => hasViewParams(new URLSearchParams(search)), [search]);
+  const savedView = useMemo(() => loadSavedView(projectId), [projectId]);
+  const latestViewRef = useRef<ListViewState | null>(null);
+
+  // The URL wins; with no view parameters, keep the view the user was using.
+  // A sidebar "List" click or `g l` can strip the query string while this
+  // component stays mounted, and that must not clear the filters.
+  const view = useMemo(() => {
+    if (hasParams) {
+      return parseListViewState(new URLSearchParams(search));
+    }
+    return latestViewRef.current ?? savedView ?? createListViewState();
+  }, [hasParams, savedView, search]);
+
+  useEffect(() => {
+    latestViewRef.current = view;
+    saveSavedView(projectId, view);
+  }, [projectId, view]);
+
+  // Write a remembered view back to the URL, on mount with a saved view or
+  // after a navigation dropped the query string. Unknown-only URLs compare
+  // equal and are left alone.
+  useEffect(() => {
+    if (hasParams) {
+      return;
+    }
+    const next = serializeListViewState(view, new URLSearchParams(search));
+    if (next.toString() !== '' && next.toString() !== search) {
+      setSearchParams(next, { replace: true });
+    }
+  }, [hasParams, search, setSearchParams, view]);
+
+  const updateView = useCallback(
+    (next: ListViewState) => {
+      // Keep the fallback in sync so an explicit clear (which empties the URL)
+      // is not mistaken for a navigation that dropped the parameters.
+      latestViewRef.current = next;
+      setSearchParams((previous) => serializeListViewState(next, previous), {
+        replace: true,
+      });
+    },
+    [setSearchParams]
+  );
+
+  const initialPosition = useMemo(() => loadListPosition(projectId), [projectId]);
+  const searchText = useMemo(() => buildSearchIndex(issues), [issues]);
+  const visible = useMemo(
+    () => selectVisibleIssues(issues, view, { searchText }),
+    [issues, view, searchText]
+  );
+  const activeFilters = hasActiveFilters(view.filter);
+
+  const [focusedId, setFocusedId] = useState<string | null>(initialPosition?.focusedId ?? null);
+  const [collapsedGroups, setCollapsedGroups] = useState<ReadonlySet<string>>(new Set());
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const focusedIdRef = useRef(focusedId);
+  // Only a visible row may request focus; the restore path sets this itself
+  // when it finds the saved row. Keeping a missing saved id here would let it
+  // steal focus later, when a filter change makes that row appear again.
+  const pendingFocusRef = useRef<string | null>(null);
+  // Bumped whenever pendingFocusRef is set, so the focus effect runs even when
+  // focusedId did not change (restoring an already-focused row).
+  const [focusRequest, setFocusRequest] = useState(0);
+  const restoredRef = useRef(false);
+
+  focusedIdRef.current = focusedId;
+
+  useEffect(() => {
+    setCollapsedGroups(new Set());
+  }, [view.group]);
+
+  const groups = useMemo(
+    () => (view.group === 'none' ? [] : groupIssues(visible, view.group)),
+    [visible, view.group]
+  );
+  const items = useMemo<ListItem[]>(() => {
+    if (view.group === 'none') {
+      return visible.map((issue) => ({ kind: 'row' as const, issue }));
+    }
+    return groups.flatMap((group) => {
+      const header: ListItem = {
+        kind: 'header',
+        key: group.key,
+        count: group.issues.length,
+      };
+      return collapsedGroups.has(group.key)
+        ? [header]
+        : [header, ...group.issues.map((issue) => ({ kind: 'row' as const, issue }))];
+    });
+  }, [collapsedGroups, groups, view.group, visible]);
+
+  const rowMeta = useMemo(() => {
+    const byId = new Map<string, { itemIndex: number; position: number }>();
+    const order: string[] = [];
+    items.forEach((item, itemIndex) => {
+      if (item.kind === 'row') {
+        byId.set(item.issue.id, { itemIndex, position: order.length });
+        order.push(item.issue.id);
+      }
+    });
+    return { byId, order, count: order.length };
+  }, [items]);
+
+  const itemsRef = useRef(items);
+  const rowMetaRef = useRef(rowMeta);
+  itemsRef.current = items;
+  rowMetaRef.current = rowMeta;
+
+  const getScrollElement = useCallback(() => scrollRef.current, []);
+  const estimateSize = useCallback(
+    (index: number) => (items[index]?.kind === 'header' ? GROUP_HEIGHT : ROW_HEIGHT),
+    [items]
+  );
+  const getItemKey = useCallback(
+    (index: number) => {
+      const item = items[index];
+      if (item === undefined) {
+        return index;
+      }
+      return item.kind === 'header' ? `header:${item.key}` : item.issue.id;
+    },
+    [items]
+  );
+
+  const virtualizer = useVirtualizer({
+    count: items.length,
+    getScrollElement,
+    estimateSize,
+    overscan: OVERSCAN,
+    getItemKey,
+    initialRect: INITIAL_RECT,
+  });
+
+  const openIssue = useCallback(
+    (issue: Issue) => {
+      navigate(`/w/${projectId}/issue/${encodeURIComponent(issue.id)}`);
+    },
+    [navigate, projectId]
+  );
+
+  const focusRow = useCallback(
+    (id: string) => {
+      const meta = rowMetaRef.current.byId.get(id);
+      if (meta === undefined) {
+        return;
+      }
+      pendingFocusRef.current = id;
+      setFocusedId(id);
+      setFocusRequest((value) => value + 1);
+      virtualizer.scrollToIndex(meta.itemIndex, { align: 'auto' });
+    },
+    [virtualizer]
+  );
+
+  const toggleGroup = useCallback((key: string) => {
+    setCollapsedGroups((previous) => {
+      const next = new Set(previous);
+      if (next.has(key)) {
+        next.delete(key);
+      } else {
+        next.add(key);
+      }
+      return next;
+    });
+  }, []);
+
+  const clearFilters = useCallback(() => {
+    updateView({ ...view, filter: createListViewState().filter });
+  }, [updateView, view]);
+
+  const total = issues.length;
+  const state: ListState =
+    syncState.kind === 'loading' && total === 0
+      ? 'loading'
+      : syncState.kind === 'bd-unavailable'
+        ? 'bd-unavailable'
+        : total === 0
+          ? 'empty'
+          : visible.length === 0 && activeFilters
+            ? 'no-match'
+            : 'ready';
+
+  // Restore once the first non-empty snapshot is available. Waiting matters
+  // when sync paints an empty list first and fills it a frame later. The
+  // restore itself runs in a frame: StrictMode re-runs the virtualizer's layout
+  // effect and that pass writes scrollTop 0, so doing it here would be undone.
+  useEffect(() => {
+    if (restoredRef.current || items.length === 0) {
+      return;
+    }
+    if (initialPosition === null) {
+      restoredRef.current = true;
+      return;
+    }
+
+    const element = scrollRef.current;
+    if (element === null) {
+      return;
+    }
+
+    requestAnimationFrame(() => {
+      if (!element.isConnected) {
+        // The first non-empty snapshot was stale (e.g. the previous workspace)
+        // or the list went back to a state screen. Leave the flag false so the
+        // next snapshot retries the restore.
+        return;
+      }
+      element.scrollTop = initialPosition.scrollTop;
+      virtualizer.scrollToOffset(initialPosition.scrollTop);
+      restoredRef.current = true;
+
+      if (initialPosition.focusedId !== null) {
+        const meta = rowMetaRef.current.byId.get(initialPosition.focusedId);
+        if (meta !== undefined) {
+          pendingFocusRef.current = initialPosition.focusedId;
+          setFocusedId(initialPosition.focusedId);
+          setFocusRequest((value) => value + 1);
+          virtualizer.scrollToIndex(meta.itemIndex, { align: 'auto' });
+        } else {
+          // The saved row is filtered out or gone; do not keep a ghost focus.
+          setFocusedId(null);
+        }
+      }
+    });
+  }, [initialPosition, items.length, virtualizer]);
+
+  // Save in a layout cleanup: by passive-effect cleanup time the scroll
+  // container may already be detached, which would persist offset zero.
+  useLayoutEffect(() => {
+    return () => {
+      // A no-match or error screen has no scroll container; saving 0 here would
+      // clobber a position the user can still return to.
+      const element = scrollRef.current;
+      if (!restoredRef.current || element === null) {
+        return;
+      }
+      saveListPosition(projectId, {
+        scrollTop: element.scrollTop,
+        focusedId: focusedIdRef.current,
+      });
+    };
+  }, [projectId]);
+
+  // Focus the requested row after the virtualizer has rendered it.
+  const virtualItems = virtualizer.getVirtualItems();
+  useEffect(() => {
+    const id = pendingFocusRef.current;
+    if (id === null) {
+      return;
+    }
+    const element = document.getElementById(rowId(id));
+    if (element === null) {
+      return;
+    }
+    pendingFocusRef.current = null;
+    element.focus({ preventScroll: true });
+  }, [focusedId, focusRequest, virtualItems]);
+
+  useEffect(() => {
+    function onKeyDown(event: KeyboardEvent): void {
+      if (event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey) {
+        return;
+      }
+      if (isEditableTarget(event.target)) {
+        return;
+      }
+      // A dialog owns the keyboard; moving focus to a row would escape its trap.
+      if (isOverlayOpen()) {
+        return;
+      }
+
+      const meta = rowMetaRef.current;
+      if (meta.count === 0) {
+        return;
+      }
+      const currentId = focusedIdRef.current;
+      const current = currentId === null ? undefined : meta.byId.get(currentId);
+      const position = current?.position ?? -1;
+
+      if (event.key === 'j' || event.key === 'J') {
+        event.preventDefault();
+        focusRow(meta.order[position < 0 ? 0 : Math.min(position + 1, meta.count - 1)] ?? '');
+        return;
+      }
+      if (event.key === 'k' || event.key === 'K') {
+        event.preventDefault();
+        focusRow(meta.order[position < 0 ? meta.count - 1 : Math.max(position - 1, 0)] ?? '');
+        return;
+      }
+      if (event.key === 'Enter' && current !== undefined && isListTarget(event.target)) {
+        const item = itemsRef.current[current.itemIndex];
+        if (item?.kind === 'row') {
+          event.preventDefault();
+          openIssue(item.issue);
+        }
+      }
+    }
+
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [focusRow, openIssue]);
+
+  return (
+    <section
+      data-testid="list-view"
+      data-state={state}
+      data-sync={syncState.kind}
+      className="flex h-full min-h-0 flex-col"
+    >
+      <header className="flex shrink-0 items-center justify-between border-b border-border px-3 py-2">
+        <h1 className="text-sm font-semibold">{t('nav.list')}</h1>
+      </header>
+      {total > 0 ? (
+        <FilterBar
+          view={view}
+          issues={issues}
+          visibleCount={visible.length}
+          totalCount={total}
+          onChange={updateView}
+          onClear={clearFilters}
+        />
+      ) : null}
+      {syncState.kind === 'bd-unavailable' && total > 0 ? (
+        <div
+          role="alert"
+          className="flex shrink-0 items-center gap-2 border-b border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive"
+        >
+          <span className="min-w-0 flex-1">{t('list.state.stale')}</span>
+          {onRefresh === undefined ? null : (
+            <button
+              type="button"
+              onClick={onRefresh}
+              className="rounded border border-destructive/40 px-2 py-1"
+            >
+              {t('list.state.retry')}
+            </button>
+          )}
+        </div>
+      ) : null}
+
+      {state === 'loading' ? (
+        <LoadingRows label={t('list.state.loading')} />
+      ) : state === 'empty' ? (
+        <EmptyState />
+      ) : syncState.kind === 'bd-unavailable' && total === 0 ? (
+        <ErrorState message={syncState.error.message} onRefresh={onRefresh} />
+      ) : visible.length === 0 && activeFilters ? (
+        <NoMatchState onClear={clearFilters} />
+      ) : (
+        <div
+          ref={scrollRef}
+          role="list"
+          aria-label={t('list.issues')}
+          tabIndex={0}
+          className="min-h-0 flex-1 overflow-auto"
+        >
+          <div className="relative w-full" style={{ height: virtualizer.getTotalSize() }}>
+            {virtualItems.map((item) => {
+              const entry = items[item.index];
+              if (entry === undefined) {
+                return null;
+              }
+              if (entry.kind === 'header') {
+                if (view.group === 'none') {
+                  return null;
+                }
+                return (
+                  <GroupHeader
+                    key={item.key}
+                    group={view.group as Exclude<GroupBy, 'none'>}
+                    groupKey={entry.key}
+                    count={entry.count}
+                    collapsed={collapsedGroups.has(entry.key)}
+                    start={item.start}
+                    onToggle={toggleGroup}
+                  />
+                );
+              }
+              return (
+                <Row
+                  key={item.key}
+                  issue={entry.issue}
+                  start={item.start}
+                  focused={entry.issue.id === focusedId}
+                  onOpen={openIssue}
+                  onFocus={setFocusedId}
+                />
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function LoadingRows({ label }: { label: string }) {
+  return (
+    <div
+      role="status"
+      aria-busy="true"
+      aria-label={label}
+      className="min-h-0 flex-1 overflow-hidden"
+    >
+      {Array.from({ length: 10 }, (_, index) => (
+        <div
+          key={index}
+          data-testid="list-skeleton-row"
+          aria-hidden="true"
+          className="flex h-9 items-center gap-3 border-b border-border px-3"
+        >
+          <span className="h-3 w-24 rounded bg-muted" />
+          <span className="h-3 w-16 rounded bg-muted" />
+          <span className="h-3 flex-1 rounded bg-muted" />
+          <span className="h-3 w-8 rounded bg-muted" />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function EmptyState() {
+  const { t } = useI18n();
+  return (
+    <div className="flex flex-1 flex-col items-center justify-center gap-2 p-6 text-center">
+      <p className="text-sm font-medium">{t('list.state.empty.title')}</p>
+      <p className="text-xs text-muted-foreground">{t('list.state.empty.body')}</p>
+      <button
+        type="button"
+        disabled
+        className="rounded border border-border px-3 py-1 text-xs text-muted-foreground disabled:opacity-60"
+      >
+        {t('list.state.empty.create')}
+      </button>
+      <p className="max-w-sm text-xs text-muted-foreground">
+        {t('list.state.empty.createDisabled')}
+      </p>
+    </div>
+  );
+}
+
+function NoMatchState({ onClear }: { onClear: () => void }) {
+  const { t } = useI18n();
+  return (
+    <div className="flex flex-1 flex-col items-center justify-center gap-2 p-6 text-center">
+      <p className="text-sm font-medium">{t('list.state.noMatch.title')}</p>
+      <p className="text-xs text-muted-foreground">{t('list.state.noMatch.body')}</p>
+      <button
+        type="button"
+        onClick={onClear}
+        className="rounded border border-border px-3 py-1 text-xs"
+      >
+        {t('list.state.noMatch.clear')}
+      </button>
+    </div>
+  );
+}
+
+function ErrorState({ message, onRefresh }: { message: string; onRefresh?: () => void }) {
+  const { t } = useI18n();
+  return (
+    <div
+      role="alert"
+      className="flex flex-1 flex-col items-center justify-center gap-2 p-6 text-center"
+    >
+      <p className="text-sm font-medium text-destructive">{t('list.state.error.title')}</p>
+      <p className="text-xs text-muted-foreground">{t('list.state.error.body')}</p>
+      <p className="max-w-md text-xs text-muted-foreground">{message}</p>
+      {onRefresh === undefined ? null : (
+        <button
+          type="button"
+          onClick={onRefresh}
+          className="rounded border border-border px-3 py-1 text-xs"
+        >
+          {t('list.state.retry')}
+        </button>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Enter only activates the list when the event came from the list itself. A
+ * button in the top bar must keep its native Enter behavior.
+ */
+function isListTarget(target: EventTarget | null): boolean {
+  if (target === null) {
+    return false;
+  }
+  if (target === window || target === document || target === document.body) {
+    return true;
+  }
+  if (!(target instanceof Element)) {
+    return false;
+  }
+  return target.closest('[data-issue-id]') !== null || target.getAttribute('role') === 'list';
+}
