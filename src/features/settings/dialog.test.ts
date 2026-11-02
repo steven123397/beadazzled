@@ -11,9 +11,7 @@ test('a chosen file is returned as its path', async () => {
   const { pickBdExecutable } = await import('./dialog');
 
   await expect(pickBdExecutable()).resolves.toBe('C:/tools/bd.exe');
-  expect(open).toHaveBeenCalledWith(
-    expect.objectContaining({ multiple: false, directory: false })
-  );
+  expect(open).toHaveBeenCalledWith(expect.objectContaining({ multiple: false, directory: false }));
 });
 
 test('a cancelled dialog resolves to null', async () => {

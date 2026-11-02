@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-import type { BdStatus, BridgeError, WorkspaceSnapshot } from '@/bindings/bd';
-import { describeError } from '@/lib/errors';
+import type { BdStatus, WorkspaceSnapshot } from '@/bindings/bd';
+import { messageOf } from '@/lib/errors';
 
 import { workspaceApi, type WorkspaceApi } from './api';
 
@@ -20,7 +20,7 @@ export type UseWorkspace = WorkspaceState & {
   switchTo: (path: string) => Promise<boolean>;
   remove: (path: string) => Promise<boolean>;
   relocate: (oldPath: string, newPath: string) => Promise<boolean>;
-  setBdPath: (path: string | null) => Promise<boolean>;
+  setBdPath: (path: string | null) => Promise<BdStatus | null>;
 };
 
 /**
@@ -101,9 +101,28 @@ export function useWorkspace(api: WorkspaceApi = workspaceApi): UseWorkspace {
     (oldPath: string, newPath: string) => run(() => api.relocate(oldPath, newPath)),
     [run, api]
   );
+  /**
+   * Saves the explicit path and hands back the probe result for that path.
+   *
+   * A rejected path is not persisted, so the effective status is reloaded from
+   * the registry rather than replaced by the failed attempt: the app keeps
+   * using the bd it already had while Settings shows why the new one was
+   * refused.
+   */
   const setBdPath = useCallback(
-    (path: string | null) => run(() => api.setBdPath(path)),
-    [run, api]
+    async (path: string | null): Promise<BdStatus | null> => {
+      try {
+        const status = await api.setBdPath(path);
+        await reload();
+        return status;
+      } catch (error) {
+        if (alive.current) {
+          setState((previous) => ({ ...previous, error: messageOf(error) }));
+        }
+        return null;
+      }
+    },
+    [api, reload]
   );
 
   return {
@@ -116,24 +135,4 @@ export function useWorkspace(api: WorkspaceApi = workspaceApi): UseWorkspace {
     relocate,
     setBdPath,
   };
-}
-
-function messageOf(error: unknown): string {
-  if (isBridgeError(error)) {
-    return describeError(error).message;
-  }
-  if (error instanceof Error) {
-    return error.message;
-  }
-  return String(error);
-}
-
-function isBridgeError(value: unknown): value is BridgeError {
-  return (
-    typeof value === 'object' &&
-    value !== null &&
-    'code' in value &&
-    'message' in value &&
-    typeof (value as { message: unknown }).message === 'string'
-  );
 }

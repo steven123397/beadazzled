@@ -2,6 +2,8 @@ import { createContext, useContext, useEffect, useRef, useState, type ReactNode 
 
 import { useWorkspaceContext } from './WorkspaceProvider';
 
+import { messageOf } from '@/lib/errors';
+
 import type { Language } from '@/lib/i18n';
 import { useI18n } from '@/lib/i18n/I18nProvider';
 import type { Theme } from '@/lib/theme/theme';
@@ -88,17 +90,4 @@ export function PreferencesBridge({
 
 export function usePreferenceWriteError(): string | null {
   return useContext(PreferencesContext).error;
-}
-
-function messageOf(error: unknown): string {
-  if (error instanceof Error) {
-    return error.message;
-  }
-  if (typeof error === 'object' && error !== null && 'message' in error) {
-    const message = (error as { message: unknown }).message;
-    if (typeof message === 'string') {
-      return message;
-    }
-  }
-  return String(error);
 }

@@ -92,6 +92,12 @@ export async function installFakeBridge(
           if (command === 'bd_status') {
             return { kind: 'ready', path: 'bd', version: '1.3.2' };
           }
+          if (command === 'app_set_preferences') {
+            return snapshot.config;
+          }
+          if (command === 'plugin:app|version') {
+            return '0.1.0';
+          }
           throw new Error(`unexpected command: ${command}`);
         },
       };

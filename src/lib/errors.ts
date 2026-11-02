@@ -15,6 +15,36 @@ const MESSAGES: Partial<Record<BridgeError['code'], string>> = {
 
 const STDERR_LIMIT = 300;
 
+/**
+ * Best-effort user-facing text for an unknown thrown value: bridge failures
+ * get their mapped message, everything else its own message.
+ */
+export function messageOf(error: unknown): string {
+  if (isBridgeError(error)) {
+    return describeError(error).message;
+  }
+  if (error instanceof Error) {
+    return error.message;
+  }
+  if (typeof error === 'object' && error !== null && 'message' in error) {
+    const message = (error as { message: unknown }).message;
+    if (typeof message === 'string') {
+      return message;
+    }
+  }
+  return String(error);
+}
+
+function isBridgeError(value: unknown): value is BridgeError {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'code' in value &&
+    'message' in value &&
+    typeof (value as { message: unknown }).message === 'string'
+  );
+}
+
 /** Maps a bridge failure to text a person can act on. */
 export function describeError(error: BridgeError): {
   code: BridgeError['code'];

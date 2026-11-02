@@ -3,6 +3,7 @@ import { HashRouter, Navigate, Outlet, Route, Routes, useParams } from 'react-ro
 
 import type { BdStatus, Issue, SyncState } from '@/bindings/bd';
 import { ListRoute } from '@/features/list/ListView';
+import { SettingsView } from '@/features/settings/SettingsView';
 import { workspaceApi as defaultWorkspaceApi, type WorkspaceApi } from '@/lib/workspace/api';
 import { useWorkspace } from '@/lib/workspace/useWorkspace';
 import { I18nProvider, useI18n } from '@/lib/i18n/I18nProvider';
@@ -16,7 +17,6 @@ import { createWriteFlow } from '@/lib/writes/flow';
 import { useWrite } from '@/lib/writes/useWrite';
 
 import { ErrorBoundary } from './shell/ErrorBoundary';
-import { Placeholder } from './shell/Placeholder';
 import { PreferencesBridge, type PreferencesApi } from './shell/PreferencesBridge';
 import { Shell } from './shell/Shell';
 import { SkeletonScreen } from './shell/SkeletonScreen';
@@ -268,7 +268,7 @@ function AppFrame({
                       }
                     />
                   </Route>
-                  <Route path="settings" element={<Placeholder titleKey="nav.settings" />} />
+                  <Route path="settings" element={<SettingsView />} />
                   <Route path="*" element={<Navigate to="/welcome" replace />} />
                 </Route>
               </Routes>

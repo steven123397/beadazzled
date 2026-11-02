@@ -249,7 +249,7 @@ test('saving an explicit bd path reloads the status', async () => {
   await waitFor(() => expect(result.current.loading).toBe(false));
 
   await act(async () => {
-    expect(await result.current.setBdPath('C:/tools/bd.exe')).toBe(true);
+    expect(await result.current.setBdPath('C:/tools/bd.exe')).toEqual(READY);
   });
 
   expect(calls).toContain('setBdPath:C:/tools/bd.exe');
@@ -267,4 +267,20 @@ test('an initial load failure is visible instead of an empty workspace list', as
   await waitFor(() => expect(result.current.loading).toBe(false));
   expect(result.current.snapshot).toBeNull();
   expect(result.current.error).toBe('registry unreadable');
+});
+
+test('a rejected bd path is reported without replacing the effective status', async () => {
+  const { api } = fakeApi();
+  api.setBdPath = async () => ({ kind: 'not-found', searched: ['C:/nope/bd.exe'] });
+  const { result } = renderHook(() => useWorkspace(api));
+  await waitFor(() => expect(result.current.bd?.kind).toBe('ready'));
+
+  let status: Awaited<ReturnType<typeof result.current.setBdPath>> = null;
+  await act(async () => {
+    status = await result.current.setBdPath('C:/nope/bd.exe');
+  });
+
+  expect(status).toEqual({ kind: 'not-found', searched: ['C:/nope/bd.exe'] });
+  // The registry kept the previous entry, so the app still talks to that bd.
+  expect(result.current.bd?.kind).toBe('ready');
 });
