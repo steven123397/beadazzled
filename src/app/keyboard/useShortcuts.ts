@@ -1,5 +1,7 @@
 import { useEffect, useRef } from 'react';
 
+import { isDraftOpen } from '@/lib/draft-guard';
+
 import {
   isEditableTarget,
   resolveShortcut,
@@ -27,7 +29,7 @@ export function useShortcuts(shortcuts: readonly Shortcut[], context: ShortcutCo
       const options: ResolveOptions = {
         now: performance.now(),
         pending: pendingRef.current,
-        editable: isEditableTarget(event.target),
+        editable: isEditableTarget(event.target) || isDraftOpen(),
       };
       const active = shortcutsRef.current.filter((shortcut) => shortcut.when?.() !== false);
       const result = resolveShortcut(active, event, options);

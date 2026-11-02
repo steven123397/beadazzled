@@ -14,3 +14,8 @@ export function setDraftGuard(next: DraftGuard | null): void {
 export function confirmLeaveDraft(): boolean {
   return guard === null || guard();
 }
+
+/** True while an editor holds an unsaved draft. */
+export function isDraftOpen(): boolean {
+  return guard !== null;
+}

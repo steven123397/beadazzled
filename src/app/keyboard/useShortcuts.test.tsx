@@ -1,6 +1,8 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { expect, test, vi } from 'vitest';
 
+import { setDraftGuard } from '@/lib/draft-guard';
+
 import type { Shortcut, ShortcutContext } from './types';
 import { useShortcuts } from './useShortcuts';
 
@@ -46,6 +48,25 @@ test('does not run a shortcut after another handler claimed the key', () => {
   window.addEventListener('keydown', capture, true);
   fireEvent.keyDown(window, { key: '?' });
   window.removeEventListener('keydown', capture, true);
+
+  expect(run).not.toHaveBeenCalled();
+});
+
+test('single-key shortcuts are inert while a detail draft is open', () => {
+  const run = vi.fn();
+  render(
+    <Harness
+      shortcuts={[{ id: 'help', keys: '?', labelKey: 'shortcut.help', group: 'Help', run }]}
+      ctx={context()}
+    />
+  );
+
+  setDraftGuard(() => true);
+  try {
+    fireEvent.keyDown(window, { key: '?' });
+  } finally {
+    setDraftGuard(null);
+  }
 
   expect(run).not.toHaveBeenCalled();
 });
