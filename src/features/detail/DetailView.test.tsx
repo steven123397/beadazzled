@@ -269,6 +269,21 @@ test('the body and acceptance editors submit their own fields', async () => {
   });
 });
 
+test('a comment submits through the write controller', async () => {
+  const writes = fakeWrites();
+  renderDetail(issue('bza-b'), undefined, writes);
+
+  fireEvent.change(screen.getByRole('textbox', { name: 'Write a comment…' }), {
+    target: { value: 'Nice work' },
+  });
+  fireEvent.click(screen.getByRole('button', { name: 'Comment' }));
+
+  await vi.waitFor(() => expect(writes.submit).toHaveBeenCalledTimes(1));
+  expect(vi.mocked(writes.submit).mock.calls[0][0].build()).toEqual({
+    Comment: { id: 'bza-b', text: 'Nice work' },
+  });
+});
+
 test('without a write controller the reading page stays read-only', () => {
   renderDetail(issue('bza-b'));
 

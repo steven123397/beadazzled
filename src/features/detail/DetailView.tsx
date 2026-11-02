@@ -4,7 +4,7 @@ import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import type { Issue } from '@/bindings/bd';
 import { useI18n } from '@/lib/i18n/I18nProvider';
 import { getIssue, indexIssues } from '@/lib/store/selectors';
-import { updateIssue, type UpdateInput } from '@/lib/writes/commands';
+import { commentIssue, updateIssue, type UpdateInput } from '@/lib/writes/commands';
 import type { UseWrite } from '@/lib/writes/useWrite';
 
 import { Comments } from './Comments';
@@ -135,6 +135,18 @@ export function DetailView({
       </button>
     ) : null;
 
+  const submitComment = async (text: string): Promise<boolean> => {
+    if (writes === undefined) {
+      return false;
+    }
+    const outcome = await writes.submit({
+      key: `detail:${issue.id}:comment:${text}`,
+      issueId: issue.id,
+      build: () => commentIssue(issue.id, text),
+    });
+    return outcome.status === 'ok';
+  };
+
   return (
     <article className="mx-auto w-full max-w-[1100px] px-6 py-6">
       <Header
@@ -239,7 +251,13 @@ export function DetailView({
             </details>
           )}
 
-          <Comments comments={issue.comments} />
+          <Comments
+            comments={issue.comments}
+            onSubmit={canEdit ? submitComment : undefined}
+            pending={pending}
+            disabled={!canEdit}
+            error={writes?.error ?? null}
+          />
         </div>
 
         <MetadataRail issue={issue} index={index} onOpenIssue={onOpenIssue} />
