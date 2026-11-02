@@ -247,7 +247,7 @@ export const en = {
   'settings.bd.source.configured': 'Configured path',
   'settings.bd.source.path': 'Found on PATH',
   'settings.bd.version': 'bd {version}',
-  'settings.bd.path': 'Path',
+  'settings.bd.pathLine': 'Path: {path}',
   'settings.bd.notFound': 'bd was not found. Install it, then detect again:',
   'settings.bd.unsupported': 'bd {found} is older than the required {min}.',
   'settings.bd.broken': 'bd at {path} did not answer: {error}',

@@ -247,7 +247,7 @@ export const zhCN: Record<keyof typeof en, string> = {
   'settings.bd.source.configured': '指定路径',
   'settings.bd.source.path': 'PATH 中找到',
   'settings.bd.version': 'bd {version}',
-  'settings.bd.path': '路径',
+  'settings.bd.pathLine': '路径：{path}',
   'settings.bd.notFound': '没有找到 bd。安装后重新检测：',
   'settings.bd.unsupported': 'bd {found} 低于要求的 {min}。',
   'settings.bd.broken': '{path} 上的 bd 无法响应：{error}',

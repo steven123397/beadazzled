@@ -92,7 +92,7 @@ export function BdSection({ pickFile = defaultPicker, copy = copyText }: BdSecti
           <>
             <p className="font-medium">{t('settings.bd.version', { version: shown.version })}</p>
             <p className="break-all text-muted-foreground">
-              {t('settings.bd.path')}: {shown.path}
+              {t('settings.bd.pathLine', { path: shown.path })}
             </p>
             <p className="text-muted-foreground">
               {configured === null
