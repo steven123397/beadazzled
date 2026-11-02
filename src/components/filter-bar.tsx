@@ -116,13 +116,17 @@ export const FilterBar = memo(function FilterBar({
   }, []);
 
   const statusOptions = useMemo(() => {
+    if (!listMode) {
+      // The board hides the status control; do not build options it never shows.
+      return [];
+    }
     const present = new Set(issues.map((issue) => issue.status));
     const extra = [...present].filter((status) => !STATUS_ORDER.includes(status)).sort();
     return withSelected([...STATUS_ORDER, ...extra], view.filter.status).map((value) => ({
       value,
       label: statusText(value, t),
     }));
-  }, [issues, view.filter.status, t]);
+  }, [issues, listMode, view.filter.status, t]);
 
   const priorityOptions = useMemo(
     () =>

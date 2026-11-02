@@ -100,10 +100,15 @@ test('the status guard blocks in_progress and closed targets only', () => {
     blockers: ['bza-blocker'],
   });
   // Backlog is not a guarded target: an open issue with blockers can be
-  // deferred, and it will simply derive back to Blocked.
+  // deferred, and the Blocked rule (status = open) no longer applies, so it
+  // derives to Backlog.
   expect(summarize(planned(issue('open', blocker()), 'ready', 'backlog', ['bza-blocker']))).toEqual(
     ['update bza-1 -s deferred --if-status open']
   );
+});
+
+test('an empty source status is refused rather than writing an empty guard', () => {
+  expect(rejection(issue(''), 'other', 'in-progress')).toEqual({ reason: 'invalid-command' });
 });
 
 test('keyboard step skips Blocked and Other and stops at the edges', () => {

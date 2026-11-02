@@ -61,6 +61,12 @@ export function planMove(
     return { ok: false, rejection: { reason: 'invalid-command' } };
   }
 
+  // A corrupt/empty status would serialize as `--if-status ""`, which bd may
+  // read as "no guard". Refuse the move instead of writing unguarded.
+  if (issue.status.trim() === '') {
+    return { ok: false, rejection: { reason: 'invalid-command' } };
+  }
+
   // Ready is derived as open + no blockers. Writing open while blockers remain
   // would leave the card in Blocked: a drop that looks like it did nothing.
   if (target === 'ready' && blockers.length > 0) {

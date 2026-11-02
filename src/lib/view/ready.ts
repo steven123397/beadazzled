@@ -11,10 +11,21 @@ export type IssueLookup = (id: string) => Issue | undefined;
  * than silently ready.
  */
 export function blockingDeps(issue: Issue, lookup: IssueLookup): string[] {
-  return (issue.dependencies ?? [])
-    .filter((dependency) => isBlockingDependency(dependency.type))
-    .filter((dependency) => lookup(dependency.depends_on_id)?.status !== 'closed')
-    .map((dependency) => dependency.depends_on_id);
+  const blockers: string[] = [];
+  for (const dependency of issue.dependencies ?? []) {
+    if (!isBlockingDependency(dependency.type)) {
+      continue;
+    }
+    if (lookup(dependency.depends_on_id)?.status === 'closed') {
+      continue;
+    }
+    // Two edges of different types can point at the same ticket; it is still
+    // one blocker, matching `lib/writes/guard.blockingDeps`.
+    if (!blockers.includes(dependency.depends_on_id)) {
+      blockers.push(dependency.depends_on_id);
+    }
+  }
+  return blockers;
 }
 
 /** Ready means the issue is open and nothing blocking remains. */
