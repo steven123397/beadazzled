@@ -29,6 +29,19 @@ export function buildSearchIndex(issues: readonly Issue[]): ReadonlyMap<string, 
   return index;
 }
 
+/** True when any filter dimension would narrow the list. */
+export function hasActiveFilters(filter: ListFilter): boolean {
+  return (
+    filter.query.trim() !== '' ||
+    filter.status.length > 0 ||
+    filter.priority.length > 0 ||
+    filter.type.length > 0 ||
+    filter.assignee.length > 0 ||
+    filter.label.length > 0 ||
+    filter.ready
+  );
+}
+
 /**
  * Dimensions combine with AND; values inside one dimension combine with OR.
  * That is what the multi-select controls in SPEC-list mean.

@@ -1,61 +1,185 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useVirtualizer } from '@tanstack/react-virtual';
 
-import type { Issue } from '@/bindings/bd';
+import type { Issue, SyncState } from '@/bindings/bd';
 import { isEditableTarget } from '@/app/keyboard/resolve';
 import { useI18n } from '@/lib/i18n/I18nProvider';
 
-import { buildSearchIndex, selectVisibleIssues } from './filter';
+import { FilterBar } from './FilterBar';
+import { buildSearchIndex, hasActiveFilters, selectVisibleIssues } from './filter';
+import { GROUP_HEIGHT, GroupHeader } from './GroupHeader';
+import { groupIssues } from './group';
 import { loadListPosition, saveListPosition } from './position';
 import { Row, rowId } from './Row';
-import { createListViewState, type ListViewState } from './view-state';
+import {
+  createListViewState,
+  hasViewParams,
+  parseListViewState,
+  serializeListViewState,
+  type GroupBy,
+  type ListViewState,
+} from './view-state';
+import { loadSavedView, saveSavedView } from './view-storage';
 
 /** Must match `--row-height` in tokens.css. */
 const ROW_HEIGHT = 36;
 const OVERSCAN = 10;
 const INITIAL_RECT = { width: 0, height: 600 };
 
+const HEALTHY: SyncState = { kind: 'healthy', lastSeq: 0, lastEventAt: null };
+
+type ListItem = { kind: 'header'; key: string; count: number } | { kind: 'row'; issue: Issue };
+
+type ListState = 'loading' | 'empty' | 'no-match' | 'bd-unavailable' | 'ready';
+
 export type ListViewProps = {
   projectId: string;
   issues: readonly Issue[];
-  /** Supplied by the URL state layer; the unfiltered list is the default. */
-  view?: ListViewState;
+  syncState?: SyncState;
+  onRefresh?: () => void;
+};
+
+export type ListRouteProps = {
+  issues: readonly Issue[];
+  syncState?: SyncState;
+  onRefresh?: () => void;
 };
 
 /** Reads the route param and remounts the list when the workspace changes. */
-export function ListRoute({ issues }: { issues: readonly Issue[] }) {
+export function ListRoute({ issues, syncState, onRefresh }: ListRouteProps) {
   const { projectId = '' } = useParams<{ projectId: string }>();
-  return <ListView key={projectId} projectId={projectId} issues={issues} />;
+  return (
+    <ListView
+      key={projectId}
+      projectId={projectId}
+      issues={issues}
+      syncState={syncState}
+      onRefresh={onRefresh}
+    />
+  );
 }
 
-export function ListView({ projectId, issues, view: viewProp }: ListViewProps) {
+export function ListView({ projectId, issues, syncState = HEALTHY, onRefresh }: ListViewProps) {
   const { t } = useI18n();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const search = searchParams.toString();
+  const hasParams = useMemo(() => hasViewParams(new URLSearchParams(search)), [search]);
+  const savedView = useMemo(() => loadSavedView(projectId), [projectId]);
+  const initializedRef = useRef(false);
+
+  // The URL wins; a workspace that has no view parameters yet opens with the
+  // filters it used last time.
+  const view = useMemo(() => {
+    if (hasParams) {
+      return parseListViewState(new URLSearchParams(search));
+    }
+    if (!initializedRef.current && savedView !== null) {
+      return savedView;
+    }
+    return createListViewState();
+  }, [hasParams, savedView, search]);
+
+  useEffect(() => {
+    if (initializedRef.current) {
+      return;
+    }
+    initializedRef.current = true;
+    if (!hasParams && savedView !== null) {
+      const next = serializeListViewState(savedView, new URLSearchParams(search));
+      if (next.toString() !== '') {
+        setSearchParams(next, { replace: true });
+      }
+    }
+  }, [hasParams, savedView, search, setSearchParams]);
+
+  useEffect(() => {
+    saveSavedView(projectId, view);
+  }, [projectId, view]);
+
+  const updateView = useCallback(
+    (next: ListViewState) => {
+      setSearchParams((previous) => serializeListViewState(next, previous), {
+        replace: true,
+      });
+    },
+    [setSearchParams]
+  );
+
   const initialPosition = useMemo(() => loadListPosition(projectId), [projectId]);
-  const view = useMemo(() => viewProp ?? createListViewState(), [viewProp]);
   const searchText = useMemo(() => buildSearchIndex(issues), [issues]);
   const visible = useMemo(
     () => selectVisibleIssues(issues, view, { searchText }),
     [issues, view, searchText]
   );
+  const activeFilters = hasActiveFilters(view.filter);
 
   const [focusedId, setFocusedId] = useState<string | null>(initialPosition?.focusedId ?? null);
+  const [collapsedGroups, setCollapsedGroups] = useState<ReadonlySet<string>>(new Set());
   const scrollRef = useRef<HTMLDivElement>(null);
   const focusedIdRef = useRef(focusedId);
-  const visibleRef = useRef(visible);
   const pendingFocusRef = useRef<string | null>(initialPosition?.focusedId ?? null);
   const restoredRef = useRef(false);
 
   focusedIdRef.current = focusedId;
-  visibleRef.current = visible;
+
+  useEffect(() => {
+    setCollapsedGroups(new Set());
+  }, [view.group]);
+
+  const groups = useMemo(() => groupIssues(visible, view.group), [visible, view.group]);
+  const items = useMemo<ListItem[]>(() => {
+    if (view.group === 'none') {
+      return visible.map((issue) => ({ kind: 'row' as const, issue }));
+    }
+    return groups.flatMap((group) => {
+      const header: ListItem = {
+        kind: 'header',
+        key: group.key,
+        count: group.issues.length,
+      };
+      return collapsedGroups.has(group.key)
+        ? [header]
+        : [header, ...group.issues.map((issue) => ({ kind: 'row' as const, issue }))];
+    });
+  }, [collapsedGroups, groups, view.group, visible]);
+
+  const rowMeta = useMemo(() => {
+    const byId = new Map<string, { itemIndex: number; position: number }>();
+    const order: string[] = [];
+    items.forEach((item, itemIndex) => {
+      if (item.kind === 'row') {
+        byId.set(item.issue.id, { itemIndex, position: order.length });
+        order.push(item.issue.id);
+      }
+    });
+    return { byId, order, count: order.length };
+  }, [items]);
+
+  const itemsRef = useRef(items);
+  const rowMetaRef = useRef(rowMeta);
+  itemsRef.current = items;
+  rowMetaRef.current = rowMeta;
 
   const getScrollElement = useCallback(() => scrollRef.current, []);
-  const estimateSize = useCallback(() => ROW_HEIGHT, []);
-  const getItemKey = useCallback((index: number) => visible[index]?.id ?? index, [visible]);
+  const estimateSize = useCallback(
+    (index: number) => (items[index]?.kind === 'header' ? GROUP_HEIGHT : ROW_HEIGHT),
+    [items]
+  );
+  const getItemKey = useCallback(
+    (index: number) => {
+      const item = items[index];
+      if (item === undefined) {
+        return index;
+      }
+      return item.kind === 'header' ? `header:${item.key}` : item.issue.id;
+    },
+    [items]
+  );
 
   const virtualizer = useVirtualizer({
-    count: visible.length,
+    count: items.length,
     getScrollElement,
     estimateSize,
     overscan: OVERSCAN,
@@ -70,25 +194,53 @@ export function ListView({ projectId, issues, view: viewProp }: ListViewProps) {
     [navigate, projectId]
   );
 
-  const moveFocus = useCallback(
-    (index: number) => {
-      const issue = visibleRef.current[index];
-      if (issue === undefined) {
+  const focusRow = useCallback(
+    (id: string) => {
+      const meta = rowMetaRef.current.byId.get(id);
+      if (meta === undefined) {
         return;
       }
-      pendingFocusRef.current = issue.id;
-      setFocusedId(issue.id);
-      virtualizer.scrollToIndex(index, { align: 'auto' });
+      pendingFocusRef.current = id;
+      setFocusedId(id);
+      virtualizer.scrollToIndex(meta.itemIndex, { align: 'auto' });
     },
     [virtualizer]
   );
+
+  const toggleGroup = useCallback((key: string) => {
+    setCollapsedGroups((previous) => {
+      const next = new Set(previous);
+      if (next.has(key)) {
+        next.delete(key);
+      } else {
+        next.add(key);
+      }
+      return next;
+    });
+  }, []);
+
+  const clearFilters = useCallback(() => {
+    updateView({ ...view, filter: createListViewState().filter });
+  }, [updateView, view]);
+
+  const total = issues.length;
+  const state: ListState =
+    syncState.kind === 'loading' && total === 0
+      ? 'loading'
+      : syncState.kind === 'bd-unavailable'
+        ? 'bd-unavailable'
+        : total === 0
+          ? 'empty'
+          : visible.length === 0 && activeFilters
+            ? 'no-match'
+            : 'ready';
 
   // Restore once the first non-empty snapshot is available. Waiting matters
   // when sync paints an empty list first and fills it a frame later. The
   // restore itself runs in a frame: StrictMode re-runs the virtualizer's layout
   // effect and that pass writes scrollTop 0, so doing it here would be undone.
   useEffect(() => {
-    if (restoredRef.current || visible.length === 0) {
+    if (restoredRef.current || items.length === 0) {
       return;
     }
     restoredRef.current = true;
@@ -109,15 +261,15 @@ export function ListView({ projectId, issues, view: viewProp }: ListViewProps) {
       virtualizer.scrollToOffset(initialPosition.scrollTop);
 
       if (initialPosition.focusedId !== null) {
-        const index = visible.findIndex((issue) => issue.id === initialPosition.focusedId);
-        if (index >= 0) {
+        const meta = rowMetaRef.current.byId.get(initialPosition.focusedId);
+        if (meta !== undefined) {
           pendingFocusRef.current = initialPosition.focusedId;
           setFocusedId(initialPosition.focusedId);
-          virtualizer.scrollToIndex(index, { align: 'auto' });
+          virtualizer.scrollToIndex(meta.itemIndex, { align: 'auto' });
         }
       }
     });
-  }, [initialPosition, visible, virtualizer]);
+  }, [initialPosition, items.length, virtualizer]);
 
   // Save in a layout cleanup: by passive-effect cleanup time the scroll
   // container may already be detached, which would persist offset zero.
@@ -157,71 +309,213 @@ export function ListView({ projectId, issues, view: viewProp }: ListViewProps) {
         return;
       }
 
-      const list = visibleRef.current;
-      if (list.length === 0) {
+      const meta = rowMetaRef.current;
+      if (meta.count === 0) {
         return;
       }
       const currentId = focusedIdRef.current;
-      const index = currentId === null ? -1 : list.findIndex((issue) => issue.id === currentId);
+      const current = currentId === null ? undefined : meta.byId.get(currentId);
+      const position = current?.position ?? -1;
 
       if (event.key === 'j' || event.key === 'J') {
         event.preventDefault();
-        moveFocus(index < 0 ? 0 : Math.min(index + 1, list.length - 1));
+        focusRow(meta.order[position < 0 ? 0 : Math.min(position + 1, meta.count - 1)] ?? '');
         return;
       }
       if (event.key === 'k' || event.key === 'K') {
         event.preventDefault();
-        moveFocus(index < 0 ? list.length - 1 : Math.max(index - 1, 0));
+        focusRow(meta.order[position < 0 ? meta.count - 1 : Math.max(position - 1, 0)] ?? '');
         return;
       }
-      if (event.key === 'Enter' && index >= 0 && isListTarget(event.target)) {
-        event.preventDefault();
-        openIssue(list[index]);
+      if (event.key === 'Enter' && current !== undefined && isListTarget(event.target)) {
+        const item = itemsRef.current[current.itemIndex];
+        if (item?.kind === 'row') {
+          event.preventDefault();
+          openIssue(item.issue);
+        }
       }
     }
 
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [moveFocus, openIssue]);
+  }, [focusRow, openIssue]);
 
   return (
-    <section className="flex h-full min-h-0 flex-col">
+    <section
+      data-testid="list-view"
+      data-state={state}
+      data-sync={syncState.kind}
+      className="flex h-full min-h-0 flex-col"
+    >
       <header className="flex shrink-0 items-center justify-between border-b border-border px-3 py-2">
         <h1 className="text-sm font-semibold">{t('nav.list')}</h1>
-        <span
-          className="text-xs tabular-nums text-muted-foreground"
-          aria-label={t('list.visibleCount', { count: visible.length })}
-        >
-          {visible.length}
-        </span>
       </header>
-      <div
-        ref={scrollRef}
-        role="listbox"
-        aria-label={t('list.issues')}
-        tabIndex={0}
-        className="min-h-0 flex-1 overflow-auto"
-      >
-        <div className="relative w-full" style={{ height: virtualizer.getTotalSize() }}>
-          {virtualItems.map((item) => {
-            const issue = visible[item.index];
-            if (issue === undefined) {
-              return null;
-            }
-            return (
-              <Row
-                key={item.key}
-                issue={issue}
-                start={item.start}
-                focused={issue.id === focusedId}
-                onOpen={openIssue}
-                onFocus={setFocusedId}
-              />
-            );
-          })}
+      {total > 0 ? (
+        <FilterBar
+          view={view}
+          issues={issues}
+          visibleCount={visible.length}
+          totalCount={total}
+          onChange={updateView}
+          onClear={clearFilters}
+        />
+      ) : null}
+      {syncState.kind === 'bd-unavailable' && total > 0 ? (
+        <div
+          role="alert"
+          className="flex shrink-0 items-center gap-2 border-b border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive"
+        >
+          <span className="min-w-0 flex-1">{t('list.state.stale')}</span>
+          {onRefresh === undefined ? null : (
+            <button
+              type="button"
+              onClick={onRefresh}
+              className="rounded border border-destructive/40 px-2 py-1"
+            >
+              {t('list.state.retry')}
+            </button>
+          )}
         </div>
-      </div>
+      ) : null}
+
+      {state === 'loading' ? (
+        <LoadingRows label={t('list.state.loading')} />
+      ) : state === 'empty' ? (
+        <EmptyState />
+      ) : syncState.kind === 'bd-unavailable' && total === 0 ? (
+        <ErrorState message={syncState.error.message} onRefresh={onRefresh} />
+      ) : visible.length === 0 && activeFilters ? (
+        <NoMatchState onClear={clearFilters} />
+      ) : (
+        <div
+          ref={scrollRef}
+          role="list"
+          aria-label={t('list.issues')}
+          tabIndex={0}
+          className="min-h-0 flex-1 overflow-auto"
+        >
+          <div className="relative w-full" style={{ height: virtualizer.getTotalSize() }}>
+            {virtualItems.map((item) => {
+              const entry = items[item.index];
+              if (entry === undefined) {
+                return null;
+              }
+              if (entry.kind === 'header') {
+                if (view.group === 'none') {
+                  return null;
+                }
+                return (
+                  <GroupHeader
+                    key={item.key}
+                    group={view.group as Exclude<GroupBy, 'none'>}
+                    groupKey={entry.key}
+                    count={entry.count}
+                    collapsed={collapsedGroups.has(entry.key)}
+                    start={item.start}
+                    onToggle={() => toggleGroup(entry.key)}
+                  />
+                );
+              }
+              return (
+                <Row
+                  key={item.key}
+                  issue={entry.issue}
+                  start={item.start}
+                  focused={entry.issue.id === focusedId}
+                  onOpen={openIssue}
+                  onFocus={setFocusedId}
+                />
+              );
+            })}
+          </div>
+        </div>
+      )}
     </section>
+  );
+}
+
+function LoadingRows({ label }: { label: string }) {
+  return (
+    <div
+      role="status"
+      aria-busy="true"
+      aria-label={label}
+      className="min-h-0 flex-1 overflow-hidden"
+    >
+      {Array.from({ length: 10 }, (_, index) => (
+        <div
+          key={index}
+          data-testid="list-skeleton-row"
+          aria-hidden="true"
+          className="flex h-9 items-center gap-3 border-b border-border px-3"
+        >
+          <span className="h-3 w-24 rounded bg-muted" />
+          <span className="h-3 w-16 rounded bg-muted" />
+          <span className="h-3 flex-1 rounded bg-muted" />
+          <span className="h-3 w-8 rounded bg-muted" />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function EmptyState() {
+  const { t } = useI18n();
+  return (
+    <div className="flex flex-1 flex-col items-center justify-center gap-2 p-6 text-center">
+      <p className="text-sm font-medium">{t('list.state.empty.title')}</p>
+      <p className="text-xs text-muted-foreground">{t('list.state.empty.body')}</p>
+      <button
+        type="button"
+        disabled
+        className="rounded border border-border px-3 py-1 text-xs text-muted-foreground disabled:opacity-60"
+      >
+        {t('list.state.empty.create')}
+      </button>
+      <p className="max-w-sm text-xs text-muted-foreground">
+        {t('list.state.empty.createDisabled')}
+      </p>
+    </div>
+  );
+}
+
+function NoMatchState({ onClear }: { onClear: () => void }) {
+  const { t } = useI18n();
+  return (
+    <div className="flex flex-1 flex-col items-center justify-center gap-2 p-6 text-center">
+      <p className="text-sm font-medium">{t('list.state.noMatch.title')}</p>
+      <p className="text-xs text-muted-foreground">{t('list.state.noMatch.body')}</p>
+      <button
+        type="button"
+        onClick={onClear}
+        className="rounded border border-border px-3 py-1 text-xs"
+      >
+        {t('list.state.noMatch.clear')}
+      </button>
+    </div>
+  );
+}
+
+function ErrorState({ message, onRefresh }: { message: string; onRefresh?: () => void }) {
+  const { t } = useI18n();
+  return (
+    <div
+      role="alert"
+      className="flex flex-1 flex-col items-center justify-center gap-2 p-6 text-center"
+    >
+      <p className="text-sm font-medium text-destructive">{t('list.state.error.title')}</p>
+      <p className="text-xs text-muted-foreground">{t('list.state.error.body')}</p>
+      <p className="max-w-md text-xs text-muted-foreground">{message}</p>
+      {onRefresh === undefined ? null : (
+        <button
+          type="button"
+          onClick={onRefresh}
+          className="rounded border border-border px-3 py-1 text-xs"
+        >
+          {t('list.state.retry')}
+        </button>
+      )}
+    </div>
   );
 }
 
@@ -239,5 +533,5 @@ function isListTarget(target: EventTarget | null): boolean {
   if (!(target instanceof Element)) {
     return false;
   }
-  return target.closest('[role="option"]') !== null || target.getAttribute('role') === 'listbox';
+  return target.closest('[data-issue-id]') !== null || target.getAttribute('role') === 'list';
 }

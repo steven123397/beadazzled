@@ -74,6 +74,16 @@ export function createListViewState(): ListViewState {
   };
 }
 
+/** True when the URL carries at least one known list-state key. */
+export function hasViewParams(params: URLSearchParams): boolean {
+  for (const key of KNOWN_KEYS) {
+    if (params.has(key)) {
+      return true;
+    }
+  }
+  return false;
+}
+
 /** Unknown keys and values fall back to defaults so old links keep working. */
 export function parseListViewState(params: URLSearchParams): ListViewState {
   return {

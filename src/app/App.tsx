@@ -119,7 +119,16 @@ function AppFrame({
                 <Route path="welcome" element={<Welcome />} />
                 <Route path="w/:projectId" element={<ProjectGate />}>
                   <Route index element={<Navigate to="list" replace />} />
-                  <Route path="list" element={<ListRoute issues={shellIssues} />} />
+                  <Route
+                    path="list"
+                    element={
+                      <ListRoute
+                        issues={shellIssues}
+                        syncState={shellSyncState}
+                        onRefresh={refresh}
+                      />
+                    }
+                  />
                   <Route path="board" element={<Placeholder titleKey="nav.board" />} />
                   <Route path="issue/:issueId" element={<IssuePlaceholder />} />
                 </Route>

@@ -24,6 +24,8 @@ test('placeholders are declared and always substituted', () => {
     '{found}',
     '{min}',
     '{count}',
+    '{visible}',
+    '{total}',
     '{version}',
     '{theme}',
     '{language}',

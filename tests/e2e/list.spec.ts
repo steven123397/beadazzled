@@ -32,7 +32,7 @@ test('a 1000-issue list virtualizes, navigates with J/K and restores focus', asy
   test.setTimeout(60_000);
   await openThousandIssueList(page);
 
-  const rows = page.getByRole('option');
+  const rows = page.getByRole('listitem');
   expect(await rows.count()).toBeLessThan(100);
 
   for (let index = 0; index < 20; index += 1) {
@@ -43,8 +43,8 @@ test('a 1000-issue list virtualizes, navigates with J/K and restores focus', asy
   await expect(focused).toHaveAttribute('data-issue-id', 'bza-19');
   await expect(focused).toBeFocused();
 
-  const listbox = page.getByRole('listbox', { name: 'Issues' });
-  const scrollBefore = await listbox.evaluate((element) => element.scrollTop);
+  const list = page.getByRole('list', { name: 'Issues' });
+  const scrollBefore = await list.evaluate((element) => element.scrollTop);
   expect(scrollBefore).toBeGreaterThan(0);
 
   await page.keyboard.press('Enter');
@@ -53,18 +53,18 @@ test('a 1000-issue list virtualizes, navigates with J/K and restores focus', asy
 
   await page.keyboard.press('Escape');
   await expect(page).toHaveURL(/#\/w\/p1\/list$/);
-  await expect(page.getByRole('option', { name: /bza-19/ })).toBeFocused();
+  await expect(page.locator('[data-issue-id="bza-19"]')).toBeFocused();
 
   const scrollAfter = await page
-    .getByRole('listbox', { name: 'Issues' })
+    .getByRole('list', { name: 'Issues' })
     .evaluate((element) => element.scrollTop);
   expect(Math.abs(scrollAfter - scrollBefore)).toBeLessThanOrEqual(2);
 
-  await page.getByRole('listbox', { name: 'Issues' }).evaluate((element) => {
+  await page.getByRole('list', { name: 'Issues' }).evaluate((element) => {
     element.scrollTop = element.scrollHeight;
   });
   await expect(page.locator('[data-issue-id="bza-999"]')).toBeVisible();
-  expect(await page.getByRole('option').count()).toBeLessThan(100);
+  expect(await page.locator('[data-issue-id]').count()).toBeLessThan(100);
 });
 
 test('scrolling a 1000-issue list keeps frame time near the 60fps budget', async ({ page }) => {
@@ -72,15 +72,15 @@ test('scrolling a 1000-issue list keeps frame time near the 60fps budget', async
   await openThousandIssueList(page);
 
   const result = await page.evaluate(async () => {
-    const listbox = document.querySelector<HTMLElement>('[role="listbox"]');
-    if (listbox === null) {
-      throw new Error('listbox missing');
+    const list = document.querySelector<HTMLElement>('[role="list"]');
+    if (list === null) {
+      throw new Error('list missing');
     }
 
     const frames: number[] = [];
     let previous = performance.now();
     for (let step = 0; step < 120; step += 1) {
-      listbox.scrollTop += 48;
+      list.scrollTop += 48;
       await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
       const now = performance.now();
       frames.push(now - previous);

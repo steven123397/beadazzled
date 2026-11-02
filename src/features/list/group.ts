@@ -1,5 +1,6 @@
 import type { Issue } from '@/bindings/bd';
 
+import { STATUS_ORDER } from './status';
 import type { GroupBy } from './view-state';
 
 export type IssueGroup = {
@@ -8,9 +9,6 @@ export type IssueGroup = {
 };
 
 const collator = new Intl.Collator('en', { numeric: true, sensitivity: 'base' });
-
-/** Canonical display order from SPEC-list; unknown statuses follow it. */
-const STATUS_ORDER = ['open', 'in_progress', 'blocked', 'deferred', 'closed', 'pinned', 'hooked'];
 
 /**
  * Groups already-filtered issues without reordering them. The caller keeps the

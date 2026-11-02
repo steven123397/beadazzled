@@ -1,8 +1,9 @@
 import { memo, useMemo } from 'react';
 
 import type { Issue } from '@/bindings/bd';
-import type { MessageKey } from '@/lib/i18n';
 import { useI18n } from '@/lib/i18n/I18nProvider';
+
+import { STATUS_ICONS, statusText } from './status';
 
 export type RowProps = {
   issue: Issue;
@@ -11,26 +12,6 @@ export type RowProps = {
   focused: boolean;
   onOpen: (issue: Issue) => void;
   onFocus: (id: string) => void;
-};
-
-const STATUS_ICONS: Record<string, string> = {
-  open: '○',
-  in_progress: '◐',
-  blocked: '⊘',
-  deferred: '❄',
-  closed: '✓',
-  pinned: '⌖',
-  hooked: '↪',
-};
-
-const STATUS_LABELS: Record<string, MessageKey> = {
-  open: 'list.status.open',
-  in_progress: 'list.status.in_progress',
-  blocked: 'list.status.blocked',
-  deferred: 'list.status.deferred',
-  closed: 'list.status.closed',
-  pinned: 'list.status.pinned',
-  hooked: 'list.status.hooked',
 };
 
 export function rowId(issueId: string): string {
@@ -43,8 +24,7 @@ export function rowId(issueId: string): string {
  */
 export const Row = memo(function Row({ issue, start, focused, onOpen, onFocus }: RowProps) {
   const { t, language } = useI18n();
-  const statusKey = STATUS_LABELS[issue.status];
-  const statusLabel = statusKey === undefined ? issue.status : t(statusKey);
+  const statusLabel = statusText(issue.status, t);
   const statusIcon = STATUS_ICONS[issue.status] ?? '?';
   const visibleLabels = issue.labels.slice(0, 2);
   const extraLabels = issue.labels.length - visibleLabels.length;
@@ -61,8 +41,8 @@ export const Row = memo(function Row({ issue, start, focused, onOpen, onFocus }:
   return (
     <div
       id={rowId(issue.id)}
-      role="option"
-      aria-selected={focused}
+      role="listitem"
+      aria-current={focused ? 'true' : undefined}
       data-issue-id={issue.id}
       data-focused={focused ? 'true' : 'false'}
       tabIndex={focused ? 0 : -1}

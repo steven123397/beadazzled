@@ -2,7 +2,7 @@ import { expect, test } from 'vitest';
 
 import type { Dependency, Issue } from '@/bindings/bd';
 
-import { buildSearchIndex, matchesFilter, selectVisibleIssues } from './filter';
+import { buildSearchIndex, hasActiveFilters, matchesFilter, selectVisibleIssues } from './filter';
 import { groupIssues } from './group';
 import { createListViewState, type ListFilter } from './view-state';
 
@@ -163,6 +163,18 @@ test('filter, group and sort keep a fixed composition order', () => {
   expect(groups.map((group) => group.key)).toEqual(['open', 'closed']);
   expect(groups[0]?.issues.map((item) => item.id)).toEqual(['open-high', 'open-mid', 'open-low']);
   expect(groups[1]?.issues.map((item) => item.id)).toEqual(['closed']);
+});
+
+test('hasActiveFilters notices every filter dimension but not grouping or sorting', () => {
+  expect(hasActiveFilters(filter())).toBe(false);
+  expect(hasActiveFilters(filter({ query: '  ' }))).toBe(false);
+  expect(hasActiveFilters(filter({ query: 'x' }))).toBe(true);
+  expect(hasActiveFilters(filter({ status: ['open'] }))).toBe(true);
+  expect(hasActiveFilters(filter({ priority: [0] }))).toBe(true);
+  expect(hasActiveFilters(filter({ type: ['bug'] }))).toBe(true);
+  expect(hasActiveFilters(filter({ assignee: [''] }))).toBe(true);
+  expect(hasActiveFilters(filter({ label: ['ui'] }))).toBe(true);
+  expect(hasActiveFilters(filter({ ready: true }))).toBe(true);
 });
 
 test('filtering 1000 issues stays within the 16ms budget for six combinations', () => {

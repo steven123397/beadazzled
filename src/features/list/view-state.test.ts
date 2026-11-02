@@ -2,10 +2,21 @@ import { expect, test } from 'vitest';
 
 import {
   createListViewState,
+  hasViewParams,
   parseListViewState,
   serializeListViewState,
   type ListViewState,
 } from './view-state';
+
+test('hasViewParams distinguishes list state from unknown query keys', () => {
+  expect(hasViewParams(new URLSearchParams())).toBe(false);
+  expect(hasViewParams(new URLSearchParams('view=tree'))).toBe(false);
+  expect(hasViewParams(new URLSearchParams('q=scroll'))).toBe(true);
+  expect(hasViewParams(new URLSearchParams('status=open'))).toBe(true);
+  expect(hasViewParams(new URLSearchParams('group=status'))).toBe(true);
+  expect(hasViewParams(new URLSearchParams('sort=priority:asc'))).toBe(true);
+  expect(hasViewParams(new URLSearchParams('ready=0'))).toBe(true);
+});
 
 test('a fresh view state has no filters, no grouping and newest-updated sorting', () => {
   expect(createListViewState()).toEqual({
