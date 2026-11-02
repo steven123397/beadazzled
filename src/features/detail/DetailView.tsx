@@ -1,6 +1,7 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 
+import { isEditableTarget, isOverlayOpen } from '@/app/keyboard/resolve';
 import type { Issue } from '@/bindings/bd';
 import { useI18n } from '@/lib/i18n/I18nProvider';
 import { getIssue, indexIssues } from '@/lib/store/selectors';
@@ -43,6 +44,87 @@ export function DetailView({
   const issue = getIssue(index, issueId);
   const [editing, setEditing] = useState<EditableField | null>(null);
   const [validationError, setValidationError] = useState<string | null>(null);
+  // The updated_at when editing began: a newer value means someone else wrote
+  // the ticket while this draft was open.
+  const [editBase, setEditBase] = useState<string | null>(null);
+  const [deleted, setDeleted] = useState(false);
+  const lastSeen = useRef<Issue | null>(null);
+  const canEdit = writes?.canWrite === true;
+
+  const beginEdit = useCallback(
+    (field: EditableField) => {
+      writes?.clearError();
+      setValidationError(null);
+      setEditBase(issue?.updated_at ?? null);
+      setEditing(field);
+    },
+    [issue?.updated_at, writes]
+  );
+
+  const cancelEdit = useCallback(() => {
+    writes?.clearError();
+    setValidationError(null);
+    setEditBase(null);
+    setEditing(null);
+  }, [writes]);
+
+  // A ticket that was on screen and then vanished was deleted; one that never
+  // appeared may simply still be deep-linked from another workspace.
+  useEffect(() => {
+    if (issue !== undefined) {
+      lastSeen.current = issue;
+      setDeleted(false);
+      return undefined;
+    }
+    if (lastSeen.current === null || loading === true) {
+      return undefined;
+    }
+    setDeleted(true);
+    const timer = setTimeout(onBack, 3_000);
+    return () => clearTimeout(timer);
+  }, [issue, loading, onBack]);
+
+  // Detail single-key shortcuts. Inputs and open overlays are excluded by the
+  // same helpers the shell uses, so typing never triggers them.
+  useEffect(() => {
+    if (issue === undefined || !canEdit || editing !== null) {
+      return undefined;
+    }
+    const handler = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || event.ctrlKey || event.metaKey || event.altKey) {
+        return;
+      }
+      if (isEditableTarget(event.target) || isOverlayOpen()) {
+        return;
+      }
+      switch (event.key.toLowerCase()) {
+        case 'e':
+          event.preventDefault();
+          beginEdit('title');
+          break;
+        case 'a':
+          event.preventDefault();
+          beginEdit('acceptance');
+          break;
+        case 'c':
+          event.preventDefault();
+          document.getElementById('detail-comment-input')?.focus();
+          break;
+        case 's':
+          event.preventDefault();
+          document.getElementById('detail-status')?.focus();
+          break;
+        case 'p':
+          event.preventDefault();
+          document.getElementById('detail-priority')?.focus();
+          break;
+        default:
+          break;
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [beginEdit, canEdit, editing, issue]);
 
   if (issue === undefined) {
     if (loading === true) {
@@ -50,6 +132,23 @@ export function DetailView({
         <p role="status" className="px-6 py-10 text-sm text-muted-foreground">
           {t('detail.loading')}
         </p>
+      );
+    }
+    if (deleted) {
+      return (
+        <div className="mx-auto w-full max-w-lg px-6 py-10">
+          <p role="status" className="rounded border border-warning px-3 py-2 text-sm text-warning">
+            {t('detail.deleted')}
+          </p>
+          <button
+            type="button"
+            aria-label={t('detail.back')}
+            onClick={onBack}
+            className="mt-3 rounded border border-border px-2 py-1 text-xs text-foreground hover:bg-muted"
+          >
+            ← {t('detail.back')}
+          </button>
+        </div>
       );
     }
     return (
@@ -73,20 +172,9 @@ export function DetailView({
   const design = textField(issue, 'design');
   const notes = textField(issue, 'notes');
   const pending = writes?.isPending(issue.id) ?? false;
-  const canEdit = writes?.canWrite === true;
   const editorError = validationError ?? writes?.error ?? null;
-
-  const beginEdit = (field: EditableField) => {
-    writes?.clearError();
-    setValidationError(null);
-    setEditing(field);
-  };
-
-  const cancelEdit = () => {
-    writes?.clearError();
-    setValidationError(null);
-    setEditing(null);
-  };
+  const updatedElsewhere =
+    editing !== null && editBase !== null && issue.updated_at !== editBase;
 
   const saveField = async (field: EditableField, next: string): Promise<boolean> => {
     if (writes === undefined) {
@@ -119,6 +207,7 @@ export function DetailView({
     });
     if (outcome.status === 'ok') {
       setEditing(null);
+      setEditBase(null);
       return true;
     }
     return false;
@@ -173,6 +262,12 @@ export function DetailView({
       {writes !== undefined && !writes.canWrite ? (
         <p role="status" className="mt-3 text-xs text-muted-foreground">
           {writes.disabledReason ?? t('detail.write.unavailable')}
+        </p>
+      ) : null}
+
+      {updatedElsewhere ? (
+        <p role="status" className="mt-3 text-xs text-warning">
+          {t('detail.edit.updatedElsewhere')}
         </p>
       ) : null}
 

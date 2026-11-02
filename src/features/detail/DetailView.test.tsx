@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { expect, test, vi } from 'vitest';
 
 import type { Comment, Dependency, Issue } from '@/bindings/bd';
@@ -288,4 +288,85 @@ test('without a write controller the reading page stays read-only', () => {
   renderDetail(issue('bza-b'));
 
   expect(screen.queryByRole('button', { name: 'Edit' })).toBeNull();
+});
+
+test('a deleted ticket shows a banner and closes after three seconds', () => {
+  vi.useFakeTimers();
+  const onBack = vi.fn();
+  const target = issue('bza-b');
+  const { rerender } = render(
+    <I18nProvider initialLanguage="en">
+      <DetailView issueId="bza-b" issues={[target]} onBack={onBack} />
+    </I18nProvider>
+  );
+
+  rerender(
+    <I18nProvider initialLanguage="en">
+      <DetailView issueId="bza-b" issues={[]} onBack={onBack} />
+    </I18nProvider>
+  );
+
+  expect(screen.getByRole('status')).toHaveTextContent('This ticket was deleted.');
+
+  act(() => {
+    vi.advanceTimersByTime(3_000);
+  });
+
+  expect(onBack).toHaveBeenCalledTimes(1);
+  vi.useRealTimers();
+});
+
+test('an update from elsewhere is announced without overwriting the draft', () => {
+  const writes = fakeWrites();
+  const target = issue('bza-b', { title: 'Old title' });
+  const { rerender } = render(
+    <I18nProvider initialLanguage="en">
+      <DetailView issueId="bza-b" issues={[target]} onBack={vi.fn()} writes={writes} />
+    </I18nProvider>
+  );
+
+  fireEvent.click(screen.getByRole('button', { name: 'Old title' }));
+  fireEvent.change(screen.getByRole('textbox', { name: 'Title' }), {
+    target: { value: 'Draft title' },
+  });
+
+  rerender(
+    <I18nProvider initialLanguage="en">
+      <DetailView
+        issueId="bza-b"
+        issues={[issue('bza-b', { title: 'Changed elsewhere', updated_at: '2026-11-02T00:00:00Z' })]}
+        onBack={vi.fn()}
+        writes={writes}
+      />
+    </I18nProvider>
+  );
+
+  expect(screen.getByText(/Updated elsewhere/)).toBeInTheDocument();
+  expect(screen.getByRole('textbox', { name: 'Title' })).toHaveValue('Draft title');
+});
+
+test('detail single-key shortcuts open editors and focus controls', () => {
+  renderDetail(issue('bza-b'), undefined, fakeWrites());
+
+  fireEvent.keyDown(window, { key: 'e' });
+  expect(screen.getByRole('textbox', { name: 'Title' })).toBeInTheDocument();
+
+  fireEvent.keyDown(screen.getByRole('textbox', { name: 'Title' }), { key: 'a' });
+  expect(screen.queryByRole('textbox', { name: 'Acceptance criteria' })).toBeNull();
+
+  fireEvent.keyDown(screen.getByRole('textbox', { name: 'Title' }), { key: 'Escape' });
+  fireEvent.keyDown(window, { key: 'a' });
+  expect(screen.getByRole('textbox', { name: 'Acceptance criteria' })).toBeInTheDocument();
+  fireEvent.keyDown(screen.getByRole('textbox', { name: 'Acceptance criteria' }), {
+    key: 'Escape',
+  });
+
+  fireEvent.keyDown(window, { key: 'c' });
+  expect(screen.getByRole('textbox', { name: 'Write a comment…' })).toHaveFocus();
+
+  fireEvent.keyDown(window, { key: 's' });
+  expect(screen.getByRole('combobox', { name: 'Status' })).toHaveFocus();
+
+  fireEvent.keyDown(window, { key: 'p' });
+  expect(screen.getByRole('combobox', { name: 'Priority' })).toHaveFocus();
 });

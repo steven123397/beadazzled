@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { HashRouter, Navigate, Outlet, Route, Routes, useParams } from 'react-router-dom';
 
 import type { BdStatus, Issue, SyncState } from '@/bindings/bd';
@@ -11,6 +11,9 @@ import type { SyncApi } from '@/lib/sync/api';
 import { useSync } from '@/lib/sync/useSync';
 import { ThemeProvider } from '@/lib/theme/ThemeProvider';
 import type { Theme } from '@/lib/theme/theme';
+import { writesApi as defaultWritesApi, type WritesApi } from '@/lib/writes/api';
+import { createWriteFlow } from '@/lib/writes/flow';
+import { useWrite } from '@/lib/writes/useWrite';
 
 import { ErrorBoundary } from './shell/ErrorBoundary';
 import { Placeholder } from './shell/Placeholder';
@@ -39,6 +42,8 @@ export type AppProps = {
    */
   syncEnabled?: boolean;
   syncApi?: SyncApi;
+  /** Injected by tests; production talks to the Tauri command layer. */
+  writesApi?: WritesApi;
 };
 
 /** Stable defaults: a fresh array/object per render would invalidate memos. */
@@ -89,6 +94,7 @@ export function App({
   initialTheme,
   syncEnabled = false,
   syncApi,
+  writesApi,
 }: AppProps) {
   return (
     <I18nProvider initialLanguage={initialLanguage}>
@@ -99,6 +105,7 @@ export function App({
           issues={issues}
           syncEnabled={syncEnabled}
           syncApi={syncApi}
+          writesApi={writesApi}
         />
       </ThemeProvider>
     </I18nProvider>
@@ -111,12 +118,14 @@ function AppFrame({
   issues,
   syncEnabled,
   syncApi,
+  writesApi,
 }: {
   workspaceApi: WorkspaceApi;
   syncState: SyncState;
   issues: readonly Issue[];
   syncEnabled: boolean;
   syncApi?: SyncApi;
+  writesApi?: WritesApi;
 }) {
   const { t } = useI18n();
   const workspace = useWorkspace(workspaceApi);
@@ -140,6 +149,40 @@ function AppFrame({
     void reload();
     sync.refresh();
   }, [reload, sync.refresh]);
+
+  // The queue must outlive render-time state changes (a journal state flip
+  // mid-write would otherwise drop queued tasks), so the flow reads the latest
+  // values through one ref and is rebuilt only when the store or API changes.
+  const writesApiRef = useRef(writesApi ?? defaultWritesApi);
+  const latestWriteContext = useRef({
+    workspace: project?.path ?? '',
+    stateKind: shellSyncState.kind,
+    sync,
+    reload,
+  });
+  writesApiRef.current = writesApi ?? defaultWritesApi;
+  latestWriteContext.current = {
+    workspace: project?.path ?? '',
+    stateKind: shellSyncState.kind,
+    sync,
+    reload,
+  };
+
+  const writeFlow = useMemo(
+    () =>
+      createWriteFlow({
+        store: sync.store,
+        workspace: () => latestWriteContext.current.workspace,
+        execute: (workspace, command) => writesApiRef.current.execute(workspace, command),
+        refresh: () => {
+          void latestWriteContext.current.reload();
+          latestWriteContext.current.sync.refresh();
+        },
+        isJournalDisabled: () => latestWriteContext.current.stateKind === 'journal-disabled',
+      }),
+    [sync.store]
+  );
+  const writeState = useWrite(writeFlow, bd);
 
   return (
     <ErrorBoundary
@@ -183,6 +226,7 @@ function AppFrame({
                         <DetailRoute
                           issues={shellIssues}
                           loading={shellSyncState.kind === 'loading'}
+                          writes={syncEnabled ? writeState : undefined}
                         />
                       </Suspense>
                     }

@@ -139,6 +139,7 @@ export function MetadataRail({
         <dd>
           {canEdit ? (
             <select
+              id="detail-status"
               aria-label={t('detail.metadata.status')}
               value={issue.status}
               disabled={disabled}
@@ -164,6 +165,7 @@ export function MetadataRail({
         <dd className="tabular-nums">
           {canEdit ? (
             <select
+              id="detail-priority"
               aria-label={t('detail.metadata.priority')}
               value={String(issue.priority)}
               disabled={disabled}
