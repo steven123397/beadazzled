@@ -131,6 +131,11 @@ export function DetailView({
       if (event.defaultPrevented || event.ctrlKey || event.metaKey || event.altKey) {
         return;
       }
+      // A modal above the page owns Escape, even while a draft is open behind
+      // it: otherwise the palette would stay up and the draft would vanish.
+      if (isOverlayOpen()) {
+        return;
+      }
       if (editing !== null) {
         // Escape leaves the editor instead of the page; the input itself also
         // handles this when focused and stops propagation.
@@ -141,7 +146,7 @@ export function DetailView({
         }
         return;
       }
-      if (isEditableTarget(event.target) || isOverlayOpen()) {
+      if (isEditableTarget(event.target)) {
         return;
       }
       switch (event.key.toLowerCase()) {

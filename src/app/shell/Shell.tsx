@@ -147,6 +147,9 @@ export function Shell({
         keys: 'escape',
         labelKey: 'shortcut.closeOverlay',
         group: 'General',
+        // Escape is the way out of a modal even when a draft guard suppresses
+        // the other single-key shortcuts; `when` keeps it scoped to overlays.
+        allowInInput: true,
         when: () => overlayOpen,
         run: (ctx) => ctx.closeOverlay(),
       },

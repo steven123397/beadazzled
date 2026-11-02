@@ -434,6 +434,40 @@ test('escape outside the input cancels the draft instead of leaving the page', (
   expect(onBack).not.toHaveBeenCalled();
 });
 
+test('an open modal owns Escape, so the draft behind it survives', () => {
+  const writes = fakeWrites();
+  renderDetail(issue('bza-b', { title: 'Old title' }), undefined, writes);
+
+  fireEvent.click(screen.getByRole('button', { name: 'Old title' }));
+  fireEvent.change(screen.getByRole('textbox', { name: 'Title' }), {
+    target: { value: 'Draft title' },
+  });
+
+  const dialog = document.createElement('div');
+  dialog.setAttribute('role', 'dialog');
+  dialog.setAttribute('aria-modal', 'true');
+  const close = vi.fn();
+  dialog.addEventListener('keydown', (event) => {
+    if ((event as KeyboardEvent).key === 'Escape') {
+      close();
+    }
+  });
+  document.body.append(dialog);
+
+  try {
+    fireEvent.keyDown(dialog, { key: 'Escape' });
+
+    expect(close).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole('textbox', { name: 'Title' })).toHaveValue('Draft title');
+  } finally {
+    dialog.remove();
+  }
+
+  // Without the modal, the same key falls back to cancelling the draft.
+  fireEvent.keyDown(window, { key: 'Escape' });
+  expect(screen.queryByRole('textbox', { name: 'Title' })).toBeNull();
+});
+
 test('a write that misses its echo says the view was refreshed', async () => {
   const writes = fakeWrites({
     submit: vi.fn(async () => ({ status: 'ok' as const, echo: 'timeout' as const })),

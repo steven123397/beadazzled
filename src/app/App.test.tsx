@@ -2,6 +2,7 @@ import { act, fireEvent, render, screen, waitFor, within } from '@testing-librar
 import { beforeEach, expect, test, vi } from 'vitest';
 
 import type { BdStatus, Issue, SyncState, WorkspaceEntry, WorkspaceSnapshot } from '@/bindings/bd';
+import { setDraftGuard } from '@/lib/draft-guard';
 import type { SyncApi, SyncEvent, SyncSnapshot } from '@/lib/sync/api';
 import type { WorkspaceApi } from '@/lib/workspace/api';
 
@@ -624,6 +625,31 @@ test('escape and the backdrop both close the diagnostics dialog', async () => {
   await openDiagnostics();
   fireEvent.click(document.querySelector('[data-diagnostics-backdrop]') as HTMLElement);
   expect(screen.queryByRole('dialog', { name: 'Diagnostics' })).not.toBeInTheDocument();
+});
+
+test('an overlay closes with escape while a draft is open behind it', async () => {
+  window.location.hash = '#/w/p1/list';
+
+  render(
+    <App
+      workspaceApi={fakeApi({
+        snapshot: async () => snapshot([entry('p1', 'alpha')], '/repo/p1'),
+      })}
+    />
+  );
+  await screen.findByRole('heading', { name: 'List' });
+
+  // The detail editor arms this guard while a draft is open; single-key
+  // shortcuts are suppressed then, but Escape must still reach the overlay.
+  setDraftGuard(() => true);
+  try {
+    await openDiagnostics();
+    fireEvent.keyDown(window, { key: 'Escape' });
+
+    expect(screen.queryByRole('dialog', { name: 'Diagnostics' })).not.toBeInTheDocument();
+  } finally {
+    setDraftGuard(null);
+  }
 });
 
 test('opening diagnostics never calls bd again', async () => {
