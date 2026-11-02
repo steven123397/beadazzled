@@ -50,12 +50,19 @@ test('script, iframe, event handlers and javascript links never become executabl
 });
 
 test('a remote image becomes a placeholder holding its address instead of a request', () => {
+  const onOpenLink = vi.fn();
   const { container } = render(
-    <Markdown>{'![diagram](https://example.com/pic.png)'}</Markdown>
+    <Markdown onOpenLink={onOpenLink}>{'![diagram](https://example.com/pic.png)'}</Markdown>
   );
 
   expect(container.querySelector('img')).toBeNull();
-  expect(screen.getByText(/https:\/\/example\.com\/pic\.png/)).toBeInTheDocument();
+  const address = screen.getByRole('link', { name: 'https://example.com/pic.png' });
+
+  const event = new MouseEvent('click', { bubbles: true, cancelable: true });
+  address.dispatchEvent(event);
+
+  expect(event.defaultPrevented).toBe(true);
+  expect(onOpenLink).toHaveBeenCalledWith('https://example.com/pic.png');
 });
 
 test('an http link opens through the system browser and does not navigate the app', () => {

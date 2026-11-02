@@ -15,18 +15,27 @@ export type DetailViewProps = {
   issues: readonly Issue[];
   onBack: () => void;
   onOpenIssue?: (id: string) => void;
+  /** The baseline is still arriving; a missing id is not "deleted" yet. */
+  loading?: boolean;
 };
 
 /**
  * The reading surface. It reads only the in-memory snapshot, so opening a
  * ticket never touches bd or the network.
  */
-export function DetailView({ issueId, issues, onBack, onOpenIssue }: DetailViewProps) {
+export function DetailView({ issueId, issues, onBack, onOpenIssue, loading }: DetailViewProps) {
   const { t } = useI18n();
   const index = useMemo(() => indexIssues(issues), [issues]);
   const issue = getIssue(index, issueId);
 
   if (issue === undefined) {
+    if (loading === true) {
+      return (
+        <p role="status" className="px-6 py-10 text-sm text-muted-foreground">
+          {t('detail.loading')}
+        </p>
+      );
+    }
     return (
       <div className="mx-auto w-full max-w-lg px-6 py-10">
         <button
@@ -108,7 +117,13 @@ export function DetailView({ issueId, issues, onBack, onOpenIssue }: DetailViewP
 }
 
 /** Read the route params and remount the view when the ticket changes. */
-export function DetailRoute({ issues }: { issues: readonly Issue[] }) {
+export function DetailRoute({
+  issues,
+  loading,
+}: {
+  issues: readonly Issue[];
+  loading?: boolean;
+}) {
   const { projectId = '', issueId = '' } = useParams<{ projectId: string; issueId: string }>();
   const navigate = useNavigate();
   const location = useLocation();
@@ -135,6 +150,7 @@ export function DetailRoute({ issues }: { issues: readonly Issue[] }) {
       issues={issues}
       onBack={back}
       onOpenIssue={openIssue}
+      loading={loading}
     />
   );
 }

@@ -146,6 +146,17 @@ test('design and notes are folded away when present', () => {
   expect(screen.getByText('Note body')).toBeInTheDocument();
 });
 
+test('a missing id while the baseline is loading is not reported as deleted', () => {
+  render(
+    <I18nProvider initialLanguage="en">
+      <DetailView issueId="bza-gone" issues={[]} onBack={vi.fn()} loading />
+    </I18nProvider>
+  );
+
+  expect(screen.getByRole('status')).toHaveTextContent('Loading ticket…');
+  expect(screen.queryByRole('heading', { name: 'Ticket not found' })).toBeNull();
+});
+
 test('the back control calls the route callback', () => {
   const { onBack } = renderDetail(issue('bza-b'));
 

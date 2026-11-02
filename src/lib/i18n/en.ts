@@ -101,6 +101,7 @@ export const en = {
   'placeholder.later': 'This view arrives in a later phase.',
 
   'detail.back': 'Back to list',
+  'detail.loading': 'Loading ticket…',
   'detail.copyId': 'Copy ticket id',
   'detail.notFound.title': 'Ticket not found',
   'detail.notFound.body': 'It may have been deleted, or it belongs to another workspace.',

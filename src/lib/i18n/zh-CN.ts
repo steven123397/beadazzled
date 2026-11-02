@@ -102,6 +102,7 @@ export const zhCN: Record<keyof typeof en, string> = {
   'placeholder.later': '该视图将在后续阶段提供。',
 
   'detail.back': '返回列表',
+  'detail.loading': '正在加载票…',
   'detail.copyId': '复制票 id',
   'detail.notFound.title': '未找到这张票',
   'detail.notFound.body': '它可能已被删除，或属于其它工作区。',

@@ -1,8 +1,7 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { HashRouter, Navigate, Outlet, Route, Routes, useParams } from 'react-router-dom';
 
 import type { BdStatus, Issue, SyncState } from '@/bindings/bd';
-import { DetailRoute } from '@/features/detail/DetailView';
 import { ListRoute } from '@/features/list/ListView';
 import { workspaceApi as defaultWorkspaceApi, type WorkspaceApi } from '@/lib/workspace/api';
 import { useWorkspace } from '@/lib/workspace/useWorkspace';
@@ -45,6 +44,14 @@ export type AppProps = {
 /** Stable defaults: a fresh array/object per render would invalidate memos. */
 const NO_ISSUES: readonly Issue[] = [];
 const LOADING: SyncState = { kind: 'loading', step: 'export' };
+
+/**
+ * The detail screen owns the Markdown pipeline, which is large; loading it as
+ * a route chunk keeps it out of the first-screen JavaScript budget.
+ */
+const DetailRoute = lazy(() =>
+  import('@/features/detail/DetailView').then((module) => ({ default: module.DetailRoute }))
+);
 
 /**
  * The sync worker never starts while bd is not ready, so it cannot produce a
@@ -163,7 +170,23 @@ function AppFrame({
                     }
                   />
                   <Route path="board" element={<Placeholder titleKey="nav.board" />} />
-                  <Route path="issue/:issueId" element={<DetailRoute issues={shellIssues} />} />
+                  <Route
+                    path="issue/:issueId"
+                    element={
+                      <Suspense
+                        fallback={
+                          <p role="status" className="px-6 py-10 text-sm text-muted-foreground">
+                            {t('detail.loading')}
+                          </p>
+                        }
+                      >
+                        <DetailRoute
+                          issues={shellIssues}
+                          loading={shellSyncState.kind === 'loading'}
+                        />
+                      </Suspense>
+                    }
+                  />
                 </Route>
                 <Route path="settings" element={<Placeholder titleKey="nav.settings" />} />
                 <Route path="*" element={<Navigate to="/welcome" replace />} />

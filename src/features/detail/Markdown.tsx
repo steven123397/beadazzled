@@ -39,12 +39,26 @@ export function Markdown({ children, className, onOpenLink = openExternal }: Mar
     },
     img({ src, alt }) {
       // Remote images are never fetched: no <img> element reaches the DOM.
+      // The address stays available as a link the user can open deliberately.
       const address = typeof src === 'string' ? src : '';
       const label = alt === undefined || alt === '' ? 'Image' : `Image: ${alt}`;
       return (
         <span className="inline-flex max-w-full items-baseline gap-1 rounded border border-border bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
           <span>{label}</span>
-          {address === '' ? null : <span className="truncate font-mono">{address}</span>}
+          {address === '' ? null : isExternalUrl(address) ? (
+            <a
+              href={address}
+              onClick={(event: MouseEvent<HTMLAnchorElement>) => {
+                event.preventDefault();
+                onOpenLink(address);
+              }}
+              className="truncate font-mono"
+            >
+              {address}
+            </a>
+          ) : (
+            <span className="truncate font-mono">{address}</span>
+          )}
         </span>
       );
     },
