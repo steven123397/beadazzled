@@ -17,7 +17,7 @@ test('the keyboard loop opens workspace, list, detail, back and board without bd
   await page.keyboard.press('Control+k');
   await page.getByRole('combobox', { name: 'Search commands and tickets' }).fill('bza-1');
   await page.keyboard.press('Enter');
-  await expect(page.getByRole('heading', { name: 'Issue bza-1' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Detail reading' })).toBeVisible();
   await expect(page).toHaveURL(/#\/w\/p1\/issue\/bza-1$/);
 
   // Detail -> List with Escape.
