@@ -1,11 +1,14 @@
-import { useCallback, useMemo } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 
 import type { Issue } from '@/bindings/bd';
 import { useI18n } from '@/lib/i18n/I18nProvider';
 import { getIssue, indexIssues } from '@/lib/store/selectors';
+import { updateIssue, type UpdateInput } from '@/lib/writes/commands';
+import type { UseWrite } from '@/lib/writes/useWrite';
 
 import { Comments } from './Comments';
+import { Editor } from './Editor';
 import { Header } from './Header';
 import { Markdown } from './Markdown';
 import { MetadataRail } from './MetadataRail';
@@ -17,16 +20,29 @@ export type DetailViewProps = {
   onOpenIssue?: (id: string) => void;
   /** The baseline is still arriving; a missing id is not "deleted" yet. */
   loading?: boolean;
+  /** Omitted in read-only tests; the production shell always passes it. */
+  writes?: UseWrite;
 };
+
+type EditableField = 'title' | 'description' | 'acceptance';
 
 /**
  * The reading surface. It reads only the in-memory snapshot, so opening a
  * ticket never touches bd or the network.
  */
-export function DetailView({ issueId, issues, onBack, onOpenIssue, loading }: DetailViewProps) {
+export function DetailView({
+  issueId,
+  issues,
+  onBack,
+  onOpenIssue,
+  loading,
+  writes,
+}: DetailViewProps) {
   const { t } = useI18n();
   const index = useMemo(() => indexIssues(issues), [issues]);
   const issue = getIssue(index, issueId);
+  const [editing, setEditing] = useState<EditableField | null>(null);
+  const [validationError, setValidationError] = useState<string | null>(null);
 
   if (issue === undefined) {
     if (loading === true) {
@@ -56,19 +72,121 @@ export function DetailView({ issueId, issues, onBack, onOpenIssue, loading }: De
   const acceptance = issue.acceptance_criteria?.trim() ?? '';
   const design = textField(issue, 'design');
   const notes = textField(issue, 'notes');
+  const pending = writes?.isPending(issue.id) ?? false;
+  const canEdit = writes?.canWrite === true;
+  const editorError = validationError ?? writes?.error ?? null;
+
+  const beginEdit = (field: EditableField) => {
+    writes?.clearError();
+    setValidationError(null);
+    setEditing(field);
+  };
+
+  const cancelEdit = () => {
+    writes?.clearError();
+    setValidationError(null);
+    setEditing(null);
+  };
+
+  const saveField = async (field: EditableField, next: string): Promise<boolean> => {
+    if (writes === undefined) {
+      setValidationError(t('detail.write.unavailable'));
+      return false;
+    }
+    if (field === 'title' && next.trim() === '') {
+      setValidationError(t('detail.edit.titleEmpty'));
+      return false;
+    }
+    setValidationError(null);
+
+    const value = field === 'title' ? next.trim() : next;
+    const input: UpdateInput =
+      field === 'title'
+        ? { title: value }
+        : field === 'description'
+          ? { description: value }
+          : { acceptance: value };
+    const result = updateIssue(issue.id, input);
+    if (!result.ok) {
+      setValidationError(result.error.message);
+      return false;
+    }
+
+    const outcome = await writes.submit({
+      key: `detail:${issue.id}:${field}:${value}`,
+      issueId: issue.id,
+      build: () => result.command,
+    });
+    if (outcome.status === 'ok') {
+      setEditing(null);
+      return true;
+    }
+    return false;
+  };
+
+  const editButton = (field: EditableField) =>
+    canEdit && editing === null ? (
+      <button
+        type="button"
+        onClick={() => beginEdit(field)}
+        className="rounded border border-border px-2 py-0.5 text-xs text-muted-foreground hover:bg-muted"
+      >
+        {t('detail.edit.edit')}
+      </button>
+    ) : null;
 
   return (
     <article className="mx-auto w-full max-w-[1100px] px-6 py-6">
-      <Header issue={issue} onBack={onBack} />
+      <Header
+        issue={issue}
+        onBack={onBack}
+        hideTitle={editing === 'title'}
+        onEditTitle={canEdit ? () => beginEdit('title') : undefined}
+      />
+
+      {editing === 'title' ? (
+        <div className="mt-3">
+          <Editor
+            label={t('detail.edit.title')}
+            value={issue.title}
+            pending={pending}
+            disabled={!canEdit}
+            error={editorError}
+            onSave={(next) => saveField('title', next)}
+            onCancel={cancelEdit}
+          />
+        </div>
+      ) : null}
+
+      {writes !== undefined && !writes.canWrite ? (
+        <p role="status" className="mt-3 text-xs text-muted-foreground">
+          {writes.disabledReason ?? t('detail.write.unavailable')}
+        </p>
+      ) : null}
 
       <div className="mt-6 grid gap-8 min-[1000px]:grid-cols-[minmax(0,1fr)_280px]">
         <div className="min-w-0">
           <section aria-labelledby="detail-description">
-            <h2 id="detail-description" className="text-sm font-semibold">
-              {t('detail.description')}
-            </h2>
+            <div className="flex items-center justify-between gap-2">
+              <h2 id="detail-description" className="text-sm font-semibold">
+                {t('detail.description')}
+              </h2>
+              {editButton('description')}
+            </div>
             <div className="mt-2 max-w-[72ch]">
-              {description === '' ? (
+              {editing === 'description' ? (
+                <Editor
+                  label={t('detail.description')}
+                  value={issue.description}
+                  multiline
+                  previewable
+                  pending={pending}
+                  disabled={!canEdit}
+                  error={editorError}
+                  onSave={(next) => saveField('description', next)}
+                  onCancel={cancelEdit}
+                />
+              ) : description === '' ? (
                 <p className="text-sm text-muted-foreground">{t('detail.description.empty')}</p>
               ) : (
                 <Markdown>{description}</Markdown>
@@ -77,11 +195,25 @@ export function DetailView({ issueId, issues, onBack, onOpenIssue, loading }: De
           </section>
 
           <section aria-labelledby="detail-acceptance" className="mt-6">
-            <h2 id="detail-acceptance" className="text-sm font-semibold">
-              {t('detail.acceptance')}
-            </h2>
+            <div className="flex items-center justify-between gap-2">
+              <h2 id="detail-acceptance" className="text-sm font-semibold">
+                {t('detail.acceptance')}
+              </h2>
+              {editButton('acceptance')}
+            </div>
             <div className="mt-2 max-w-[72ch]">
-              {acceptance === '' ? (
+              {editing === 'acceptance' ? (
+                <Editor
+                  label={t('detail.acceptance')}
+                  value={issue.acceptance_criteria ?? ''}
+                  multiline
+                  pending={pending}
+                  disabled={!canEdit}
+                  error={editorError}
+                  onSave={(next) => saveField('acceptance', next)}
+                  onCancel={cancelEdit}
+                />
+              ) : acceptance === '' ? (
                 <p className="text-sm text-muted-foreground">{t('detail.acceptance.empty')}</p>
               ) : (
                 <Markdown>{acceptance}</Markdown>
@@ -120,9 +252,11 @@ export function DetailView({ issueId, issues, onBack, onOpenIssue, loading }: De
 export function DetailRoute({
   issues,
   loading,
+  writes,
 }: {
   issues: readonly Issue[];
   loading?: boolean;
+  writes?: UseWrite;
 }) {
   const { projectId = '', issueId = '' } = useParams<{ projectId: string; issueId: string }>();
   const navigate = useNavigate();
@@ -151,6 +285,7 @@ export function DetailRoute({
       onBack={back}
       onOpenIssue={openIssue}
       loading={loading}
+      writes={writes}
     />
   );
 }

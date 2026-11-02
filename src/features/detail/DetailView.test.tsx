@@ -3,6 +3,7 @@ import { expect, test, vi } from 'vitest';
 
 import type { Comment, Dependency, Issue } from '@/bindings/bd';
 import { I18nProvider } from '@/lib/i18n/I18nProvider';
+import type { UseWrite } from '@/lib/writes/useWrite';
 
 import { DetailView } from './DetailView';
 
@@ -34,14 +35,28 @@ function comment(id: string, text: string, createdAt: string): Comment {
   return { id, issue_id: 'b', author: 'ada', text, created_at: createdAt };
 }
 
-function renderDetail(target: Issue, issues: readonly Issue[] = [target]) {
+function renderDetail(target: Issue, issues: readonly Issue[] = [target], writes?: UseWrite) {
   const onBack = vi.fn();
   render(
     <I18nProvider initialLanguage="en">
-      <DetailView issueId={target.id} issues={issues} onBack={onBack} />
+      <DetailView issueId={target.id} issues={issues} onBack={onBack} writes={writes} />
     </I18nProvider>
   );
   return { onBack };
+}
+
+function fakeWrites(overrides: Partial<UseWrite> = {}): UseWrite {
+  return {
+    pending: [],
+    error: null,
+    result: null,
+    canWrite: true,
+    disabledReason: null,
+    isPending: () => false,
+    submit: vi.fn(async () => ({ status: 'ok' as const })),
+    clearError: vi.fn(),
+    ...overrides,
+  };
 }
 
 test('the page shows title, markdown body, acceptance, metadata and comments', () => {
@@ -163,4 +178,99 @@ test('the back control calls the route callback', () => {
   fireEvent.click(screen.getByRole('button', { name: 'Back to list' }));
 
   expect(onBack).toHaveBeenCalledTimes(1);
+});
+
+test('editing the title submits one update and closes the editor after success', async () => {
+  const writes = fakeWrites();
+  renderDetail(issue('bza-b', { title: 'Old title' }), undefined, writes);
+
+  fireEvent.click(screen.getByRole('button', { name: 'Old title' }));
+  fireEvent.change(screen.getByRole('textbox', { name: 'Title' }), {
+    target: { value: 'New title' },
+  });
+  fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+  await vi.waitFor(() => expect(writes.submit).toHaveBeenCalledTimes(1));
+  await vi.waitFor(() =>
+    expect(screen.queryByRole('textbox', { name: 'Title' })).toBeNull()
+  );
+
+  const submission = vi.mocked(writes.submit).mock.calls[0][0];
+  expect(submission.issueId).toBe('bza-b');
+  expect(submission.build()).toMatchObject({ Update: { id: 'bza-b', title: 'New title' } });
+});
+
+test('an empty title is rejected locally without a bd call', () => {
+  const writes = fakeWrites();
+  renderDetail(issue('bza-b', { title: 'Old title' }), undefined, writes);
+
+  fireEvent.click(screen.getByRole('button', { name: 'Old title' }));
+  fireEvent.change(screen.getByRole('textbox', { name: 'Title' }), {
+    target: { value: '   ' },
+  });
+  fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+  expect(screen.getByRole('alert')).toHaveTextContent('The title cannot be empty.');
+  expect(writes.submit).not.toHaveBeenCalled();
+});
+
+test('a failed save keeps the title editor and its draft', async () => {
+  const writes = fakeWrites({
+    submit: vi.fn(async () => ({
+      status: 'failed' as const,
+      error: { code: 'BD_TIMEOUT' as const, message: 'bd timed out' },
+    })),
+  });
+  renderDetail(issue('bza-b', { title: 'Old title' }), undefined, writes);
+
+  fireEvent.click(screen.getByRole('button', { name: 'Old title' }));
+  fireEvent.change(screen.getByRole('textbox', { name: 'Title' }), {
+    target: { value: 'Draft title' },
+  });
+  fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+  await vi.waitFor(() => expect(writes.submit).toHaveBeenCalledTimes(1));
+  expect(screen.getByRole('textbox', { name: 'Title' })).toHaveValue('Draft title');
+});
+
+test('the body and acceptance editors submit their own fields', async () => {
+  const writes = fakeWrites();
+  renderDetail(
+    issue('bza-b', { description: 'Old body', acceptance_criteria: 'Old acceptance' }),
+    undefined,
+    writes
+  );
+
+  const description = screen.getByRole('region', { name: 'Description' });
+  fireEvent.click(within(description).getByRole('button', { name: 'Edit' }));
+  fireEvent.change(screen.getByRole('textbox', { name: 'Description' }), {
+    target: { value: 'New body' },
+  });
+  fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+  await vi.waitFor(() => expect(writes.submit).toHaveBeenCalledTimes(1));
+  await vi.waitFor(() =>
+    expect(screen.queryByRole('textbox', { name: 'Description' })).toBeNull()
+  );
+  expect(vi.mocked(writes.submit).mock.calls[0][0].build()).toMatchObject({
+    Update: { description: 'New body' },
+  });
+
+  const acceptance = screen.getByRole('region', { name: 'Acceptance criteria' });
+  fireEvent.click(within(acceptance).getByRole('button', { name: 'Edit' }));
+  fireEvent.change(screen.getByRole('textbox', { name: 'Acceptance criteria' }), {
+    target: { value: 'New acceptance' },
+  });
+  fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+  await vi.waitFor(() => expect(writes.submit).toHaveBeenCalledTimes(2));
+  expect(vi.mocked(writes.submit).mock.calls[1][0].build()).toMatchObject({
+    Update: { acceptance: 'New acceptance' },
+  });
+});
+
+test('without a write controller the reading page stays read-only', () => {
+  renderDetail(issue('bza-b'));
+
+  expect(screen.queryByRole('button', { name: 'Edit' })).toBeNull();
 });

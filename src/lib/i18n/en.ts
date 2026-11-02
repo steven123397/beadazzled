@@ -132,6 +132,7 @@ export const en = {
 
   'detail.edit.save': 'Save',
   'detail.edit.cancel': 'Cancel',
+  'detail.edit.title': 'Title',
   'detail.edit.preview': 'Preview',
   'detail.edit.edit': 'Edit',
   'detail.edit.saving': 'Saving…',

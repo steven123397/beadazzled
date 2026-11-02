@@ -133,6 +133,7 @@ export const zhCN: Record<keyof typeof en, string> = {
 
   'detail.edit.save': '保存',
   'detail.edit.cancel': '取消',
+  'detail.edit.title': '标题',
   'detail.edit.preview': '预览',
   'detail.edit.edit': '编辑',
   'detail.edit.saving': '保存中…',

@@ -6,7 +6,17 @@ import { useI18n } from '@/lib/i18n/I18nProvider';
 
 import { statusText } from '@/features/list/status';
 
-export function Header({ issue, onBack }: { issue: Issue; onBack: () => void }) {
+export function Header({
+  issue,
+  onBack,
+  onEditTitle,
+  hideTitle = false,
+}: {
+  issue: Issue;
+  onBack: () => void;
+  onEditTitle?: () => void;
+  hideTitle?: boolean;
+}) {
   const { t } = useI18n();
   const [copied, setCopied] = useState(false);
 
@@ -42,7 +52,22 @@ export function Header({ issue, onBack }: { issue: Issue; onBack: () => void }) 
           <span>{issue.issue_type}</span>
         </span>
       </div>
-      <h1 className="mt-3 text-xl font-semibold leading-snug">{issue.title}</h1>
+      {hideTitle ? null : (
+        <h1 className="mt-3 text-xl font-semibold leading-snug">
+          {onEditTitle === undefined ? (
+            issue.title
+          ) : (
+            <button
+              type="button"
+              onClick={onEditTitle}
+              className="text-left hover:underline"
+              title={t('detail.edit.edit')}
+            >
+              {issue.title}
+            </button>
+          )}
+        </h1>
+      )}
     </header>
   );
 }
