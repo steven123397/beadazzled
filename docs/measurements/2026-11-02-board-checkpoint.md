@@ -15,11 +15,13 @@
 npm run e2e
 ```
 
-结果：37 passed，其中 `tests/e2e/board.spec.ts` 7 条：
+结果：40 passed，其中 `tests/e2e/board.spec.ts` 10 条：
 
 - 真实指针拖到可投放列（走到写入闸门后因无写 seam 拒绝）
 - 拖入 Blocked 被拒绝、从 Blocked 拖出被拒绝
 - H/L/J/K 焦点移动与 Enter 打开详情
+- 筛选控件上的 Enter 保留原生行为（不打开票）
+- 详情返回后恢复列滚动偏移与焦点卡
 - 拖动与拒绝全程零 bd 调用
 - dnd-kit keyboard sensor 激活与 Escape 取消
 - 1000 卡片列虚拟化；滚动、聚焦、筛选零 bd
@@ -39,9 +41,9 @@ npm run e2e
 
 | 项目 | 结果 |
 |---|---|
-| 单测 | 507 passed（board 58） |
-| E2E | 37 passed |
-| 滚动 | `measure:scroll --view=board` p50 16.7ms / p95 19.6ms，PASS |
+| 单测 | 527 passed（board 75） |
+| E2E | 40 passed（board 10） |
+| 滚动 | `measure:scroll --view=board` p50 16.6–16.7ms / p95 18.8–18.9ms，PASS |
 | axe | Board 路由 0 serious/critical |
 | 首屏 | 143.2 / 150 KB gzip |
 | 质量门 | `check:fast`、`check:task`、`check:boundaries`、`check:bindings`、`check:deps` 通过 |

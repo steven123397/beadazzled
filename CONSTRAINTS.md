@@ -32,7 +32,7 @@
 | 关键 E2E | 3 条全绿 | `npm run e2e` | CI | block | 装→列表→详情→改状态 | 待接线 |
 | 依赖高危漏洞 | 0；unknown 未豁免即为失败 | `npm run check:deps` | CI | block | 会随安装包分发出去；无 severity 的记录无法自动判级 | 可运行 |
 | 安装包体积 | ≤ 15 MB | `npm run build:app && npm run check:size` | CI | block | Tauri 空壳 5–10MB；超过即说明选型错了 | 可运行（需先 `build:app`） |
-| 首屏 JS（index.html 及其 preload） | ≤ 150 KB gzip | `npm run check:bundle`（`check:size` 会先跑它） | CI | block | 启动时间随首屏解析量线性增长；当前 142.5 KB（设计基座接入后），余量约 5% | 可运行（需先 `build`） |
+| 首屏 JS（index.html 及其 preload） | ≤ 150 KB gzip | `npm run check:bundle`（`check:size` 会先跑它） | CI | block | 启动时间随首屏解析量线性增长；当前 143.2 KB，余量约 4.5% | 可运行（需先 `build`） |
 | 冷启动→可交互 | ≤ 2.0s（P95） | `npm run measure:startup` | CI | warn | WebView2 冷启动实测量级 | 可运行（未接 CI） |
 | 热启动→可交互 | ≤ 800ms | 同上 | CI | warn | 双击即开是核心卖点 | 可运行（未接 CI） |
 | 常驻内存（1000 条票） | ≤ 150 MB | `npm run measure:memory` | CI | warn | WebView2 常见占用 | 待接线 |
