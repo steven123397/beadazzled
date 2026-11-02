@@ -137,11 +137,12 @@ test('restores a deep link and shows the sync state in the status bar', async ()
       workspaceApi={fakeApi({
         snapshot: async () => snapshot([entry('p1', 'alpha')], '/repo/p1'),
       })}
+      issues={[issue('bza-1', 'Deep linked')]}
       syncState={healthy}
     />
   );
 
-  expect(await screen.findByRole('heading', { name: /bza-1/ })).toBeInTheDocument();
+  expect(await screen.findByRole('heading', { name: 'Deep linked' })).toBeInTheDocument();
   expect(screen.getByLabelText('Status bar')).toHaveTextContent('Live');
 });
 
@@ -221,9 +222,10 @@ test('escape returns from an issue route to the list', async () => {
       workspaceApi={fakeApi({
         snapshot: async () => snapshot([entry('p1', 'alpha')], '/repo/p1'),
       })}
+      issues={[issue('bza-1', 'Deep linked')]}
     />
   );
-  await screen.findByRole('heading', { name: /bza-1/ });
+  await screen.findByRole('heading', { name: 'Deep linked' });
 
   fireEvent.keyDown(window, { key: 'Escape' });
 
@@ -239,9 +241,10 @@ test('escape closes an overlay without leaving the issue route', async () => {
       workspaceApi={fakeApi({
         snapshot: async () => snapshot([entry('p1', 'alpha')], '/repo/p1'),
       })}
+      issues={[issue('bza-1', 'Deep linked')]}
     />
   );
-  await screen.findByRole('heading', { name: /bza-1/ });
+  await screen.findByRole('heading', { name: 'Deep linked' });
 
   fireEvent.keyDown(window, { key: 'k', ctrlKey: true });
   expect(screen.getByRole('dialog', { name: 'Command palette' })).toBeInTheDocument();
@@ -249,7 +252,7 @@ test('escape closes an overlay without leaving the issue route', async () => {
   fireEvent.keyDown(window, { key: 'Escape' });
 
   expect(screen.queryByRole('dialog', { name: 'Command palette' })).not.toBeInTheDocument();
-  expect(screen.getByRole('heading', { name: /bza-1/ })).toBeInTheDocument();
+  expect(screen.getByRole('heading', { name: 'Deep linked' })).toBeInTheDocument();
   expect(window.location.hash).toBe('#/w/p1/issue/bza-1');
 });
 

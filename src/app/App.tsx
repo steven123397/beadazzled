@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { HashRouter, Navigate, Outlet, Route, Routes, useParams } from 'react-router-dom';
 
 import type { BdStatus, Issue, SyncState } from '@/bindings/bd';
+import { DetailRoute } from '@/features/detail/DetailView';
 import { ListRoute } from '@/features/list/ListView';
 import { workspaceApi as defaultWorkspaceApi, type WorkspaceApi } from '@/lib/workspace/api';
 import { useWorkspace } from '@/lib/workspace/useWorkspace';
@@ -13,7 +14,7 @@ import { ThemeProvider } from '@/lib/theme/ThemeProvider';
 import type { Theme } from '@/lib/theme/theme';
 
 import { ErrorBoundary } from './shell/ErrorBoundary';
-import { IssuePlaceholder, Placeholder } from './shell/Placeholder';
+import { Placeholder } from './shell/Placeholder';
 import { Shell } from './shell/Shell';
 import { SkeletonScreen } from './shell/SkeletonScreen';
 import { SyncStatusProvider } from './shell/SyncStatus';
@@ -162,7 +163,7 @@ function AppFrame({
                     }
                   />
                   <Route path="board" element={<Placeholder titleKey="nav.board" />} />
-                  <Route path="issue/:issueId" element={<IssuePlaceholder />} />
+                  <Route path="issue/:issueId" element={<DetailRoute issues={shellIssues} />} />
                 </Route>
                 <Route path="settings" element={<Placeholder titleKey="nav.settings" />} />
                 <Route path="*" element={<Navigate to="/welcome" replace />} />
