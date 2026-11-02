@@ -47,6 +47,7 @@ fn write_startup_trace(label: &str, url: &str) {
 pub fn run() {
     let app = match tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_dialog::init())
         .on_page_load(|_webview, payload| {
             if matches!(payload.event(), tauri::webview::PageLoadEvent::Finished) {
                 write_startup_trace("page-load-finished", payload.url().as_str());

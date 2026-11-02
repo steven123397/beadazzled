@@ -1,7 +1,12 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Default permissions for the main window. The opener plugin grants only `open_url` with the default http(s)/mailto/tel scopes: the app opens external links by URL alone and never reveals files in the OS file manager, so `allow-reveal-item-in-dir` stays out of the capability.",
+  "description": "Default permissions for the main window. The opener plugin grants only `open_url` with the default http(s)/mailto/tel scopes: the app opens external links by URL alone and never reveals files in the OS file manager, so `allow-reveal-item-in-dir` stays out of the capability. The dialog plugin grants only `open` (the bd path and workspace pickers): the app never asks it to save a file.",
   "windows": ["main"],
-  "permissions": ["core:default", "opener:allow-open-url", "opener:allow-default-urls"]
+  "permissions": [
+    "core:default",
+    "opener:allow-open-url",
+    "opener:allow-default-urls",
+    "dialog:allow-open"
+  ]
 }

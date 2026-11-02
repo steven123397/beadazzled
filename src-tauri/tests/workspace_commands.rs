@@ -547,3 +547,58 @@ fn preferences_are_written_without_touching_the_rest_of_the_config() {
     assert_eq!(reloaded.bd_path, before.bd_path);
     assert_eq!(reloaded.workspaces, before.workspaces);
 }
+
+#[test]
+fn an_unusable_bd_path_is_rejected_and_the_previous_one_stays() {
+    let dir = common::temp_dir("cmd-bd-path-reject");
+    let config_path = dir.join("config.json");
+    let service = service(&config_path);
+    let before = service.snapshot().config.bd_path;
+    assert!(before.is_some());
+
+    let missing = dir.join("missing-bd.exe").display().to_string();
+    let status = service.set_bd_path(Some(missing));
+
+    assert!(
+        !matches!(status, BdStatus::Ready { .. }),
+        "an unusable path must not be reported ready: {status:?}"
+    );
+    assert_eq!(service.snapshot().config.bd_path, before);
+
+    service.flush().expect("flush config");
+    let reloaded = registry::load(&config_path).expect("load config").config;
+    assert_eq!(reloaded.bd_path, before);
+}
+
+#[test]
+fn a_new_valid_bd_path_is_persisted() {
+    let dir = common::temp_dir("cmd-bd-path-accept");
+    let config_path = dir.join("config.json");
+    let service = WorkspaceService::open(&config_path).expect("open service");
+    assert_eq!(service.snapshot().config.bd_path, None);
+
+    let bd = common::fake_bd_path().display().to_string();
+    let status = service.set_bd_path(Some(bd.clone()));
+
+    assert!(matches!(status, BdStatus::Ready { .. }));
+    assert_eq!(service.snapshot().config.bd_path, Some(bd.clone()));
+
+    service.flush().expect("flush config");
+    let reloaded = registry::load(&config_path).expect("load config").config;
+    assert_eq!(reloaded.bd_path, Some(bd));
+}
+
+#[test]
+fn clearing_the_bd_path_falls_back_to_path_lookup() {
+    let dir = common::temp_dir("cmd-bd-path-clear");
+    let config_path = dir.join("config.json");
+    let service = service(&config_path);
+    assert!(service.snapshot().config.bd_path.is_some());
+
+    service.set_bd_path(None);
+
+    assert_eq!(service.snapshot().config.bd_path, None);
+    service.flush().expect("flush config");
+    let reloaded = registry::load(&config_path).expect("load config").config;
+    assert_eq!(reloaded.bd_path, None);
+}

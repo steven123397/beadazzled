@@ -103,18 +103,36 @@ impl WorkspaceService {
     }
 
     /// Stores the explicit bd path (or clears it) and probes immediately.
+    ///
+    /// A path that does not answer `bd --version` as a supported bd is
+    /// rejected: the previous entry stays configured and the returned status
+    /// describes the attempt so Settings can show why. Probing the candidate
+    /// on its own matters — discovery would fall back to PATH and report
+    /// `ready` for a path the user just picked that does not work.
     pub fn set_bd_path(&self, path: Option<String>) -> BdStatus {
-        let discovery = {
+        let probe = |path: &Path| BdBridge::new(path, PathBuf::from(".")).version();
+        let Some(path) = path.filter(|value| !value.trim().is_empty()) else {
             let mut state = lock(&self.state);
-            state.config.bd_path = path.filter(|value| !value.trim().is_empty());
-            let discovery =
-                std::sync::Arc::new(BdDiscovery::from_env(state.config.bd_path.as_deref()));
+            state.config.bd_path = None;
+            let discovery = std::sync::Arc::new(BdDiscovery::from_env(None));
             state.discovery = std::sync::Arc::clone(&discovery);
             self.writer.queue(state.config.clone());
-            discovery
+            drop(state);
+            return discovery.refresh(probe);
         };
-        let probe = |path: &Path| BdBridge::new(path, PathBuf::from(".")).version();
-        discovery.refresh(probe)
+
+        let candidate = BdDiscovery::new(Some(&path), None);
+        let status = candidate.refresh(probe);
+        if !matches!(status, BdStatus::Ready { .. }) {
+            return status;
+        }
+
+        let mut state = lock(&self.state);
+        state.config.bd_path = Some(path);
+        let discovery = std::sync::Arc::new(BdDiscovery::from_env(state.config.bd_path.as_deref()));
+        state.discovery = std::sync::Arc::clone(&discovery);
+        self.writer.queue(state.config.clone());
+        status
     }
 
     /// Applies the language/theme pair and queues it for persistence.
