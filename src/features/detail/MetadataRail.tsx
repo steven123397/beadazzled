@@ -1,21 +1,133 @@
-import type { Issue } from '@/bindings/bd';
+import { useState } from 'react';
+
+import type { Issue, WriteCommand } from '@/bindings/bd';
 import { useI18n } from '@/lib/i18n/I18nProvider';
 import type { IssueIndex } from '@/lib/store/selectors';
 import { formatAbsoluteTime, formatRelativeTime } from '@/lib/time';
+import {
+  closeIssue,
+  reopenIssue,
+  updateIssue,
+  type UpdateInput,
+} from '@/lib/writes/commands';
+import { blockingDeps, canChangeStatus } from '@/lib/writes/guard';
+import type { UseWrite } from '@/lib/writes/useWrite';
 
-import { statusText } from '@/features/list/status';
+import { STATUS_ORDER, statusText } from '@/features/list/status';
 import { Dependencies } from './Dependencies';
+import { Editor } from './Editor';
+
+const PRIORITIES = [0, 1, 2, 3, 4];
 
 export function MetadataRail({
   issue,
   index,
   onOpenIssue,
+  writes,
 }: {
   issue: Issue;
   index: IssueIndex;
   onOpenIssue?: (id: string) => void;
+  writes?: UseWrite;
 }) {
   const { t, language } = useI18n();
+  const [editingAssignee, setEditingAssignee] = useState(false);
+  const [newLabel, setNewLabel] = useState('');
+  const [localError, setLocalError] = useState<string | null>(null);
+
+  const pending = writes?.isPending(issue.id) ?? false;
+  const canEdit = writes?.canWrite === true;
+  const disabled = !canEdit || pending;
+  const blockers = blockingDeps(issue.dependencies, (id) => index.byId[id]?.status);
+  const statuses = STATUS_ORDER.includes(issue.status)
+    ? STATUS_ORDER
+    : [...STATUS_ORDER, issue.status];
+
+  const submitUpdate = async (input: UpdateInput, key: string): Promise<boolean> => {
+    if (writes === undefined) {
+      setLocalError(t('detail.write.unavailable'));
+      return false;
+    }
+    const result = updateIssue(issue.id, input);
+    if (!result.ok) {
+      setLocalError(result.error.message);
+      return false;
+    }
+    setLocalError(null);
+    const outcome = await writes.submit({
+      key: `detail:${issue.id}:${key}`,
+      issueId: issue.id,
+      build: () => result.command,
+    });
+    return outcome.status === 'ok';
+  };
+
+  const changeStatus = (target: string) => {
+    if (target === issue.status) {
+      return;
+    }
+    const decision = canChangeStatus(issue, target, blockers);
+    if (!decision.allowed) {
+      setLocalError(blockedMessage(decision.blockers));
+      return;
+    }
+    void submitUpdate({ status: target, ifStatus: issue.status }, `status:${target}`);
+  };
+
+  const saveAssignee = async (next: string): Promise<boolean> => {
+    const value = next.trim();
+    const saved = await submitUpdate(
+      value === ''
+        ? { assignee: { clear: true }, ifAssignee: issue.assignee ?? '' }
+        : { assignee: { set: value }, ifAssignee: issue.assignee ?? '' },
+      `assignee:${value}`
+    );
+    if (saved) {
+      setEditingAssignee(false);
+    }
+    return saved;
+  };
+
+  const addLabel = () => {
+    const value = newLabel.trim();
+    if (value === '') {
+      return;
+    }
+    void submitUpdate({ addLabels: [value] }, `label:add:${value}`).then((saved) => {
+      if (saved) {
+        setNewLabel('');
+      }
+    });
+  };
+
+  const closeTicket = () => {
+    const decision = canChangeStatus(issue, 'closed', blockers);
+    if (!decision.allowed) {
+      setLocalError(blockedMessage(decision.blockers));
+      return;
+    }
+    void submitCommand(() => closeIssue(issue.id), 'close');
+  };
+
+  const submitCommand = async (
+    build: () => WriteCommand,
+    key: string
+  ): Promise<boolean> => {
+    if (writes === undefined) {
+      setLocalError(t('detail.write.unavailable'));
+      return false;
+    }
+    setLocalError(null);
+    const outcome = await writes.submit({
+      key: `detail:${issue.id}:${key}`,
+      issueId: issue.id,
+      build,
+    });
+    return outcome.status === 'ok';
+  };
+
+  const blockedMessage = (ids: readonly string[]) =>
+    t('detail.edit.blockedByDependencies', { ids: ids.join(', ') });
 
   return (
     <aside aria-labelledby="detail-metadata" className="min-w-0 text-xs">
@@ -24,34 +136,150 @@ export function MetadataRail({
       </h2>
       <dl className="mt-3 grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1.5">
         <dt className="text-muted-foreground">{t('detail.metadata.status')}</dt>
-        <dd>{statusText(issue.status, t)}</dd>
+        <dd>
+          {canEdit ? (
+            <select
+              aria-label={t('detail.metadata.status')}
+              value={issue.status}
+              disabled={disabled}
+              onChange={(event) => changeStatus(event.target.value)}
+              className="w-full rounded border border-border bg-background px-1 py-0.5"
+            >
+              {statuses.map((status) => {
+                const decision = canChangeStatus(issue, status, blockers);
+                return (
+                  <option key={status} value={status} disabled={!decision.allowed}>
+                    {statusText(status, t)}
+                    {decision.allowed ? '' : ` — ${t('detail.edit.blocked')}`}
+                  </option>
+                );
+              })}
+            </select>
+          ) : (
+            statusText(issue.status, t)
+          )}
+        </dd>
 
         <dt className="text-muted-foreground">{t('detail.metadata.priority')}</dt>
-        <dd className="tabular-nums">P{issue.priority}</dd>
+        <dd className="tabular-nums">
+          {canEdit ? (
+            <select
+              aria-label={t('detail.metadata.priority')}
+              value={String(issue.priority)}
+              disabled={disabled}
+              onChange={(event) =>
+                void submitUpdate(
+                  { priority: Number(event.target.value), ifStatus: issue.status },
+                  `priority:${event.target.value}`
+                )
+              }
+              className="w-full rounded border border-border bg-background px-1 py-0.5"
+            >
+              {(PRIORITIES.includes(issue.priority)
+                ? PRIORITIES
+                : [...PRIORITIES, issue.priority]
+              ).map((priority) => (
+                <option key={priority} value={priority}>
+                  P{priority}
+                </option>
+              ))}
+            </select>
+          ) : (
+            `P${issue.priority}`
+          )}
+        </dd>
 
         <dt className="text-muted-foreground">{t('detail.metadata.type')}</dt>
         <dd>{issue.issue_type}</dd>
 
         <dt className="text-muted-foreground">{t('detail.metadata.assignee')}</dt>
         <dd>
-          {issue.assignee === undefined ? (
-            <span className="italic text-muted-foreground">{t('list.unassigned')}</span>
+          {editingAssignee ? (
+            <Editor
+              label={t('detail.metadata.assignee')}
+              value={issue.assignee ?? ''}
+              pending={pending}
+              disabled={!canEdit}
+              error={localError ?? writes?.error ?? null}
+              onSave={saveAssignee}
+              onCancel={() => setEditingAssignee(false)}
+            />
           ) : (
-            issue.assignee
+            <span className="flex items-center gap-2">
+              {issue.assignee === undefined ? (
+                <span className="italic text-muted-foreground">{t('list.unassigned')}</span>
+              ) : (
+                issue.assignee
+              )}
+              {canEdit ? (
+                <button
+                  type="button"
+                  aria-label={t('detail.edit.assignee')}
+                  disabled={disabled}
+                  onClick={() => setEditingAssignee(true)}
+                  className="rounded border border-border px-1.5 py-0.5 text-[11px] disabled:opacity-50"
+                >
+                  {t('detail.edit.edit')}
+                </button>
+              ) : null}
+            </span>
           )}
         </dd>
 
         <dt className="text-muted-foreground">{t('detail.metadata.labels')}</dt>
-        <dd className="flex flex-wrap gap-1">
-          {issue.labels.length === 0 ? (
-            <span className="text-muted-foreground">{t('detail.metadata.none')}</span>
-          ) : (
-            issue.labels.map((label) => (
-              <span key={label} className="rounded bg-muted px-1.5 py-0.5">
-                {label}
-              </span>
-            ))
-          )}
+        <dd>
+          <div className="flex flex-wrap gap-1">
+            {issue.labels.length === 0 ? (
+              <span className="text-muted-foreground">{t('detail.metadata.none')}</span>
+            ) : (
+              issue.labels.map((label) => (
+                <span
+                  key={label}
+                  className="inline-flex items-center gap-1 rounded bg-muted px-1.5 py-0.5"
+                >
+                  {label}
+                  {canEdit ? (
+                    <button
+                      type="button"
+                      aria-label={t('detail.edit.removeLabel', { label })}
+                      disabled={disabled}
+                      onClick={() =>
+                        void submitUpdate({ removeLabels: [label] }, `label:remove:${label}`)
+                      }
+                      className="text-muted-foreground disabled:opacity-50"
+                    >
+                      ×
+                    </button>
+                  ) : null}
+                </span>
+              ))
+            )}
+          </div>
+          {canEdit ? (
+            <div className="mt-1 flex items-center gap-1">
+              <input
+                aria-label={t('detail.edit.newLabel')}
+                value={newLabel}
+                disabled={disabled}
+                onChange={(event) => setNewLabel(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') {
+                    event.preventDefault();
+                    addLabel();
+                  }
+                }}
+                className="min-w-0 flex-1 rounded border border-border bg-background px-1 py-0.5"
+              />
+              <button
+                type="button"
+                onClick={addLabel}
+                disabled={disabled || newLabel.trim() === ''}
+                className="rounded border border-border px-1.5 py-0.5 disabled:opacity-50"
+              >
+                {t('detail.edit.add')}
+              </button>
+            </div>
+          ) : null}
         </dd>
 
         <dt className="text-muted-foreground">{t('detail.metadata.created')}</dt>
@@ -73,6 +301,36 @@ export function MetadataRail({
           </>
         )}
       </dl>
+
+      {(localError ?? writes?.error ?? null) === null ? null : (
+        <p role="alert" className="mt-2 text-xs text-destructive">
+          {localError ?? writes?.error}
+        </p>
+      )}
+
+      {canEdit ? (
+        <div className="mt-3 flex gap-2">
+          {issue.status === 'closed' ? (
+            <button
+              type="button"
+              disabled={disabled}
+              onClick={() => void submitCommand(() => reopenIssue(issue.id), 'reopen')}
+              className="rounded border border-border px-2 py-1 disabled:opacity-50"
+            >
+              {t('detail.reopen')}
+            </button>
+          ) : (
+            <button
+              type="button"
+              disabled={disabled || !canChangeStatus(issue, 'closed', blockers).allowed}
+              onClick={closeTicket}
+              className="rounded border border-border px-2 py-1 disabled:opacity-50"
+            >
+              {t('detail.close')}
+            </button>
+          )}
+        </div>
+      ) : null}
 
       <Dependencies issue={issue} index={index} onOpenIssue={onOpenIssue} />
     </aside>

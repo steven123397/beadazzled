@@ -260,7 +260,12 @@ export function DetailView({
           />
         </div>
 
-        <MetadataRail issue={issue} index={index} onOpenIssue={onOpenIssue} />
+        <MetadataRail
+          issue={issue}
+          index={index}
+          onOpenIssue={onOpenIssue}
+          writes={writes}
+        />
       </div>
     </article>
   );

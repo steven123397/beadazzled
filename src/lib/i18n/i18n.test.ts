@@ -37,6 +37,7 @@ test('placeholders are declared and always substituted', () => {
     '{time}',
     '{error}',
     '{ids}',
+    '{label}',
   ]);
 
   for (const [language, catalog] of Object.entries(catalogs)) {
