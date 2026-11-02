@@ -22,7 +22,9 @@ function issue(id: string, overrides: Record<string, unknown> = {}) {
   };
 }
 
-test('detail renders markdown, metadata, dependencies and comments from memory', async ({ page }) => {
+test('detail renders markdown, metadata, dependencies and comments from memory', async ({
+  page,
+}) => {
   await installFakeBridge(page, {
     issues: [
       issue('bza-a', { title: 'Blocker' }),
@@ -38,7 +40,9 @@ test('detail renders markdown, metadata, dependencies and comments from memory',
         acceptance_criteria: '- [x] shipped',
         assignee: 'ada',
         labels: ['ui'],
-        dependencies: [{ issue_id: 'bza-b', depends_on_id: 'bza-a', type: 'blocks', created_at: TS }],
+        dependencies: [
+          { issue_id: 'bza-b', depends_on_id: 'bza-a', type: 'blocks', created_at: TS },
+        ],
         comments: [
           { id: 'c1', issue_id: 'bza-b', author: 'lin', text: 'Looks good', created_at: TS },
         ],
@@ -60,9 +64,7 @@ test('detail renders markdown, metadata, dependencies and comments from memory',
   await expect(page.getByRole('link', { name: 'https://example.com/pic.png' })).toBeVisible();
 });
 
-test('opening a ticket from the list is in-memory and inside the 50ms budget', async ({
-  page,
-}) => {
+test('opening a ticket from the list is in-memory and inside the 50ms budget', async ({ page }) => {
   test.setTimeout(90_000);
   await installFakeBridge(page, {
     issues: Array.from({ length: 1000 }, (_, index) => issue(`bza-${index}`)),
@@ -112,4 +114,61 @@ test('opening a ticket from the list is in-memory and inside the 50ms budget', a
   samples.sort((left, right) => left - right);
   expect(samples[2]).toBeLessThan(50);
   expect(await invokeLog(page)).toEqual([]);
+});
+test('injected markdown never creates executable nodes', async ({ page }) => {
+  await installFakeBridge(page, {
+    issues: [
+      issue('bza-x', {
+        title: 'Injection sample',
+        description: [
+          '<script>window.__pwned = true;</script>',
+          '<iframe src="https://evil.example"></iframe>',
+          '<img src="x" onerror="window.__pwned = true">',
+          '[click](javascript:window.__pwned=true)',
+        ].join('\n\n'),
+      }),
+    ],
+  });
+  await page.goto('/#/w/p1/issue/bza-x');
+  await expect(page.getByRole('heading', { name: 'Injection sample' })).toBeVisible();
+
+  const article = page.locator('article');
+  await expect(article.locator('script')).toHaveCount(0);
+  await expect(article.locator('iframe')).toHaveCount(0);
+  await expect(article.locator('img')).toHaveCount(0);
+  await expect(article.locator('[onerror]')).toHaveCount(0);
+  await expect(article.locator('a[href^="javascript:"]')).toHaveCount(0);
+  expect(
+    await page.evaluate(() => (window as unknown as { __pwned?: boolean }).__pwned)
+  ).toBeUndefined();
+});
+
+test('blocked-by and blocks both resolve, including a deleted target', async ({ page }) => {
+  await installFakeBridge(page, {
+    issues: [
+      issue('bza-a'),
+      issue('bza-b', {
+        dependencies: [
+          { issue_id: 'bza-b', depends_on_id: 'bza-a', type: 'blocks', created_at: TS },
+          { issue_id: 'bza-b', depends_on_id: 'bza-gone', type: 'blocks', created_at: TS },
+        ],
+      }),
+      issue('bza-c', {
+        dependencies: [
+          { issue_id: 'bza-c', depends_on_id: 'bza-a', type: 'blocks', created_at: TS },
+        ],
+      }),
+    ],
+  });
+
+  await page.goto('/#/w/p1/issue/bza-b');
+  const blockedBy = page.getByRole('region', { name: 'Blocked by' });
+  await expect(blockedBy).toContainText('bza-a');
+  await expect(blockedBy).toContainText('bza-gone');
+  await expect(blockedBy).toContainText('Not found');
+
+  await page.goto('/#/w/p1/issue/bza-a');
+  const blocks = page.getByRole('region', { name: 'Blocks' });
+  await expect(blocks).toContainText('bza-b');
+  await expect(blocks).toContainText('bza-c');
 });

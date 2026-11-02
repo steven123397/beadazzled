@@ -3,13 +3,9 @@ import { useState } from 'react';
 import type { Issue, WriteCommand } from '@/bindings/bd';
 import { useI18n } from '@/lib/i18n/I18nProvider';
 import type { IssueIndex } from '@/lib/store/selectors';
+import { describeError } from '@/lib/errors';
 import { formatAbsoluteTime, formatRelativeTime } from '@/lib/time';
-import {
-  closeIssue,
-  reopenIssue,
-  updateIssue,
-  type UpdateInput,
-} from '@/lib/writes/commands';
+import { closeIssue, reopenIssue, updateIssue, type UpdateInput } from '@/lib/writes/commands';
 import { blockingDeps, canChangeStatus } from '@/lib/writes/guard';
 import type { UseWrite } from '@/lib/writes/useWrite';
 
@@ -59,7 +55,11 @@ export function MetadataRail({
       issueId: issue.id,
       build: () => result.command,
     });
-    return outcome.status === 'ok';
+    if (outcome.status !== 'ok') {
+      setLocalError(describeError(outcome.error).message);
+      return false;
+    }
+    return true;
   };
 
   const changeStatus = (target: string) => {
@@ -109,10 +109,7 @@ export function MetadataRail({
     void submitCommand(() => closeIssue(issue.id), 'close');
   };
 
-  const submitCommand = async (
-    build: () => WriteCommand,
-    key: string
-  ): Promise<boolean> => {
+  const submitCommand = async (build: () => WriteCommand, key: string): Promise<boolean> => {
     if (writes === undefined) {
       setLocalError(t('detail.write.unavailable'));
       return false;
@@ -123,7 +120,11 @@ export function MetadataRail({
       issueId: issue.id,
       build,
     });
-    return outcome.status === 'ok';
+    if (outcome.status !== 'ok') {
+      setLocalError(describeError(outcome.error).message);
+      return false;
+    }
+    return true;
   };
 
   const blockedMessage = (ids: readonly string[]) =>
@@ -304,9 +305,9 @@ export function MetadataRail({
         )}
       </dl>
 
-      {(localError ?? writes?.error ?? null) === null ? null : (
+      {(localError ?? null) === null ? null : (
         <p role="alert" className="mt-2 text-xs text-destructive">
-          {localError ?? writes?.error}
+          {localError}
         </p>
       )}
 

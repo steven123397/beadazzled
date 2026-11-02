@@ -142,7 +142,9 @@ test('restores a deep link and shows the sync state in the status bar', async ()
     />
   );
 
-  expect(await screen.findByRole('heading', { name: 'Deep linked' }, { timeout: 3000 })).toBeInTheDocument();
+  expect(
+    await screen.findByRole('heading', { name: 'Deep linked' }, { timeout: 3000 })
+  ).toBeInTheDocument();
   expect(screen.getByLabelText('Status bar')).toHaveTextContent('Live');
 });
 
@@ -857,4 +859,45 @@ test('a title edit waits for the journal echo before the page changes', async ()
     await screen.findByRole('heading', { level: 1, name: 'New title' }, { timeout: 3000 })
   ).toBeInTheDocument();
   expect(screen.queryByRole('textbox', { name: 'Title' })).toBeNull();
+});
+
+test('a status conflict is visible and triggers a baseline refresh', async () => {
+  window.location.hash = '#/w/p1/issue/bza-1';
+  const sync = fakeSyncApi();
+  const execute = vi.fn(async () => ({
+    ok: false as const,
+    error: { code: 'WRITE_CONFLICT' as const, message: 'stale' },
+  }));
+
+  render(
+    <App
+      workspaceApi={fakeApi({
+        snapshot: async () => snapshot([entry('p1', 'alpha')], '/repo/p1'),
+      })}
+      syncEnabled
+      syncApi={sync.api}
+      writesApi={{ execute }}
+    />
+  );
+
+  await waitFor(() => expect(sync.start).toHaveBeenCalledWith('/repo/p1'));
+  act(() => {
+    sync.emit('state', healthy);
+    sync.emit('snapshot', {
+      issues: [issue('bza-1', 'Conflict target')],
+      since: 42,
+    } satisfies SyncSnapshot);
+  });
+
+  await screen.findByRole('heading', { level: 1, name: 'Conflict target' }, { timeout: 3000 });
+
+  fireEvent.change(screen.getByRole('combobox', { name: 'Status' }), {
+    target: { value: 'in_progress' },
+  });
+
+  await waitFor(() => expect(execute).toHaveBeenCalledTimes(1));
+  expect(await screen.findByRole('alert')).toHaveTextContent(
+    'This issue changed elsewhere; refreshing the view.'
+  );
+  await waitFor(() => expect(vi.mocked(sync.api.refresh)).toHaveBeenCalled());
 });

@@ -4,6 +4,7 @@ import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { isEditableTarget, isOverlayOpen } from '@/app/keyboard/resolve';
 import type { Issue } from '@/bindings/bd';
 import { confirmLeaveDraft, setDraftGuard } from '@/lib/draft-guard';
+import { describeError } from '@/lib/errors';
 import { useI18n } from '@/lib/i18n/I18nProvider';
 import { getIssue, indexIssues } from '@/lib/store/selectors';
 import { commentIssue, updateIssue, type UpdateInput } from '@/lib/writes/commands';
@@ -45,6 +46,7 @@ export function DetailView({
   const issue = getIssue(index, issueId);
   const [editing, setEditing] = useState<EditableField | null>(null);
   const [validationError, setValidationError] = useState<string | null>(null);
+  const [commentError, setCommentError] = useState<string | null>(null);
   // The updated_at when editing began: a newer value means someone else wrote
   // the ticket while this draft was open.
   const [editBase, setEditBase] = useState<string | null>(null);
@@ -217,9 +219,8 @@ export function DetailView({
   const design = textField(issue, 'design');
   const notes = textField(issue, 'notes');
   const pending = writes?.isPending(issue.id) ?? false;
-  const editorError = validationError ?? writes?.error ?? null;
-  const updatedElsewhere =
-    editing !== null && editBase !== null && issue.updated_at !== editBase;
+  const editorError = validationError;
+  const updatedElsewhere = editing !== null && editBase !== null && issue.updated_at !== editBase;
 
   const saveField = async (field: EditableField, next: string): Promise<boolean> => {
     if (writes === undefined) {
@@ -258,6 +259,7 @@ export function DetailView({
       }
       return true;
     }
+    setValidationError(describeError(outcome.error).message);
     return false;
   };
 
@@ -276,15 +278,20 @@ export function DetailView({
     if (writes === undefined) {
       return false;
     }
+    setCommentError(null);
     const outcome = await writes.submit({
       key: `detail:${issue.id}:comment:${text}`,
       issueId: issue.id,
       build: () => commentIssue(issue.id, text),
     });
-    if (outcome.status === 'ok' && outcome.echo !== undefined && outcome.echo !== 'echoed') {
-      setNotice(t('detail.write.refreshed'));
+    if (outcome.status === 'ok') {
+      if (outcome.echo !== undefined && outcome.echo !== 'echoed') {
+        setNotice(t('detail.write.refreshed'));
+      }
+      return true;
     }
-    return outcome.status === 'ok';
+    setCommentError(describeError(outcome.error).message);
+    return false;
   };
 
   return (
@@ -387,7 +394,9 @@ export function DetailView({
 
           {design === null ? null : (
             <details className="mt-6">
-              <summary className="cursor-pointer text-sm font-semibold">{t('detail.design')}</summary>
+              <summary className="cursor-pointer text-sm font-semibold">
+                {t('detail.design')}
+              </summary>
               <div className="mt-2 max-w-[72ch]">
                 <Markdown>{design}</Markdown>
               </div>
@@ -396,7 +405,9 @@ export function DetailView({
 
           {notes === null ? null : (
             <details className="mt-4">
-              <summary className="cursor-pointer text-sm font-semibold">{t('detail.notes')}</summary>
+              <summary className="cursor-pointer text-sm font-semibold">
+                {t('detail.notes')}
+              </summary>
               <div className="mt-2 max-w-[72ch]">
                 <Markdown>{notes}</Markdown>
               </div>
@@ -408,16 +419,11 @@ export function DetailView({
             onSubmit={canEdit ? submitComment : undefined}
             pending={pending}
             disabled={!canEdit}
-            error={writes?.error ?? null}
+            error={commentError}
           />
         </div>
 
-        <MetadataRail
-          issue={issue}
-          index={index}
-          onOpenIssue={onOpenIssue}
-          writes={writes}
-        />
+        <MetadataRail issue={issue} index={index} onOpenIssue={onOpenIssue} writes={writes} />
       </div>
     </article>
   );
