@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useRef } from 'react';
+import { memo, useEffect, useMemo, useRef } from 'react';
 
 import type { Issue } from '@/bindings/bd';
 import { isEditableTarget } from '@/app/keyboard/resolve';
 import type { MessageKey } from '@/lib/i18n';
 import { useI18n } from '@/lib/i18n/I18nProvider';
 
+import { collator } from './collator';
 import { hasActiveFilters } from './filter';
 import { STATUS_ORDER, statusText } from './status';
 import {
@@ -16,8 +17,6 @@ import {
   type ListViewState,
   type SortField,
 } from './view-state';
-
-const collator = new Intl.Collator('en', { numeric: true, sensitivity: 'base' });
 
 const GROUP_LABELS: Record<GroupBy, MessageKey> = {
   none: 'list.group.none',
@@ -49,7 +48,11 @@ type Option = {
   label: string;
 };
 
-export function FilterBar({
+/**
+ * Memoized: the list re-renders on every scroll range change, while these
+ * props stay identity-stable, so scrolling does not reconcile the whole bar.
+ */
+export const FilterBar = memo(function FilterBar({
   view,
   issues,
   visibleCount,
@@ -233,7 +236,7 @@ export function FilterBar({
       </output>
     </div>
   );
-}
+});
 
 function MultiSelect({
   label,

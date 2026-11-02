@@ -20,7 +20,6 @@ export const en = {
   'nav.settings': 'Settings',
 
   'list.issues': 'Issues',
-  'list.visibleCount': 'Issues: {count}',
   'list.unassigned': 'Unassigned',
   'list.moreLabels': '+{count}',
   'list.status.open': 'Open',

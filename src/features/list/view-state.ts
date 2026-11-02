@@ -77,6 +77,13 @@ export function createListViewState(): ListViewState {
 /** True when the URL carries at least one known list-state key. */
 export function hasViewParams(params: URLSearchParams): boolean {
   for (const key of KNOWN_KEYS) {
+    // `?q=` is what an emptied search box leaves behind; it is not a view.
+    if (key === 'q') {
+      if ((params.get('q') ?? '').trim() !== '') {
+        return true;
+      }
+      continue;
+    }
     if (params.has(key)) {
       return true;
     }
@@ -112,9 +119,11 @@ export function serializeListViewState(
   params: URLSearchParams = new URLSearchParams()
 ): URLSearchParams {
   const known = new URLSearchParams();
-  const query = view.filter.query.trim();
+  // Keep the raw value: the search box is controlled by what this function
+  // writes, so trimming here would eat every space as the user types it.
+  const query = view.filter.query;
 
-  if (query !== '') {
+  if (query.trim() !== '') {
     known.set('q', query);
   }
   for (const value of view.filter.status) {
@@ -200,7 +209,13 @@ function nonEmpty(values: readonly string[]): string[] {
 function numbers(values: readonly string[]): number[] {
   const parsed: number[] = [];
   for (const value of values) {
-    const number = Number(value);
+    // `?priority=` produces an empty string; Number('') is 0, which would
+    // silently filter the list to P0.
+    const trimmed = value.trim();
+    if (trimmed === '') {
+      continue;
+    }
+    const number = Number(trimmed);
     // bd priorities are 0-4; anything else is a stale or hand-written link.
     if (Number.isInteger(number) && number >= 0 && number <= 4) {
       parsed.push(number);

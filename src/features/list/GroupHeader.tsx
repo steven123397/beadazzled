@@ -11,7 +11,7 @@ export type GroupHeaderProps = {
   count: number;
   collapsed: boolean;
   start: number;
-  onToggle: () => void;
+  onToggle: (key: string) => void;
 };
 
 /** One collapsible group heading inside the virtual list. */
@@ -35,7 +35,7 @@ export function GroupHeader({
       <button
         type="button"
         aria-expanded={!collapsed}
-        onClick={onToggle}
+        onClick={() => onToggle(groupKey)}
         className="flex h-full w-full items-center gap-2 px-3 text-left text-xs font-medium"
       >
         <span aria-hidden="true" className="w-3 text-muted-foreground">

@@ -54,7 +54,7 @@ test('priority, type and assignee groups use their raw keys', () => {
   expect(screen.getAllByRole('button', { name: /Unassigned/ }).length).toBeGreaterThan(0);
 
   fireEvent.click(screen.getAllByRole('button', { name: /P0/ })[0]!);
-  expect(onToggle).toHaveBeenCalled();
+  expect(onToggle).toHaveBeenCalledWith('0');
 });
 
 test('a collapsed group reports aria-expanded false', () => {

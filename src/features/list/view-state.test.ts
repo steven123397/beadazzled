@@ -196,3 +196,24 @@ test('the default sort is omitted but an explicit direction is kept', () => {
   view.sort = { by: 'priority', direction: 'asc' };
   expect(serializeListViewState(view).get('sort')).toBe('priority:asc');
 });
+
+test('a query keeps its interior and trailing spaces through the URL', () => {
+  const view = createListViewState();
+  view.filter.query = 'fix scroll ';
+
+  const params = serializeListViewState(view);
+
+  expect(params.get('q')).toBe('fix scroll ');
+  expect(parseListViewState(params).filter.query).toBe('fix scroll ');
+});
+
+test('an empty query does not count as a view state', () => {
+  expect(hasViewParams(new URLSearchParams('q='))).toBe(false);
+  expect(hasViewParams(new URLSearchParams('q=+'))).toBe(false);
+  expect(hasViewParams(new URLSearchParams('q=fix'))).toBe(true);
+});
+
+test('an empty priority param is ignored instead of becoming P0', () => {
+  expect(parseListViewState(new URLSearchParams('priority=')).filter.priority).toEqual([]);
+  expect(parseListViewState(new URLSearchParams('priority=+')).filter.priority).toEqual([]);
+});

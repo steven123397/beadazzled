@@ -22,7 +22,6 @@ export const zhCN: Record<keyof typeof en, string> = {
   'nav.settings': '设置',
 
   'list.issues': '票',
-  'list.visibleCount': '票：{count}',
   'list.unassigned': '未指派',
   'list.moreLabels': '+{count}',
   'list.status.open': '开放',

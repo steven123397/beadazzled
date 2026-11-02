@@ -41,10 +41,14 @@ export type AppProps = {
   syncApi?: SyncApi;
 };
 
+/** Stable defaults: a fresh array/object per render would invalidate memos. */
+const NO_ISSUES: readonly Issue[] = [];
+const LOADING: SyncState = { kind: 'loading', step: 'export' };
+
 export function App({
   workspaceApi = defaultWorkspaceApi,
-  syncState = { kind: 'loading', step: 'export' },
-  issues = [],
+  syncState = LOADING,
+  issues = NO_ISSUES,
   initialLanguage,
   initialTheme,
   syncEnabled = false,

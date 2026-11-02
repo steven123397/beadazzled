@@ -8,10 +8,14 @@
  * bundle (with the e2e data seam compiled in via VITE_E2E=1), serves it with
  * `vite preview`, and drives a 1000-issue list in Chromium.
  *
- * Each run scrolls 48px per animation frame for two seconds, which mounts about
- * 1.3 new rows per frame. The metric is the gap between animation frames: a
- * 60Hz display ticks every 16.7ms, so a median at that value means the list
- * keeps up, while p95 and max catch sustained stalls and single long tasks.
+ * Each run scrolls a fixed distance per animation frame for two seconds and
+ * records the gap between animation frames. Three scenarios cover a comfortable
+ * reading speed (48px/frame), a fast wheel fling (240px/frame, ~6.7 new rows
+ * per frame) and the steady speed while status groups are rendered. A 60Hz
+ * display ticks every 16.7ms, so a median at that value means the list keeps
+ * up, while p95 and the worst observed frame catch sustained stalls and long
+ * tasks. Median-of-runs is reported for p50/p95; the max is the worst frame
+ * across all runs, so one GC pause cannot hide behind the median.
  *
  * Usage: npm run measure:scroll -- [--runs=5] [--json]
  */
@@ -26,10 +30,27 @@ import { chromium } from '@playwright/test';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const outDir = path.join(root, 'dist-e2e');
 const viteBin = path.join(root, 'node_modules', 'vite', 'bin', 'vite.js');
-const port = Number(process.env.SCROLL_PORT ?? 1431);
 const budgets = { p50: 20, p95: 24, max: 50 };
-const steps = 120;
-const delta = 48;
+// Steady reading speed, a fast wheel fling, and the same steady speed with
+// group headers in the window. 240px/frame mounts roughly 6.7 rows per frame,
+// close to the low end of a real fling; 48px/frame is a comfortable read.
+const scenarios = [
+  { name: 'steady', delta: 48, steps: 120, group: 'none' },
+  { name: 'fling', delta: 240, steps: 100, group: 'none' },
+  { name: 'grouped', delta: 48, steps: 120, group: 'status' },
+];
+let port = 1431;
+
+function resolvePort(raw) {
+  if (raw === undefined || raw === '') {
+    return 1431;
+  }
+  const value = Number(raw);
+  if (!Number.isInteger(value) || value < 1024 || value > 65535) {
+    throw new Error('SCROLL_PORT must be an integer between 1024 and 65535');
+  }
+  return value;
+}
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -80,9 +101,15 @@ function issues() {
 }
 
 function build() {
+  // Do not bake unrelated VITE_* values from the developer shell into the
+  // benchmark bundle; only the seam flag is intentional.
+  const env = Object.fromEntries(
+    Object.entries(process.env).filter(([key]) => !key.startsWith('VITE_'))
+  );
+  env.VITE_E2E = '1';
   const result = spawnSync(process.execPath, [viteBin, 'build', '--outDir', 'dist-e2e'], {
     cwd: root,
-    env: { ...process.env, VITE_E2E: '1' },
+    env,
     stdio: 'inherit',
   });
   if (result.status !== 0) {
@@ -99,6 +126,11 @@ async function serve() {
 
   const deadline = Date.now() + 15_000;
   while (Date.now() < deadline) {
+    // A foreign service on this port would answer the probe; --strictPort
+    // makes our own preview exit in that case. Detect that first.
+    if (child.exitCode !== null) {
+      throw new Error(`preview server exited with code ${child.exitCode}`);
+    }
     try {
       const response = await fetch(`http://localhost:${port}/`);
       if (response.ok) {
@@ -107,9 +139,6 @@ async function serve() {
     } catch {
       // Not listening yet.
     }
-    if (child.exitCode !== null) {
-      throw new Error(`preview server exited with code ${child.exitCode}`);
-    }
     await sleep(150);
   }
 
@@ -117,7 +146,7 @@ async function serve() {
   throw new Error(`preview server did not listen on ${port}`);
 }
 
-async function measureRun(browser, run) {
+async function measureRun(browser, scenario, run) {
   const page = await browser.newPage();
   try {
     await page.addInitScript(
@@ -161,7 +190,8 @@ async function measureRun(browser, run) {
       { projectId: 'p1', tickets: issues() }
     );
 
-    await page.goto(`http://localhost:${port}/#/w/p1/list`);
+    const query = scenario.group === 'none' ? '' : `?group=${scenario.group}`;
+    await page.goto(`http://localhost:${port}/#/w/p1/list${query}`);
     await page.waitForSelector('[data-testid="list-view"][data-state="ready"]', {
       state: 'visible',
       timeout: 15_000,
@@ -193,7 +223,7 @@ async function measureRun(browser, run) {
           max: frames[frames.length - 1],
         };
       },
-      { steps, delta }
+      { steps: scenario.steps, delta: scenario.delta }
     );
 
     return { run, ...result };
@@ -204,6 +234,7 @@ async function measureRun(browser, run) {
 
 async function main() {
   const options = parseArgs(process.argv.slice(2));
+  port = resolvePort(process.env.SCROLL_PORT);
   if (!existsSync(viteBin)) {
     throw new Error(`vite not found at ${viteBin}; run npm install first`);
   }
@@ -216,42 +247,57 @@ async function main() {
   try {
     server = await serve();
     browser = await chromium.launch();
-    const runs = [];
-    for (let run = 1; run <= options.runs; run += 1) {
-      runs.push(await measureRun(browser, run));
+    const results = [];
+    for (const scenario of scenarios) {
+      const runs = [];
+      for (let run = 1; run <= options.runs; run += 1) {
+        runs.push(await measureRun(browser, scenario, run));
+      }
+      const summary = {
+        scenario: scenario.name,
+        delta: scenario.delta,
+        steps: scenario.steps,
+        group: scenario.group,
+        runs,
+        median: {
+          p50: median(runs.map((entry) => entry.p50)),
+          p95: median(runs.map((entry) => entry.p95)),
+        },
+        // Median-of-runs hides a single long GC or compile pause; gate the
+        // worst frame actually observed as well.
+        worstMax: Math.max(...runs.map((entry) => entry.max)),
+      };
+      summary.passed =
+        summary.median.p50 < budgets.p50 &&
+        summary.median.p95 < budgets.p95 &&
+        summary.worstMax < budgets.max;
+      results.push(summary);
     }
 
-    const summary = {
-      runs,
-      median: {
-        p50: median(runs.map((entry) => entry.p50)),
-        p95: median(runs.map((entry) => entry.p95)),
-        max: median(runs.map((entry) => entry.max)),
-      },
-      budgets,
-    };
-    const passed =
-      summary.median.p50 < budgets.p50 &&
-      summary.median.p95 < budgets.p95 &&
-      summary.median.max < budgets.max;
+    const passed = results.every((result) => result.passed);
 
     if (options.json) {
-      console.log(JSON.stringify({ ...summary, passed }));
+      console.log(JSON.stringify({ scenarios: results, budgets, passed }));
     } else {
-      console.log('scroll frame pacing (production bundle, 1000 issues, 48px/frame)\n');
-      console.log('  run    p50      p95      max');
-      for (const entry of runs) {
+      console.log('scroll frame pacing (production bundle, 1000 issues)\n');
+      for (const result of results) {
         console.log(
-          `  ${String(entry.run).padStart(3)}  ${entry.p50.toFixed(1).padStart(6)}ms  ${entry.p95
-            .toFixed(1)
-            .padStart(6)}ms  ${entry.max.toFixed(1).padStart(6)}ms`
+          `  ${result.scenario}: ${result.delta}px/frame, group=${result.group}, ${result.steps} frames`
+        );
+        console.log('  run    p50      p95      max');
+        for (const entry of result.runs) {
+          console.log(
+            `  ${String(entry.run).padStart(3)}  ${entry.p50.toFixed(1).padStart(6)}ms  ${entry.p95
+              .toFixed(1)
+              .padStart(6)}ms  ${entry.max.toFixed(1).padStart(6)}ms`
+          );
+        }
+        console.log(
+          `  median p50 ${result.median.p50.toFixed(1)}ms, p95 ${result.median.p95.toFixed(
+            1
+          )}ms; worst max ${result.worstMax.toFixed(1)}ms — ${result.passed ? 'PASS' : 'FAIL'}\n`
         );
       }
-      console.log(
-        `\n  median ${summary.median.p50.toFixed(1)}ms / ${summary.median.p95.toFixed(
-          1
-        )}ms / ${summary.median.max.toFixed(1)}ms`
-      );
       console.log(
         `  budget p50 < ${budgets.p50}ms, p95 < ${budgets.p95}ms, max < ${budgets.max}ms — ${
           passed ? 'PASS' : 'FAIL'

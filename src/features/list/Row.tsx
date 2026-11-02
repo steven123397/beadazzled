@@ -78,8 +78,11 @@ export const Row = memo(function Row({ issue, start, focused, onOpen, onFocus }:
         className="hidden w-32 shrink-0 items-center gap-1 overflow-hidden lg:flex"
         title={issue.labels.join(', ')}
       >
-        {visibleLabels.map((label) => (
-          <span key={label} className="truncate rounded bg-muted px-1 py-0.5 text-[11px]">
+        {visibleLabels.map((label, index) => (
+          <span
+            key={`${label}-${index}`}
+            className="truncate rounded bg-muted px-1 py-0.5 text-[11px]"
+          >
             {label}
           </span>
         ))}

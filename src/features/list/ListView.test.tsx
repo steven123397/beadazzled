@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { beforeEach, expect, test, vi } from 'vitest';
 
@@ -6,7 +6,7 @@ import type { Issue, SyncState } from '@/bindings/bd';
 import { I18nProvider } from '@/lib/i18n/I18nProvider';
 
 import { ListView } from './ListView';
-import { LIST_POSITION_PREFIX } from './position';
+import { LIST_POSITION_PREFIX, saveListPosition } from './position';
 import { createListViewState } from './view-state';
 import { saveSavedView } from './view-storage';
 
@@ -187,6 +187,28 @@ test('restores the saved scroll offset and focused row', async () => {
 
   await waitFor(() => expect(screen.getByRole('list')).toHaveProperty('scrollTop', 180));
   await waitFor(() => expect(row('bza-3')).toHaveFocus());
+});
+
+test('a saved focus that is filtered out does not steal focus later', async () => {
+  saveListPosition('p1', { scrollTop: 0, focusedId: 'bza-2' });
+
+  renderList({
+    issues: [issue('bza-1', { title: 'Keep me' }), issue('bza-2', { title: 'Other work' })],
+    entry: '/w/p1/list?q=keep',
+  });
+
+  // Let the restore pass finish while bza-2 is excluded by the deep link.
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  });
+  expect(document.querySelector('[data-issue-id="bza-2"]')).toBeNull();
+
+  fireEvent.change(screen.getByRole('searchbox', { name: 'Search tickets' }), {
+    target: { value: '' },
+  });
+
+  await waitFor(() => expect(row('bza-2')).toBeInTheDocument());
+  expect(row('bza-2')).not.toHaveFocus();
 });
 
 test('saves the scroll offset and focused row on unmount', async () => {

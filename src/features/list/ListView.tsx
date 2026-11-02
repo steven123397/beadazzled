@@ -119,7 +119,13 @@ export function ListView({ projectId, issues, syncState = HEALTHY, onRefresh }: 
   const [collapsedGroups, setCollapsedGroups] = useState<ReadonlySet<string>>(new Set());
   const scrollRef = useRef<HTMLDivElement>(null);
   const focusedIdRef = useRef(focusedId);
-  const pendingFocusRef = useRef<string | null>(initialPosition?.focusedId ?? null);
+  // Only a visible row may request focus; the restore path sets this itself
+  // when it finds the saved row. Keeping a missing saved id here would let it
+  // steal focus later, when a filter change makes that row appear again.
+  const pendingFocusRef = useRef<string | null>(null);
+  // Bumped whenever pendingFocusRef is set, so the focus effect runs even when
+  // focusedId did not change (restoring an already-focused row).
+  const [focusRequest, setFocusRequest] = useState(0);
   const restoredRef = useRef(false);
 
   focusedIdRef.current = focusedId;
@@ -128,7 +134,10 @@ export function ListView({ projectId, issues, syncState = HEALTHY, onRefresh }: 
     setCollapsedGroups(new Set());
   }, [view.group]);
 
-  const groups = useMemo(() => groupIssues(visible, view.group), [visible, view.group]);
+  const groups = useMemo(
+    () => (view.group === 'none' ? [] : groupIssues(visible, view.group)),
+    [visible, view.group]
+  );
   const items = useMemo<ListItem[]>(() => {
     if (view.group === 'none') {
       return visible.map((issue) => ({ kind: 'row' as const, issue }));
@@ -202,6 +211,7 @@ export function ListView({ projectId, issues, syncState = HEALTHY, onRefresh }: 
       }
       pendingFocusRef.current = id;
       setFocusedId(id);
+      setFocusRequest((value) => value + 1);
       virtualizer.scrollToIndex(meta.itemIndex, { align: 'auto' });
     },
     [virtualizer]
@@ -265,7 +275,11 @@ export function ListView({ projectId, issues, syncState = HEALTHY, onRefresh }: 
         if (meta !== undefined) {
           pendingFocusRef.current = initialPosition.focusedId;
           setFocusedId(initialPosition.focusedId);
+          setFocusRequest((value) => value + 1);
           virtualizer.scrollToIndex(meta.itemIndex, { align: 'auto' });
+        } else {
+          // The saved row is filtered out or gone; do not keep a ghost focus.
+          setFocusedId(null);
         }
       }
     });
@@ -275,11 +289,14 @@ export function ListView({ projectId, issues, syncState = HEALTHY, onRefresh }: 
   // container may already be detached, which would persist offset zero.
   useLayoutEffect(() => {
     return () => {
-      if (!restoredRef.current) {
+      // A no-match or error screen has no scroll container; saving 0 here would
+      // clobber a position the user can still return to.
+      const element = scrollRef.current;
+      if (!restoredRef.current || element === null) {
         return;
       }
       saveListPosition(projectId, {
-        scrollTop: scrollRef.current?.scrollTop ?? 0,
+        scrollTop: element.scrollTop,
         focusedId: focusedIdRef.current,
       });
     };
@@ -298,7 +315,7 @@ export function ListView({ projectId, issues, syncState = HEALTHY, onRefresh }: 
     }
     pendingFocusRef.current = null;
     element.focus({ preventScroll: true });
-  }, [focusedId, virtualItems]);
+  }, [focusedId, focusRequest, virtualItems]);
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent): void {
@@ -412,7 +429,7 @@ export function ListView({ projectId, issues, syncState = HEALTHY, onRefresh }: 
                     count={entry.count}
                     collapsed={collapsedGroups.has(entry.key)}
                     start={item.start}
-                    onToggle={() => toggleGroup(entry.key)}
+                    onToggle={toggleGroup}
                   />
                 );
               }

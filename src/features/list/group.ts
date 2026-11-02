@@ -1,5 +1,6 @@
 import type { Issue } from '@/bindings/bd';
 
+import { collator } from './collator';
 import { STATUS_ORDER } from './status';
 import type { GroupBy } from './view-state';
 
@@ -7,8 +8,6 @@ export type IssueGroup = {
   key: string;
   issues: Issue[];
 };
-
-const collator = new Intl.Collator('en', { numeric: true, sensitivity: 'base' });
 
 /**
  * Groups already-filtered issues without reordering them. The caller keeps the

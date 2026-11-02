@@ -67,6 +67,26 @@ test('a 1000-issue list virtualizes, navigates with J/K and restores focus', asy
   expect(await page.locator('[data-issue-id]').count()).toBeLessThan(100);
 });
 
+test('typing a multi-word query keeps its spaces', async ({ page }) => {
+  await installFakeBridge(page, {
+    issues: [
+      { ...issue(1), title: 'Fix scroll' },
+      { ...issue(2), title: 'Fix board' },
+    ],
+  });
+  await page.goto('/#/w/p1/list');
+
+  const search = page.getByRole('searchbox', { name: 'Search tickets' });
+  await search.click();
+  // A controlled input echoes every keystroke through the URL; trimming the
+  // query there would drop the space before the next character arrives.
+  await search.pressSequentially('fix scroll', { delay: 20 });
+
+  await expect(search).toHaveValue('fix scroll');
+  await expect(page.locator('[data-issue-id="bza-1"]')).toBeVisible();
+  await expect(page.locator('[data-issue-id="bza-2"]')).toHaveCount(0);
+});
+
 test('filtering, sorting, scrolling and grouping never call bd', async ({ page }) => {
   test.setTimeout(60_000);
   await openThousandIssueList(page);
