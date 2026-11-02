@@ -84,6 +84,39 @@ test('/ focuses the search box', () => {
   expect(screen.getByRole('searchbox', { name: 'Search tickets' })).toHaveFocus();
 });
 
+test('a lagging URL update does not overwrite what the user has typed', () => {
+  const bar = (view: ListViewState) => (
+    <I18nProvider initialLanguage="en">
+      <FilterBar
+        view={view}
+        issues={[]}
+        visibleCount={0}
+        totalCount={0}
+        onChange={vi.fn()}
+        onClear={vi.fn()}
+      />
+    </I18nProvider>
+  );
+  const { rerender } = render(bar(createListViewState()));
+  const search = screen.getByRole('searchbox', { name: 'Search tickets' });
+  search.focus();
+
+  fireEvent.change(search, { target: { value: 'fix scroll' } });
+  expect(search).toHaveValue('fix scroll');
+
+  // Every keystroke goes through the URL, so a commit can land with the query
+  // of the previous keystroke while the next one is already in the field.
+  const lagging = createListViewState();
+  lagging.filter.query = 'fix scrol';
+  rerender(bar(lagging));
+  expect(search).toHaveValue('fix scroll');
+
+  // Once the field is not being typed into, external changes win again.
+  search.blur();
+  rerender(bar(createListViewState()));
+  expect(search).toHaveValue('');
+});
+
 test('status, priority, type, assignee and label checkboxes update their dimensions', () => {
   const { onChange } = renderBar();
 
