@@ -53,6 +53,22 @@ test('deduplicates identical keys submitted before dispatch', async () => {
   expect(calls).toBe(1);
 });
 
+test('a deduplicated caller gets the journal position read at dispatch', async () => {
+  let seq = 3;
+  const queue = createWriteQueue(async () => success);
+
+  const first = queue.submit('same', 'ws', () => reopen('x'), () => seq);
+  const second = queue.submit('same', 'ws', () => reopen('x'), () => seq);
+  // Both are still queued: the position is read once, when the shared write
+  // is dispatched.
+  seq = 7;
+
+  const [shared, joined] = await Promise.all([first, second]);
+
+  expect(shared).toMatchObject({ status: 'ok', afterSeq: 7 });
+  expect(joined).toMatchObject({ status: 'ok', afterSeq: 7 });
+});
+
 test('the same key in two workspaces is two writes', async () => {
   const seen: string[] = [];
   const queue = createWriteQueue(async (workspace) => {

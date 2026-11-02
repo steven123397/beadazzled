@@ -38,16 +38,17 @@ export async function submitWrite(
   flow: WriteFlow,
   submission: WriteSubmission
 ): Promise<WriteResult> {
-  // Read the sequence when the command is dispatched, not when it is queued:
-  // a previous edit's echo can land while this write waits behind it, and that
-  // record must not satisfy this write's echo wait. The initial value only
-  // covers the deduped path, where `build` is never called.
-  let afterSeq = flow.currentSeq();
   const workspace = submission.workspace ?? flow.workspace();
-  const result = await flow.queue.submit(submission.key, workspace, () => {
-    afterSeq = flow.currentSeq();
-    return submission.build();
-  });
+  // The queue reads the sequence when it dispatches the write and hands the
+  // same value back to every caller sharing that dispatch. A deduplicated
+  // caller never runs `build`, so it cannot read the position itself: an edit
+  // queued behind another write must not accept the earlier echo as its own.
+  const result = await flow.queue.submit(
+    submission.key,
+    workspace,
+    () => submission.build(),
+    () => flow.currentSeq()
+  );
 
   if (result.status === 'conflict') {
     flow.refresh();
@@ -62,7 +63,14 @@ export async function submitWrite(
     return result;
   }
 
-  const echo = await flow.waitForEcho(issueId, afterSeq, ECHO_TIMEOUT_MS);
+  // A queue that cannot report the dispatch position leaves the wait unscoped,
+  // which would accept any echo; treat that as an unconfirmed write instead.
+  if (result.afterSeq === undefined) {
+    flow.refresh();
+    return { ...result, echo: 'timeout' };
+  }
+
+  const echo = await flow.waitForEcho(issueId, result.afterSeq, ECHO_TIMEOUT_MS);
   if (echo !== 'echoed') {
     flow.refresh();
   }

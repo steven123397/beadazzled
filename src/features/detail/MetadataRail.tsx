@@ -10,6 +10,7 @@ import { blockingDeps, canChangeStatus } from '@/lib/writes/guard';
 import type { UseWrite } from '@/lib/writes/useWrite';
 
 import { STATUS_ORDER, statusText } from '@/features/list/status';
+import type { DraftField } from './changes';
 import { Dependencies } from './Dependencies';
 import { Editor } from './Editor';
 
@@ -21,6 +22,7 @@ export function MetadataRail({
   onOpenIssue,
   writes,
   onDirtyChange,
+  onSelfWrite,
 }: {
   issue: Issue;
   index: IssueIndex;
@@ -28,6 +30,9 @@ export function MetadataRail({
   writes?: UseWrite;
   /** Reports whether the rail holds unsaved input. */
   onDirtyChange?: (dirty: boolean) => void;
+  /** Names the fields this rail is about to write, so the page can tell its
+   * own journal echo from an edit made somewhere else. */
+  onSelfWrite?: (fields: readonly DraftField[]) => void;
 }) {
   const { t, language } = useI18n();
   const [editingAssignee, setEditingAssignee] = useState(false);
@@ -48,7 +53,11 @@ export function MetadataRail({
     ? STATUS_ORDER
     : [...STATUS_ORDER, issue.status];
 
-  const submitUpdate = async (input: UpdateInput, key: string): Promise<boolean> => {
+  const submitUpdate = async (
+    input: UpdateInput,
+    key: string,
+    fields: readonly DraftField[]
+  ): Promise<boolean> => {
     if (writes === undefined) {
       setLocalError(t('detail.write.unavailable'));
       return false;
@@ -59,6 +68,7 @@ export function MetadataRail({
       return false;
     }
     setLocalError(null);
+    onSelfWrite?.(fields);
     const outcome = await writes.submit({
       key: `detail:${issue.id}:${key}`,
       issueId: issue.id,
@@ -80,7 +90,7 @@ export function MetadataRail({
       setLocalError(blockedMessage(decision.blockers));
       return;
     }
-    void submitUpdate({ status: target, ifStatus: issue.status }, `status:${target}`);
+    void submitUpdate({ status: target, ifStatus: issue.status }, `status:${target}`, ['status']);
   };
 
   const saveAssignee = async (next: string): Promise<boolean> => {
@@ -89,7 +99,8 @@ export function MetadataRail({
       value === ''
         ? { assignee: { clear: true }, ifAssignee: issue.assignee ?? '' }
         : { assignee: { set: value }, ifAssignee: issue.assignee ?? '' },
-      `assignee:${value}`
+      `assignee:${value}`,
+      ['assignee']
     );
     if (saved) {
       setEditingAssignee(false);
@@ -102,7 +113,7 @@ export function MetadataRail({
     if (value === '') {
       return;
     }
-    void submitUpdate({ addLabels: [value] }, `label:add:${value}`).then((saved) => {
+    void submitUpdate({ addLabels: [value] }, `label:add:${value}`, ['labels']).then((saved) => {
       if (saved) {
         setNewLabel('');
       }
@@ -115,15 +126,20 @@ export function MetadataRail({
       setLocalError(blockedMessage(decision.blockers));
       return;
     }
-    void submitCommand(() => closeIssue(issue.id), 'close');
+    void submitCommand(() => closeIssue(issue.id), 'close', ['status']);
   };
 
-  const submitCommand = async (build: () => WriteCommand, key: string): Promise<boolean> => {
+  const submitCommand = async (
+    build: () => WriteCommand,
+    key: string,
+    fields: readonly DraftField[]
+  ): Promise<boolean> => {
     if (writes === undefined) {
       setLocalError(t('detail.write.unavailable'));
       return false;
     }
     setLocalError(null);
+    onSelfWrite?.(fields);
     const outcome = await writes.submit({
       key: `detail:${issue.id}:${key}`,
       issueId: issue.id,
@@ -182,7 +198,8 @@ export function MetadataRail({
               onChange={(event) =>
                 void submitUpdate(
                   { priority: Number(event.target.value), ifStatus: issue.status },
-                  `priority:${event.target.value}`
+                  `priority:${event.target.value}`,
+                  ['priority']
                 )
               }
               className="w-full rounded border border-border bg-background px-1 py-0.5"
@@ -257,7 +274,7 @@ export function MetadataRail({
                       aria-label={t('detail.edit.removeLabel', { label })}
                       disabled={disabled}
                       onClick={() =>
-                        void submitUpdate({ removeLabels: [label] }, `label:remove:${label}`)
+                        void submitUpdate({ removeLabels: [label] }, `label:remove:${label}`, ['labels'])
                       }
                       className="text-muted-foreground disabled:opacity-50"
                     >
@@ -327,7 +344,7 @@ export function MetadataRail({
             <button
               type="button"
               disabled={disabled}
-              onClick={() => void submitCommand(() => reopenIssue(issue.id), 'reopen')}
+              onClick={() => void submitCommand(() => reopenIssue(issue.id), 'reopen', ['status'])}
               className="rounded border border-border px-2 py-1 disabled:opacity-50"
             >
               {t('detail.reopen')}

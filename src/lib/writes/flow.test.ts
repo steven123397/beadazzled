@@ -20,9 +20,10 @@ function flow(
   };
   const base: WriteFlow = {
     queue: {
-      submit: async (_key, _workspace, build) => {
+      submit: async (_key, _workspace, build, afterSeq) => {
         const command = build();
         const issueId = 'Reopen' in command ? command.Reopen.id : 'created';
+        const seq = afterSeq?.();
         if (outcome === 'conflict') {
           const error: BridgeError = { code: 'WRITE_CONFLICT', message: 'changed' };
           return { status: 'conflict', error, createdId: issueId };
@@ -31,7 +32,7 @@ function flow(
           const error: BridgeError = { code: 'BD_EXIT_NONZERO', message: 'nope' };
           return { status: 'failed', error };
         }
-        return { status: 'ok', createdId: issueId };
+        return { status: 'ok', createdId: issueId, ...(seq === undefined ? {} : { afterSeq: seq }) };
       },
       pendingCount: () => 0,
     },
@@ -140,7 +141,11 @@ test('a write without an issue id does not wait for an echo', async () => {
 test('a create waits for the echo of the id bd returned', async () => {
   const deps = flow('echoed', {
     queue: {
-      submit: async () => ({ status: 'ok', createdId: 'bza-new' }),
+      submit: async (_key, _workspace, _build, afterSeq) => ({
+        status: 'ok',
+        createdId: 'bza-new',
+        afterSeq: afterSeq?.(),
+      }),
       pendingCount: () => 0,
     },
   });
@@ -203,6 +208,38 @@ test('back-to-back edits wait for the sequence at dispatch, not at enqueue', asy
   ]);
 });
 
+test('a deduplicated write waits on the dispatch position, not its own submission', async () => {
+  const store = createTicketStore();
+  store.applySnapshot([], 10);
+  const echoes: Array<[string, number]> = [];
+  const queue = createWriteQueue(async () => ({ ok: true, createdId: null }));
+  const deps: WriteFlow = {
+    queue,
+    workspace: () => 'C:/ws',
+    currentSeq: () => store.getState().lastSeq,
+    waitForEcho: async (issueId, afterSeq) => {
+      echoes.push([issueId, afterSeq]);
+      return 'echoed';
+    },
+    refresh: () => {},
+  };
+
+  const first = submitWrite(deps, { key: 'same', issueId: 'bza-1', build: () => reopen('bza-1') });
+  const second = submitWrite(deps, { key: 'same', issueId: 'bza-1', build: () => reopen('bza-1') });
+  // An earlier write's echo lands before the shared write is dispatched; the
+  // deduplicated caller must not wait from the position it read on the way in.
+  store.applyRecords([
+    { seq: 11, ts: '2026-11-01T00:00:11Z', op: 'update', issue_id: 'bza-1', issue: null },
+  ]);
+
+  await Promise.all([first, second]);
+
+  expect(echoes).toEqual([
+    ['bza-1', 11],
+    ['bza-1', 11],
+  ]);
+});
+
 test('createWriteFlow wires afterSeq, echo and refresh from the store', async () => {
   vi.useFakeTimers();
   const store = createTicketStore();
@@ -233,7 +270,7 @@ test('createWriteFlow wires afterSeq, echo and refresh from the store', async ()
   ]);
   const result = await pending;
 
-  expect(result).toEqual({ status: 'ok', echo: 'echoed' });
+  expect(result).toMatchObject({ status: 'ok', echo: 'echoed', afterSeq: 4 });
   expect(sent).toHaveLength(1);
   expect(refreshes).toBe(0);
   expect(store.getState().lastSeq).toBe(5);

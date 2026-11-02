@@ -595,6 +595,94 @@ test('an acceptance draft exactly at the limit is submitted', async () => {
   expect(screen.queryByRole('alert')).toBeNull();
 });
 
+test('a write from this page does not claim the ticket changed elsewhere', () => {
+  const writes = fakeWrites();
+  const target = issue('bza-b', { title: 'Old title' });
+  const { rerender } = render(
+    <I18nProvider initialLanguage="en">
+      <DetailView issueId="bza-b" issues={[target]} onBack={vi.fn()} writes={writes} />
+    </I18nProvider>
+  );
+
+  fireEvent.click(screen.getByRole('button', { name: 'Old title' }));
+  fireEvent.change(screen.getByRole('combobox', { name: 'Status' }), {
+    target: { value: 'in_progress' },
+  });
+
+  // The journal echo of that status write reaches the store.
+  rerender(
+    <I18nProvider initialLanguage="en">
+      <DetailView
+        issueId="bza-b"
+        issues={[
+          issue('bza-b', {
+            title: 'Old title',
+            status: 'in_progress',
+            updated_at: '2026-11-02T00:00:00Z',
+          }),
+        ]}
+        onBack={vi.fn()}
+        writes={writes}
+      />
+    </I18nProvider>
+  );
+
+  expect(screen.queryByText(/Updated elsewhere/)).toBeNull();
+  expect(screen.getByRole('textbox', { name: 'Title' })).toHaveValue('Old title');
+});
+
+test('an outside edit is still announced after a write from this page', () => {
+  const writes = fakeWrites();
+  const target = issue('bza-b', { title: 'Old title' });
+  const { rerender } = render(
+    <I18nProvider initialLanguage="en">
+      <DetailView issueId="bza-b" issues={[target]} onBack={vi.fn()} writes={writes} />
+    </I18nProvider>
+  );
+
+  fireEvent.click(screen.getByRole('button', { name: 'Old title' }));
+  fireEvent.change(screen.getByRole('combobox', { name: 'Status' }), {
+    target: { value: 'in_progress' },
+  });
+  rerender(
+    <I18nProvider initialLanguage="en">
+      <DetailView
+        issueId="bza-b"
+        issues={[
+          issue('bza-b', {
+            title: 'Old title',
+            status: 'in_progress',
+            updated_at: '2026-11-02T00:00:00Z',
+          }),
+        ]}
+        onBack={vi.fn()}
+        writes={writes}
+      />
+    </I18nProvider>
+  );
+  expect(screen.queryByText(/Updated elsewhere/)).toBeNull();
+
+  rerender(
+    <I18nProvider initialLanguage="en">
+      <DetailView
+        issueId="bza-b"
+        issues={[
+          issue('bza-b', {
+            title: 'Changed elsewhere',
+            status: 'in_progress',
+            updated_at: '2026-11-02T01:00:00Z',
+          }),
+        ]}
+        onBack={vi.fn()}
+        writes={writes}
+      />
+    </I18nProvider>
+  );
+
+  expect(screen.getByText(/Updated elsewhere/)).toBeInTheDocument();
+  expect(screen.getByRole('textbox', { name: 'Title' })).toHaveValue('Old title');
+});
+
 test('a write that misses its echo says the view was refreshed', async () => {
   const writes = fakeWrites({
     submit: vi.fn(async () => ({ status: 'ok' as const, echo: 'timeout' as const })),

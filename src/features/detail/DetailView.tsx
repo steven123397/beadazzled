@@ -11,6 +11,7 @@ import { commentIssue, updateIssue, type UpdateInput } from '@/lib/writes/comman
 import type { UseWrite } from '@/lib/writes/useWrite';
 
 import { Comments } from './Comments';
+import { changedFields, type DraftField } from './changes';
 import { Editor } from './Editor';
 import { Header } from './Header';
 import { Markdown } from './Markdown';
@@ -52,14 +53,23 @@ export function DetailView({
   const [railDirty, setRailDirty] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
   const [commentError, setCommentError] = useState<string | null>(null);
-  // The updated_at when editing began: a newer value means someone else wrote
-  // the ticket while this draft was open.
-  const [editBase, setEditBase] = useState<string | null>(null);
+  // Set when the ticket changes while a draft is open and the change was not
+  // caused by this page.
+  const [externalUpdate, setExternalUpdate] = useState(false);
   const [deleted, setDeleted] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const lastSeen = useRef<Issue | null>(null);
+  // Fields this page has written since the current draft opened; their echo is
+  // the page's own doing, not someone else's edit.
+  const selfFields = useRef(new Set<DraftField>());
   const canEdit = writes?.canWrite === true;
   const hasDraft = fieldDirty || commentDirty || railDirty;
+
+  const noteSelfWrite = useCallback((fields: readonly DraftField[]) => {
+    for (const field of fields) {
+      selfFields.current.add(field);
+    }
+  }, []);
 
   const beginEdit = useCallback(
     (field: EditableField) => {
@@ -67,17 +77,18 @@ export function DetailView({
       setValidationError(null);
       setNotice(null);
       setFieldDirty(false);
-      setEditBase(issue?.updated_at ?? null);
+      setExternalUpdate(false);
+      selfFields.current.clear();
       setEditing(field);
     },
-    [issue?.updated_at, writes]
+    [writes]
   );
 
   const cancelEdit = useCallback(() => {
     writes?.clearError();
     setValidationError(null);
-    setEditBase(null);
     setFieldDirty(false);
+    setExternalUpdate(false);
     setEditing(null);
   }, [writes]);
 
@@ -114,20 +125,36 @@ export function DetailView({
   }, [hasDraft]);
 
   // A ticket that was on screen and then vanished was deleted; one that never
-  // appeared may simply still be deep-linked from another workspace.
+  // appeared may simply still be deep-linked from another workspace. An edit
+  // that is not this page's own write means someone else changed the ticket.
   useEffect(() => {
+    const previous = lastSeen.current;
     if (issue !== undefined) {
       lastSeen.current = issue;
       setDeleted(false);
+      if (
+        previous !== null &&
+        previous.id === issue.id &&
+        previous.updated_at !== issue.updated_at
+      ) {
+        const changed = changedFields(previous, issue);
+        const own = changed.length > 0 && changed.every((field) => selfFields.current.has(field));
+        for (const field of changed) {
+          selfFields.current.delete(field);
+        }
+        if (!own && editing !== null) {
+          setExternalUpdate(true);
+        }
+      }
       return undefined;
     }
-    if (lastSeen.current === null || loading === true) {
+    if (previous === null || loading === true) {
       return undefined;
     }
     setDeleted(true);
     const timer = setTimeout(onBack, 3_000);
     return () => clearTimeout(timer);
-  }, [issue, loading, onBack]);
+  }, [editing, issue, loading, onBack]);
 
   // Detail single-key shortcuts. Inputs and open overlays are excluded by the
   // same helpers the shell uses, so typing never triggers them.
@@ -233,7 +260,7 @@ export function DetailView({
   const notes = textField(issue, 'notes');
   const pending = writes?.isPending(issue.id) ?? false;
   const editorError = validationError;
-  const updatedElsewhere = editing !== null && editBase !== null && issue.updated_at !== editBase;
+  const updatedElsewhere = editing !== null && externalUpdate;
 
   const saveField = async (field: EditableField, next: string): Promise<boolean> => {
     if (writes === undefined) {
@@ -259,6 +286,7 @@ export function DetailView({
       return false;
     }
 
+    noteSelfWrite([field === 'acceptance' ? 'acceptance_criteria' : field]);
     const outcome = await writes.submit({
       key: `detail:${issue.id}:${field}:${value}`,
       issueId: issue.id,
@@ -266,7 +294,7 @@ export function DetailView({
     });
     if (outcome.status === 'ok') {
       setEditing(null);
-      setEditBase(null);
+      setExternalUpdate(false);
       if (outcome.echo !== undefined && outcome.echo !== 'echoed') {
         setNotice(t('detail.write.refreshed'));
       }
@@ -292,6 +320,7 @@ export function DetailView({
       return false;
     }
     setCommentError(null);
+    noteSelfWrite(['comments']);
     const outcome = await writes.submit({
       key: `detail:${issue.id}:comment:${text}`,
       issueId: issue.id,
@@ -446,6 +475,7 @@ export function DetailView({
           onOpenIssue={onOpenIssue}
           writes={writes}
           onDirtyChange={setRailDirty}
+          onSelfWrite={noteSelfWrite}
         />
       </div>
     </article>
