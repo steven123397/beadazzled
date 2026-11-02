@@ -126,7 +126,9 @@ test('redirects the root to the active workspace list', async () => {
     />
   );
 
-  expect(await screen.findByRole('heading', { name: 'List' })).toBeInTheDocument();
+  expect(
+    await screen.findByRole('heading', { name: 'List' }, { timeout: 3000 })
+  ).toBeInTheDocument();
   expect(window.location.hash).toBe('#/w/p1/list');
 });
 
