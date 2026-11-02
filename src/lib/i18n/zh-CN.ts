@@ -154,6 +154,9 @@ export const zhCN: Record<keyof typeof en, string> = {
   'detail.reopen': '重开票',
   'detail.deleted': '这条票已被删除。',
 
+  'markdown.taskDone': '已完成任务',
+  'markdown.taskOpen': '未完成任务',
+
   'error.title': '出错了',
   'error.copy': '复制诊断信息',
 

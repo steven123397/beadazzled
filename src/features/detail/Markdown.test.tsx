@@ -1,7 +1,13 @@
 import { render, screen } from '@testing-library/react';
 import { expect, test, vi } from 'vitest';
 
+import { I18nProvider } from '@/lib/i18n/I18nProvider';
+
 import { Markdown } from './Markdown';
+
+function renderMarkdown(ui: React.ReactElement) {
+  return render(<I18nProvider initialLanguage="en">{ui}</I18nProvider>);
+}
 
 test('GFM tables, task lists, strikethrough, code and nested lists all render', () => {
   const source = [
@@ -22,10 +28,10 @@ test('GFM tables, task lists, strikethrough, code and nested lists all render', 
     '  - inner',
   ].join('\n');
 
-  const { container } = render(<Markdown>{source}</Markdown>);
+  const { container } = renderMarkdown(<Markdown>{source}</Markdown>);
 
   expect(container.querySelector('table th')?.textContent).toBe('Name');
-  expect(container.querySelector('input[type="checkbox"]')).toBeChecked();
+  expect(screen.getByRole('checkbox', { name: 'Completed task' })).toBeChecked();
   expect(container.querySelector('del')?.textContent).toBe('struck');
   expect(container.querySelector('pre code')?.textContent).toContain('const answer = 42;');
   expect(container.querySelectorAll('ul ul li')).toHaveLength(1);
@@ -39,7 +45,7 @@ test('script, iframe, event handlers and javascript links never become executabl
     '[click me](javascript:window.__pwned=true)',
   ].join('\n\n');
 
-  const { container } = render(<Markdown>{source}</Markdown>);
+  const { container } = renderMarkdown(<Markdown>{source}</Markdown>);
 
   expect(container.querySelector('script')).toBeNull();
   expect(container.querySelector('iframe')).toBeNull();
@@ -51,7 +57,7 @@ test('script, iframe, event handlers and javascript links never become executabl
 
 test('a remote image becomes a placeholder holding its address instead of a request', () => {
   const onOpenLink = vi.fn();
-  const { container } = render(
+  const { container } = renderMarkdown(
     <Markdown onOpenLink={onOpenLink}>{'![diagram](https://example.com/pic.png)'}</Markdown>
   );
 
@@ -67,7 +73,7 @@ test('a remote image becomes a placeholder holding its address instead of a requ
 
 test('an http link opens through the system browser and does not navigate the app', () => {
   const onOpenLink = vi.fn();
-  render(<Markdown onOpenLink={onOpenLink}>{'[docs](https://example.com/docs)'}</Markdown>);
+  renderMarkdown(<Markdown onOpenLink={onOpenLink}>{'[docs](https://example.com/docs)'}</Markdown>);
 
   const link = screen.getByRole('link', { name: 'docs' });
   const event = new MouseEvent('click', { bubbles: true, cancelable: true });
@@ -78,20 +84,20 @@ test('an http link opens through the system browser and does not navigate the ap
 });
 
 test('a relative link is plain text and cannot trigger in-app navigation', () => {
-  render(<Markdown>{'[local](./other.md)'}</Markdown>);
+  renderMarkdown(<Markdown>{'[local](./other.md)'}</Markdown>);
 
   expect(screen.queryByRole('link')).toBeNull();
   expect(screen.getByText('local')).toBeInTheDocument();
 });
 
 test('bare URLs autolink as external links', () => {
-  render(<Markdown>{'see https://example.com for details'}</Markdown>);
+  renderMarkdown(<Markdown>{'see https://example.com for details'}</Markdown>);
 
   expect(screen.getByRole('link', { name: 'https://example.com' })).toBeInTheDocument();
 });
 
 test('empty content renders an empty container', () => {
-  const { container } = render(<Markdown>{''}</Markdown>);
+  const { container } = renderMarkdown(<Markdown>{''}</Markdown>);
 
   expect(container.firstElementChild).toBeEmptyDOMElement();
 });

@@ -76,3 +76,63 @@ test('the dark warning tone has no serious or critical violations', async ({ pag
 
   expect(await seriousViolations(page)).toEqual([]);
 });
+
+test('the detail reading page has no serious or critical violations', async ({ page }) => {
+  const TS = '2026-11-01T00:00:00Z';
+  await installFakeBridge(page, {
+    issues: [
+      {
+        id: 'bza-a',
+        title: 'Blocker',
+        description: '',
+        status: 'closed',
+        priority: 1,
+        issue_type: 'task',
+        created_at: TS,
+        updated_at: TS,
+        labels: [],
+        dependency_count: 0,
+        dependent_count: 1,
+        comment_count: 0,
+      },
+      {
+        id: 'bza-b',
+        title: 'Document reading',
+        description: [
+          '## Notes',
+          '',
+          'A **bold** paragraph with `code`.',
+          '',
+          '| Name | State |',
+          '| --- | --- |',
+          '| beta | open |',
+          '',
+          '- [x] shipped',
+        ].join('\n'),
+        acceptance_criteria: '- [x] ships',
+        status: 'open',
+        priority: 2,
+        issue_type: 'task',
+        assignee: 'ada',
+        created_at: TS,
+        updated_at: TS,
+        labels: ['ui'],
+        dependencies: [
+          { issue_id: 'bza-b', depends_on_id: 'bza-a', type: 'blocks', created_at: TS },
+        ],
+        comments: [
+          { id: 'c1', issue_id: 'bza-b', author: 'lin', text: 'Looks good', created_at: TS },
+        ],
+        dependency_count: 1,
+        dependent_count: 0,
+        comment_count: 1,
+      },
+    ],
+  });
+
+  await page.goto('/#/w/p1/issue/bza-b');
+  await expect(page.getByRole('heading', { name: 'Document reading' })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Blocked by' })).toBeVisible();
+
+  expect(await seriousViolations(page)).toEqual([]);
+});

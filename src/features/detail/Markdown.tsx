@@ -4,6 +4,7 @@ import rehypeSanitize, { defaultSchema } from 'rehype-sanitize';
 import remarkGfm from 'remark-gfm';
 
 import { isExternalUrl, openExternal } from '@/lib/links';
+import { useI18n } from '@/lib/i18n/I18nProvider';
 
 export type MarkdownProps = {
   children: string;
@@ -31,8 +32,25 @@ export const Markdown = memo(function Markdown({
   className,
   onOpenLink = openExternal,
 }: MarkdownProps) {
+  const { t } = useI18n();
   const components = useMemo<Components>(
     () => ({
+      input({ type, checked, disabled }) {
+        if (type !== 'checkbox') {
+          return <input type={type} disabled={disabled} />;
+        }
+        // remark-gfm renders task lists as unlabeled disabled checkboxes;
+        // axe flags those as form elements without a label.
+        return (
+          <input
+            type="checkbox"
+            checked={checked === true}
+            disabled={disabled}
+            readOnly
+            aria-label={checked === true ? t('markdown.taskDone') : t('markdown.taskOpen')}
+          />
+        );
+      },
       a({ href, children: label }) {
         if (!isExternalUrl(href)) {
           // Relative links have no destination inside a desktop app; rendering
@@ -77,7 +95,7 @@ export const Markdown = memo(function Markdown({
         );
       },
     }),
-    [onOpenLink]
+    [onOpenLink, t]
   );
 
   return (

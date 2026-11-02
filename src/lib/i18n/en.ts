@@ -153,6 +153,9 @@ export const en = {
   'detail.reopen': 'Reopen ticket',
   'detail.deleted': 'This ticket was deleted.',
 
+  'markdown.taskDone': 'Completed task',
+  'markdown.taskOpen': 'Incomplete task',
+
   'error.title': 'Something went wrong',
   'error.copy': 'Copy diagnostics',
 
