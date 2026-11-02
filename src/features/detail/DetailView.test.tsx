@@ -433,3 +433,20 @@ test('escape outside the input cancels the draft instead of leaving the page', (
   expect(screen.queryByRole('textbox', { name: 'Title' })).toBeNull();
   expect(onBack).not.toHaveBeenCalled();
 });
+
+test('a write that misses its echo says the view was refreshed', async () => {
+  const writes = fakeWrites({
+    submit: vi.fn(async () => ({ status: 'ok' as const, echo: 'timeout' as const })),
+  });
+  renderDetail(issue('bza-b', { title: 'Old title' }), undefined, writes);
+
+  fireEvent.click(screen.getByRole('button', { name: 'Old title' }));
+  fireEvent.change(screen.getByRole('textbox', { name: 'Title' }), {
+    target: { value: 'New title' },
+  });
+  fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+  expect(
+    await screen.findByText(/the view did not confirm in time/)
+  ).toBeInTheDocument();
+});

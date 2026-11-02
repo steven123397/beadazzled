@@ -59,7 +59,7 @@ test('a successful write clears pending and leaves no error', async () => {
   });
 
   expect(result.current.error).toBeNull();
-  expect(result.current.result).toEqual({ status: 'ok' });
+  expect(result.current.result).toEqual({ status: 'ok', echo: 'echoed' });
   expect(result.current.isPending('bza-1')).toBe(false);
 });
 

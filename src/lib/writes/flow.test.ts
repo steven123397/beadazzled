@@ -233,7 +233,7 @@ test('createWriteFlow wires afterSeq, echo and refresh from the store', async ()
   ]);
   const result = await pending;
 
-  expect(result).toEqual({ status: 'ok' });
+  expect(result).toEqual({ status: 'ok', echo: 'echoed' });
   expect(sent).toHaveLength(1);
   expect(refreshes).toBe(0);
   expect(store.getState().lastSeq).toBe(5);

@@ -66,7 +66,7 @@ export async function submitWrite(
   if (echo !== 'echoed') {
     flow.refresh();
   }
-  return result;
+  return { ...result, echo };
 }
 
 export type WriteFlowOptions = {

@@ -49,6 +49,7 @@ export function DetailView({
   // the ticket while this draft was open.
   const [editBase, setEditBase] = useState<string | null>(null);
   const [deleted, setDeleted] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
   const lastSeen = useRef<Issue | null>(null);
   const canEdit = writes?.canWrite === true;
 
@@ -56,6 +57,7 @@ export function DetailView({
     (field: EditableField) => {
       writes?.clearError();
       setValidationError(null);
+      setNotice(null);
       setEditBase(issue?.updated_at ?? null);
       setEditing(field);
     },
@@ -251,6 +253,9 @@ export function DetailView({
     if (outcome.status === 'ok') {
       setEditing(null);
       setEditBase(null);
+      if (outcome.echo !== undefined && outcome.echo !== 'echoed') {
+        setNotice(t('detail.write.refreshed'));
+      }
       return true;
     }
     return false;
@@ -276,6 +281,9 @@ export function DetailView({
       issueId: issue.id,
       build: () => commentIssue(issue.id, text),
     });
+    if (outcome.status === 'ok' && outcome.echo !== undefined && outcome.echo !== 'echoed') {
+      setNotice(t('detail.write.refreshed'));
+    }
     return outcome.status === 'ok';
   };
 
@@ -313,6 +321,12 @@ export function DetailView({
           {t('detail.edit.updatedElsewhere')}
         </p>
       ) : null}
+
+      {notice === null ? null : (
+        <p role="status" className="mt-3 text-xs text-muted-foreground">
+          {notice}
+        </p>
+      )}
 
       <div className="mt-6 grid gap-8 min-[1000px]:grid-cols-[minmax(0,1fr)_280px]">
         <div className="min-w-0">

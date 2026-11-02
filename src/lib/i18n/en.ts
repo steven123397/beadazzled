@@ -146,6 +146,7 @@ export const en = {
   'detail.edit.updatedElsewhere': 'Updated elsewhere while you were editing; your draft is kept.',
   'detail.edit.discard': 'Discard the unsaved draft?',
   'detail.write.unavailable': 'bd is not available; editing is disabled.',
+  'detail.write.refreshed': 'Saved, but the view did not confirm in time; it has been refreshed.',
   'detail.comment.placeholder': 'Write a comment…',
   'detail.comment.submit': 'Comment',
   'detail.close': 'Close ticket',

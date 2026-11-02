@@ -1,12 +1,14 @@
 import type { BridgeError, WriteCommand } from '@/bindings/bd';
 
+import type { EchoOutcome } from '../sync/echo';
+
 /** What the IPC layer reports for one `bd` write. */
 export type WriteOutcome =
   | { ok: true; createdId: string | null }
   | { ok: false; error: BridgeError };
 
 export type WriteResult =
-  | { status: 'ok'; createdId?: string }
+  | { status: 'ok'; createdId?: string; echo?: EchoOutcome }
   | { status: 'conflict'; error: BridgeError }
   | { status: 'failed'; error: BridgeError };
 
