@@ -6,7 +6,7 @@ import {
   parseListViewState,
   serializeListViewState,
   type ListViewState,
-} from './view-state';
+} from './state';
 
 test('hasViewParams distinguishes list state from unknown query keys', () => {
   expect(hasViewParams(new URLSearchParams())).toBe(false);

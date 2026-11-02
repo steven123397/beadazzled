@@ -1,7 +1,7 @@
 import type { Issue } from '@/bindings/bd';
 
-import { collator } from './collator';
-import type { ListSort, SortField } from './view-state';
+import { collator } from '@/lib/view/collator';
+import type { ListSort, SortField } from '@/lib/view/state';
 
 /** Returns a new array; the store's issue list is never mutated in place. */
 export function sortIssues(issues: readonly Issue[], sort: ListSort): Issue[] {

@@ -90,7 +90,7 @@ docs/
 - 注释解释「为什么」，不复述代码；每个模块的公开接口在 spec 中先定义再实现。
 
 ```ts
-// src/features/list/filter.ts
+// src/lib/view/filter.ts
 export function matchesFilter(issue: Issue, filter: ListFilter): boolean {
   if (filter.status.length > 0 && !filter.status.includes(issue.status)) return false;
   const query = filter.query.trim().toLowerCase();

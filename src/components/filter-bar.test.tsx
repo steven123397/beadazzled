@@ -3,9 +3,9 @@ import { expect, test, vi } from 'vitest';
 
 import type { Issue } from '@/bindings/bd';
 import { I18nProvider } from '@/lib/i18n/I18nProvider';
+import { createListViewState, type ListViewState } from '@/lib/view/state';
 
-import { FilterBar } from './FilterBar';
-import { createListViewState, type ListViewState } from './view-state';
+import { FilterBar } from './filter-bar';
 
 const TS = '2026-11-01T00:00:00Z';
 

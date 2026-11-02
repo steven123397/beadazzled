@@ -98,13 +98,18 @@ export function selectVisibleIssues(issues: Issue[], view: ListViewState): Issue
 src/features/list/
   ListView.tsx        虚拟列表与键盘容器
   Row.tsx             单行（memo）
-  FilterBar.tsx       筛选/分组/排序控制
   GroupHeader.tsx     分组头与计数
-  view-state.ts       ListViewState 与 URL 序列化
-  filter.ts           matchesFilter / selectVisibleIssues
+  filter.ts           selectVisibleIssues（过滤原语见 src/lib/view）
   group.ts            groupIssues
   sort.ts             sortIssues
+src/lib/view/          列表与看板共享
+  state.ts            ListViewState 与 URL 序列化
+  storage.ts          每个工作区记住上次视图
+  filter.ts           matchesFilter / buildSearchIndex / hasActiveFilters
   ready.ts            ready 判定
+  collator.ts         稳定排序
+src/components/
+  filter-bar.tsx      筛选/分组/排序控制（list / board 共用）
 ```
 
 ## Module Code Style

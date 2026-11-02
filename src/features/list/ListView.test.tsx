@@ -7,8 +7,8 @@ import { I18nProvider } from '@/lib/i18n/I18nProvider';
 
 import { ListView } from './ListView';
 import { LIST_POSITION_PREFIX, saveListPosition } from './position';
-import { createListViewState } from './view-state';
-import { saveSavedView } from './view-storage';
+import { createListViewState } from '@/lib/view/state';
+import { saveSavedView } from '@/lib/view/storage';
 
 vi.mock('@tanstack/react-virtual', () => ({
   useVirtualizer: (options: {

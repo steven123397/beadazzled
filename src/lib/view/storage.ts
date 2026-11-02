@@ -1,4 +1,4 @@
-import { parseListViewState, serializeListViewState, type ListViewState } from './view-state';
+import { parseListViewState, serializeListViewState, type ListViewState } from './state';
 
 /** Per-workspace list view, remembered across restarts. */
 export const LIST_VIEW_PREFIX = 'beadazzled.list.view.';
