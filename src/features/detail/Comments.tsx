@@ -1,5 +1,7 @@
 import { useEffect, useState, type KeyboardEvent } from 'react';
 
+import { Button } from '@/components/ui/button';
+import { Textarea } from '@/components/ui/input';
 import type { Comment } from '@/bindings/bd';
 import { useI18n } from '@/lib/i18n/I18nProvider';
 import { formatAbsoluteTime, formatRelativeTime, timeOrder } from '@/lib/time';
@@ -87,7 +89,7 @@ export function Comments({
 
       {onSubmit === undefined ? null : (
         <div className="mt-4">
-          <textarea
+          <Textarea
             id="detail-comment-input"
             aria-label={t('detail.comment.placeholder')}
             placeholder={t('detail.comment.placeholder')}
@@ -96,21 +98,15 @@ export function Comments({
             onChange={(event) => setDraft(event.target.value)}
             onKeyDown={onKeyDown}
             rows={3}
-            className="w-full rounded border border-border bg-background p-2 text-sm"
           />
           {error === null ? null : (
             <p role="alert" className="mt-1 text-xs text-destructive">
               {error}
             </p>
           )}
-          <button
-            type="button"
-            onClick={submit}
-            disabled={!canSubmit}
-            className="mt-2 rounded bg-primary px-2 py-1 text-xs text-primary-foreground disabled:opacity-50"
-          >
+          <Button variant="primary" onClick={submit} disabled={!canSubmit} className="mt-2">
             {t('detail.comment.submit')}
-          </button>
+          </Button>
         </div>
       )}
     </section>

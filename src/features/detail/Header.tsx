@@ -1,5 +1,7 @@
 import { useState } from 'react';
 
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import type { Issue } from '@/bindings/bd';
 import { copyText } from '@/lib/clipboard';
 import { useI18n } from '@/lib/i18n/I18nProvider';
@@ -27,40 +29,30 @@ export function Header({
   return (
     <header>
       <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-        <button
-          type="button"
-          aria-label={t('detail.back')}
-          onClick={onBack}
-          className="rounded border border-border px-2 py-1 text-foreground hover:bg-muted"
-        >
+        <Button variant="ghost" aria-label={t('detail.back')} onClick={onBack}>
           ← {t('detail.back')}
-        </button>
+        </Button>
         <span className="font-mono">{issue.id}</span>
-        <button
-          type="button"
-          aria-label={t('detail.copyId')}
-          onClick={copyId}
-          className="rounded border border-border px-2 py-1 hover:bg-muted"
-        >
+        <Button variant="ghost" aria-label={t('detail.copyId')} onClick={copyId}>
           {copied ? t('clipboard.copied') : '#'}
-        </button>
+        </Button>
         <span className="ml-auto flex items-center gap-2">
-          <span className="rounded bg-muted px-2 py-0.5 text-foreground">
+          <Badge variant="outline" className="text-foreground">
             {statusText(issue.status, t)}
-          </span>
+          </Badge>
           <span className="tabular-nums">P{issue.priority}</span>
           <span>{issue.issue_type}</span>
         </span>
       </div>
       {hideTitle ? null : (
-        <h1 className="mt-3 text-xl font-semibold leading-snug">
+        <h1 className="mt-3 text-xl font-semibold leading-tight">
           {onEditTitle === undefined ? (
             issue.title
           ) : (
             <button
               type="button"
               onClick={onEditTitle}
-              className="text-left hover:underline"
+              className="-mx-1 rounded-sm px-1 text-left hover:bg-hover"
               title={t('detail.edit.edit')}
             >
               {issue.title}

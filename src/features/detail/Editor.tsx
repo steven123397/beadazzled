@@ -1,5 +1,8 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
 
+import { Button } from '@/components/ui/button';
+import { Input, Textarea } from '@/components/ui/input';
+
 import { useI18n } from '@/lib/i18n/I18nProvider';
 
 import { Markdown } from './Markdown';
@@ -82,25 +85,25 @@ export function Editor({
   return (
     <div role="group" aria-label={label} onKeyDown={onKeyDown} className="max-w-[72ch]">
       {preview ? (
-        <div className="rounded border border-border bg-card p-3">
+        <div className="rounded-md border border-border bg-card p-3 shadow-xs">
           {draft.trim() === '' ? null : <Markdown onOpenLink={onOpenLink}>{draft}</Markdown>}
         </div>
       ) : multiline ? (
-        <textarea
+        <Textarea
           aria-label={label}
           value={draft}
           disabled={disabled || busy}
           onChange={(event) => setDraft(event.target.value)}
           rows={12}
-          className="w-full rounded border border-border bg-background p-2 font-mono text-sm leading-relaxed"
+          className="font-mono leading-relaxed"
         />
       ) : (
-        <input
+        <Input
           aria-label={label}
           value={draft}
           disabled={disabled || busy}
           onChange={(event) => setDraft(event.target.value)}
-          className="w-full rounded border border-border bg-background px-2 py-1 text-sm"
+          className="h-control-md"
         />
       )}
 
@@ -111,31 +114,16 @@ export function Editor({
       )}
 
       <div className="mt-2 flex items-center gap-2">
-        <button
-          type="button"
-          onClick={save}
-          disabled={disabled || busy}
-          className="rounded bg-primary px-2 py-1 text-xs text-primary-foreground disabled:opacity-50"
-        >
+        <Button variant="primary" onClick={save} disabled={disabled || busy}>
           {busy ? t('detail.edit.saving') : t('detail.edit.save')}
-        </button>
-        <button
-          type="button"
-          onClick={onCancel}
-          disabled={busy}
-          className="rounded border border-border px-2 py-1 text-xs disabled:opacity-50"
-        >
+        </Button>
+        <Button variant="secondary" onClick={onCancel} disabled={busy}>
           {t('detail.edit.cancel')}
-        </button>
+        </Button>
         {previewable ? (
-          <button
-            type="button"
-            onClick={() => setPreview((current) => !current)}
-            disabled={busy}
-            className="rounded border border-border px-2 py-1 text-xs disabled:opacity-50"
-          >
+          <Button variant="ghost" onClick={() => setPreview((current) => !current)} disabled={busy}>
             {preview ? t('detail.edit.edit') : t('detail.edit.preview')}
-          </button>
+          </Button>
         ) : null}
       </div>
     </div>

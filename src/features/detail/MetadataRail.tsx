@@ -1,5 +1,12 @@
 import { useEffect, useState } from 'react';
 
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { IconButton } from '@/components/ui/icon-button';
+import { Input } from '@/components/ui/input';
+import { Select } from '@/components/ui/select';
+import { PriorityIcon } from '@/components/ui/priority-icon';
+import { StatusIcon } from '@/components/ui/status-icon';
 import type { Issue, WriteCommand } from '@/bindings/bd';
 import { useI18n } from '@/lib/i18n/I18nProvider';
 import type { IssueIndex } from '@/lib/store/selectors';
@@ -164,33 +171,39 @@ export function MetadataRail({
         <dt className="text-muted-foreground">{t('detail.metadata.status')}</dt>
         <dd>
           {canEdit ? (
-            <select
-              id="detail-status"
-              aria-label={t('detail.metadata.status')}
-              value={issue.status}
-              disabled={disabled}
-              onChange={(event) => changeStatus(event.target.value)}
-              className="w-full rounded border border-border bg-background px-1 py-0.5"
-            >
-              {statuses.map((status) => {
-                const decision = canChangeStatus(issue, status, blockers);
-                return (
-                  <option key={status} value={status} disabled={!decision.allowed}>
-                    {statusText(status, t)}
-                    {decision.allowed ? '' : ` — ${t('detail.edit.blocked')}`}
-                  </option>
-                );
-              })}
-            </select>
+            <span className="flex w-full items-center gap-1.5">
+              <StatusIcon status={issue.status} />
+              <Select
+                id="detail-status"
+                aria-label={t('detail.metadata.status')}
+                value={issue.status}
+                disabled={disabled}
+                onChange={(event) => changeStatus(event.target.value)}
+                className="w-full"
+              >
+                {statuses.map((status) => {
+                  const decision = canChangeStatus(issue, status, blockers);
+                  return (
+                    <option key={status} value={status} disabled={!decision.allowed}>
+                      {statusText(status, t)}
+                      {decision.allowed ? '' : ` — ${t('detail.edit.blocked')}`}
+                    </option>
+                  );
+                })}
+              </Select>
+            </span>
           ) : (
-            statusText(issue.status, t)
+            <span className="flex items-center gap-1.5">
+              <StatusIcon status={issue.status} />
+              {statusText(issue.status, t)}
+            </span>
           )}
         </dd>
 
         <dt className="text-muted-foreground">{t('detail.metadata.priority')}</dt>
         <dd className="tabular-nums">
           {canEdit ? (
-            <select
+            <Select
               id="detail-priority"
               aria-label={t('detail.metadata.priority')}
               value={String(issue.priority)}
@@ -202,7 +215,7 @@ export function MetadataRail({
                   ['priority']
                 )
               }
-              className="w-full rounded border border-border bg-background px-1 py-0.5"
+              className="w-full"
             >
               {(PRIORITIES.includes(issue.priority)
                 ? PRIORITIES
@@ -212,9 +225,12 @@ export function MetadataRail({
                   P{priority}
                 </option>
               ))}
-            </select>
+            </Select>
           ) : (
-            `P${issue.priority}`
+            <span className="flex items-center gap-1.5">
+              <PriorityIcon priority={issue.priority} />
+              {`P${issue.priority}`}
+            </span>
           )}
         </dd>
 
@@ -242,15 +258,15 @@ export function MetadataRail({
                 issue.assignee
               )}
               {canEdit ? (
-                <button
-                  type="button"
+                <Button
+                  variant="ghost"
+                  size="xs"
                   aria-label={t('detail.edit.assignee')}
                   disabled={disabled}
                   onClick={() => setEditingAssignee(true)}
-                  className="rounded border border-border px-1.5 py-0.5 text-[11px] disabled:opacity-50"
                 >
                   {t('detail.edit.edit')}
-                </button>
+                </Button>
               ) : null}
             </span>
           )}
@@ -263,33 +279,30 @@ export function MetadataRail({
               <span className="text-muted-foreground">{t('detail.metadata.none')}</span>
             ) : (
               issue.labels.map((label, position) => (
-                <span
-                  key={`${label}:${position}`}
-                  className="inline-flex items-center gap-1 rounded bg-muted px-1.5 py-0.5"
-                >
+                <Badge key={`${label}:${position}`} className="gap-0.5 py-0 pr-0.5">
                   {label}
                   {canEdit ? (
-                    <button
-                      type="button"
-                      aria-label={t('detail.edit.removeLabel', { label })}
+                    <IconButton
+                      label={t('detail.edit.removeLabel', { label })}
+                      size="xs"
                       disabled={disabled}
                       onClick={() =>
                         void submitUpdate({ removeLabels: [label] }, `label:remove:${label}`, [
                           'labels',
                         ])
                       }
-                      className="text-muted-foreground disabled:opacity-50"
+                      className="size-3.5 text-muted-foreground"
                     >
                       ×
-                    </button>
+                    </IconButton>
                   ) : null}
-                </span>
+                </Badge>
               ))
             )}
           </div>
           {canEdit ? (
             <div className="mt-1 flex items-center gap-1">
-              <input
+              <Input
                 aria-label={t('detail.edit.newLabel')}
                 value={newLabel}
                 disabled={disabled}
@@ -300,16 +313,11 @@ export function MetadataRail({
                     addLabel();
                   }
                 }}
-                className="min-w-0 flex-1 rounded border border-border bg-background px-1 py-0.5"
+                className="min-w-0 flex-1"
               />
-              <button
-                type="button"
-                onClick={addLabel}
-                disabled={disabled || newLabel.trim() === ''}
-                className="rounded border border-border px-1.5 py-0.5 disabled:opacity-50"
-              >
+              <Button size="sm" onClick={addLabel} disabled={disabled || newLabel.trim() === ''}>
                 {t('detail.edit.add')}
-              </button>
+              </Button>
             </div>
           ) : null}
         </dd>
@@ -343,23 +351,19 @@ export function MetadataRail({
       {canEdit ? (
         <div className="mt-3 flex gap-2">
           {issue.status === 'closed' ? (
-            <button
-              type="button"
+            <Button
               disabled={disabled}
               onClick={() => void submitCommand(() => reopenIssue(issue.id), 'reopen', ['status'])}
-              className="rounded border border-border px-2 py-1 disabled:opacity-50"
             >
               {t('detail.reopen')}
-            </button>
+            </Button>
           ) : (
-            <button
-              type="button"
+            <Button
               disabled={disabled || !canChangeStatus(issue, 'closed', blockers).allowed}
               onClick={closeTicket}
-              className="rounded border border-border px-2 py-1 disabled:opacity-50"
             >
               {t('detail.close')}
-            </button>
+            </Button>
           )}
         </div>
       ) : null}

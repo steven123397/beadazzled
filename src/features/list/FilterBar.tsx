@@ -1,7 +1,10 @@
-import { memo, useEffect, useMemo, useRef } from 'react';
+import { memo, useEffect, useMemo, useRef, useState } from 'react';
 
 import type { Issue } from '@/bindings/bd';
 import { isEditableTarget, isOverlayOpen } from '@/app/keyboard/resolve';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Select } from '@/components/ui/select';
 import type { MessageKey } from '@/lib/i18n';
 import { useI18n } from '@/lib/i18n/I18nProvider';
 
@@ -62,6 +65,28 @@ export const FilterBar = memo(function FilterBar({
 }: FilterBarProps) {
   const { t } = useI18n();
   const searchRef = useRef<HTMLInputElement>(null);
+  // The input is driven by this draft, not by the URL: every keystroke would
+  // otherwise round-trip through router state, and a character typed during
+  // that round trip gets reset out of the field.
+  const [draftQuery, setDraftQuery] = useState(view.filter.query);
+
+  // Follow external changes (clear, a restored saved view) while the field is
+  // not being typed into.
+  useEffect(() => {
+    if (document.activeElement !== searchRef.current) {
+      setDraftQuery(view.filter.query);
+    }
+  }, [view.filter.query]);
+
+  const changeQuery = (next: string) => {
+    setDraftQuery(next);
+    updateFilter({ query: next });
+  };
+
+  const clearAll = () => {
+    setDraftQuery('');
+    onClear();
+  };
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent): void {
@@ -131,15 +156,15 @@ export const FilterBar = memo(function FilterBar({
 
   return (
     <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-border px-3 py-2">
-      <input
+      <Input
         ref={searchRef}
         type="search"
         aria-label={t('list.filter.search')}
         aria-keyshortcuts="/"
         placeholder={t('list.filter.search')}
-        value={view.filter.query}
-        onChange={(event) => updateFilter({ query: event.target.value })}
-        className="w-64 rounded border border-border bg-background px-2 py-1 text-xs"
+        value={draftQuery}
+        onChange={(event) => changeQuery(event.target.value)}
+        className="w-64"
       />
       <MultiSelect
         label={t('list.filter.status')}
@@ -179,35 +204,34 @@ export const FilterBar = memo(function FilterBar({
         />
         {t('list.filter.ready')}
       </label>
-      <select
+      <Select
         aria-label={t('list.filter.groupBy')}
         value={view.group}
         onChange={(event) => onChange({ ...view, group: event.target.value as GroupBy })}
-        className="rounded border border-border bg-background px-2 py-1 text-xs"
       >
         {GROUP_VALUES.map((value) => (
           <option key={value} value={value}>
             {t(GROUP_LABELS[value])}
           </option>
         ))}
-      </select>
-      <select
+      </Select>
+      <Select
         aria-label={t('list.filter.sortBy')}
         value={view.sort.by}
         onChange={(event) => {
           const by = event.target.value as SortField;
           onChange({ ...view, sort: { by, direction: DEFAULT_SORT_DIRECTION[by] } });
         }}
-        className="rounded border border-border bg-background px-2 py-1 text-xs"
       >
         {SORT_FIELDS.map((value) => (
           <option key={value} value={value}>
             {t(SORT_LABELS[value])}
           </option>
         ))}
-      </select>
-      <button
-        type="button"
+      </Select>
+      <Button
+        variant="secondary"
+        size="sm"
         aria-label={t('list.sort.reverse')}
         onClick={() =>
           onChange({
@@ -218,18 +242,14 @@ export const FilterBar = memo(function FilterBar({
             },
           })
         }
-        className="rounded border border-border px-2 py-1 text-xs text-muted-foreground"
+        className="text-muted-foreground"
       >
         {view.sort.direction === 'asc' ? '↑' : '↓'}
-      </button>
+      </Button>
       {hasActiveFilters(view.filter) ? (
-        <button
-          type="button"
-          onClick={onClear}
-          className="rounded border border-border px-2 py-1 text-xs text-muted-foreground"
-        >
+        <Button variant="ghost" size="sm" onClick={clearAll} className="text-muted-foreground">
           {t('list.filter.clear')}
-        </button>
+        </Button>
       ) : null}
       <output aria-live="polite" className="ml-auto text-xs tabular-nums text-muted-foreground">
         {t('list.count', { visible: visibleCount, total: totalCount })}
@@ -253,16 +273,19 @@ function MultiSelect({
 
   return (
     <details aria-label={label} className="relative">
-      <summary className="cursor-pointer list-none rounded border border-border px-2 py-1 text-xs text-muted-foreground">
+      <summary className="flex h-control-sm cursor-pointer list-none items-center rounded-md border border-border bg-card px-2 text-xs text-muted-foreground shadow-xs hover:bg-hover">
         {label}
         {selected.length > 0 ? ` (${selected.length})` : ''}
       </summary>
-      <div className="absolute left-0 z-30 mt-1 max-h-64 w-48 overflow-auto rounded border border-border bg-card p-2 shadow">
+      <div className="absolute left-0 z-30 mt-1 max-h-64 w-48 overflow-auto rounded-md border border-border bg-card p-1 shadow-popover">
         {options.length === 0 ? (
           <p className="px-1 py-0.5 text-xs text-muted-foreground">{t('list.filter.noOptions')}</p>
         ) : null}
         {options.map((option) => (
-          <label key={option.value} className="flex items-center gap-2 px-1 py-0.5 text-xs">
+          <label
+            key={option.value}
+            className="flex cursor-pointer items-center gap-2 rounded-sm px-1.5 py-1 text-xs hover:bg-hover"
+          >
             <input
               type="checkbox"
               checked={selected.includes(option.value)}

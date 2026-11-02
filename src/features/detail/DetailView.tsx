@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 
 import { isEditableTarget, isOverlayOpen } from '@/app/keyboard/resolve';
+import { Button } from '@/components/ui/button';
 import type { Issue } from '@/bindings/bd';
 import { confirmLeaveDraft, setDraftGuard } from '@/lib/draft-guard';
 import { describeError } from '@/lib/errors';
@@ -241,27 +242,22 @@ export function DetailView({
           <p role="status" className="rounded border border-warning px-3 py-2 text-sm text-warning">
             {t('detail.deleted')}
           </p>
-          <button
-            type="button"
+          <Button
+            variant="secondary"
             aria-label={t('detail.back')}
             onClick={requestBack}
-            className="mt-3 rounded border border-border px-2 py-1 text-xs text-foreground hover:bg-muted"
+            className="mt-3"
           >
             ← {t('detail.back')}
-          </button>
+          </Button>
         </div>
       );
     }
     return (
       <div className="mx-auto w-full max-w-lg px-6 py-10">
-        <button
-          type="button"
-          aria-label={t('detail.back')}
-          onClick={requestBack}
-          className="rounded border border-border px-2 py-1 text-xs text-foreground hover:bg-muted"
-        >
+        <Button variant="secondary" aria-label={t('detail.back')} onClick={requestBack}>
           ← {t('detail.back')}
-        </button>
+        </Button>
         <h1 className="mt-4 text-lg font-semibold">{t('detail.notFound.title')}</h1>
         <p className="mt-1 text-sm text-muted-foreground">{t('detail.notFound.body')}</p>
       </div>
@@ -319,13 +315,14 @@ export function DetailView({
 
   const editButton = (field: EditableField) =>
     canEdit && editing === null ? (
-      <button
-        type="button"
+      <Button
+        variant="ghost"
+        size="xs"
         onClick={() => beginEdit(field)}
-        className="rounded border border-border px-2 py-0.5 text-xs text-muted-foreground hover:bg-muted"
+        className="text-muted-foreground"
       >
         {t('detail.edit.edit')}
-      </button>
+      </Button>
     ) : null;
 
   const submitComment = async (text: string): Promise<boolean> => {
