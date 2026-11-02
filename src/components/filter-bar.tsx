@@ -1,4 +1,4 @@
-import { memo, useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 
 import type { Issue } from '@/bindings/bd';
 import { isEditableTarget, isOverlayOpen } from '@/app/keyboard/resolve';
@@ -99,7 +99,10 @@ export const FilterBar = memo(function FilterBar({
     onClear();
   };
 
-  useEffect(() => {
+  // A layout effect, not a passive one: the bar paints as soon as the first
+  // snapshot arrives, and "/" pressed between that paint and the effect flush
+  // would be lost. A keyboard-first list must not drop the first key.
+  useLayoutEffect(() => {
     function onKeyDown(event: KeyboardEvent): void {
       if (event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey) {
         return;
