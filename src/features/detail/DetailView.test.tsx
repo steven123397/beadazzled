@@ -8,6 +8,18 @@ import type { UseWrite } from '@/lib/writes/useWrite';
 
 import { DetailView } from './DetailView';
 
+// The plugin cannot open a URL inside jsdom: every link click here is a
+// failure path, which is what the feedback test needs.
+vi.mock('@/lib/links', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/links')>();
+  return {
+    ...actual,
+    openExternal: vi.fn(async () => {
+      throw new Error('no default browser');
+    }),
+  };
+});
+
 const TS = '2026-11-01T00:00:00Z';
 
 function issue(id: string, overrides: Partial<Issue> = {}): Issue {
@@ -696,6 +708,16 @@ test('an outside edit is still announced after a write from this page', () => {
 
   expect(screen.getByText(/Updated elsewhere/)).toBeInTheDocument();
   expect(screen.getByRole('textbox', { name: 'Title' })).toHaveValue('Old title');
+});
+
+test('a link the system refuses to open says so instead of failing silently', async () => {
+  renderDetail(issue('bza-b', { description: 'See [the docs](https://example.com/docs).' }));
+
+  fireEvent.click(screen.getByRole('link', { name: 'the docs' }));
+
+  expect(
+    await screen.findByText('The link could not be opened in your browser.')
+  ).toBeInTheDocument();
 });
 
 test('a write that misses its echo says the view was refreshed', async () => {

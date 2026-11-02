@@ -652,6 +652,35 @@ test('an overlay closes with escape while a draft is open behind it', async () =
   }
 });
 
+test('browser back with a draft open asks and keeps the page', async () => {
+  window.location.hash = '#/w/p1/issue/bza-1';
+
+  render(
+    <App
+      workspaceApi={fakeApi({
+        snapshot: async () => snapshot([entry('p1', 'alpha')], '/repo/p1'),
+      })}
+      issues={[issue('bza-1', 'Deep linked')]}
+    />
+  );
+  await screen.findByRole('heading', { name: 'Deep linked' }, { timeout: 3000 });
+
+  const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+  // The detail page arms this while an editor holds an unsaved draft.
+  setDraftGuard(() => window.confirm('Discard the unsaved draft?'));
+  try {
+    window.location.hash = '#/w/p1/list';
+    window.dispatchEvent(new PopStateEvent('popstate'));
+
+    expect(confirm).toHaveBeenCalledTimes(1);
+    expect(window.location.hash).toBe('#/w/p1/issue/bza-1');
+    expect(screen.getByRole('heading', { name: 'Deep linked' })).toBeInTheDocument();
+  } finally {
+    setDraftGuard(null);
+    confirm.mockRestore();
+  }
+});
+
 test('opening diagnostics never calls bd again', async () => {
   window.location.hash = '#/w/p1/list';
   const bdStatus = vi.fn(async () => bdReady);

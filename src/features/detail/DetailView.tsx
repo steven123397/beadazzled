@@ -6,6 +6,7 @@ import type { Issue } from '@/bindings/bd';
 import { confirmLeaveDraft, setDraftGuard } from '@/lib/draft-guard';
 import { describeError } from '@/lib/errors';
 import { useI18n } from '@/lib/i18n/I18nProvider';
+import { openExternal } from '@/lib/links';
 import { getIssue, indexIssues } from '@/lib/store/selectors';
 import { commentIssue, updateIssue, type UpdateInput } from '@/lib/writes/commands';
 import type { UseWrite } from '@/lib/writes/useWrite';
@@ -91,6 +92,19 @@ export function DetailView({
     setExternalUpdate(false);
     setEditing(null);
   }, [writes]);
+
+  // The OS has no default browser for the scheme, the plugin is missing, or
+  // the shell refused the call: none of that may look like a dead click.
+  const openLink = useCallback(
+    async (url: string) => {
+      try {
+        await openExternal(url);
+      } catch {
+        setNotice(t('detail.link.failed'));
+      }
+    },
+    [t]
+  );
 
   const requestBack = useCallback(() => {
     if (!confirmLeaveDraft()) {
@@ -398,13 +412,14 @@ export function DetailView({
                   disabled={!canEdit}
                   error={editorError}
                   onDirtyChange={setFieldDirty}
+                  onOpenLink={openLink}
                   onSave={(next) => saveField('description', next)}
                   onCancel={cancelEdit}
                 />
               ) : description === '' ? (
                 <p className="text-sm text-muted-foreground">{t('detail.description.empty')}</p>
               ) : (
-                <Markdown>{description}</Markdown>
+                <Markdown onOpenLink={openLink}>{description}</Markdown>
               )}
             </div>
           </section>
@@ -426,13 +441,14 @@ export function DetailView({
                   disabled={!canEdit}
                   error={editorError}
                   onDirtyChange={setFieldDirty}
+                  onOpenLink={openLink}
                   onSave={(next) => saveField('acceptance', next)}
                   onCancel={cancelEdit}
                 />
               ) : acceptance === '' ? (
                 <p className="text-sm text-muted-foreground">{t('detail.acceptance.empty')}</p>
               ) : (
-                <Markdown>{acceptance}</Markdown>
+                <Markdown onOpenLink={openLink}>{acceptance}</Markdown>
               )}
             </div>
           </section>
@@ -443,7 +459,7 @@ export function DetailView({
                 {t('detail.design')}
               </summary>
               <div className="mt-2 max-w-[72ch]">
-                <Markdown>{design}</Markdown>
+                <Markdown onOpenLink={openLink}>{design}</Markdown>
               </div>
             </details>
           )}
@@ -454,7 +470,7 @@ export function DetailView({
                 {t('detail.notes')}
               </summary>
               <div className="mt-2 max-w-[72ch]">
-                <Markdown>{notes}</Markdown>
+                <Markdown onOpenLink={openLink}>{notes}</Markdown>
               </div>
             </details>
           )}

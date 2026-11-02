@@ -15,6 +15,8 @@ export type EditorProps = {
   error?: string | null;
   /** Reports whether the local draft differs from the stored value. */
   onDirtyChange?: (dirty: boolean) => void;
+  /** Opens a link from the preview; defaults to the system browser. */
+  onOpenLink?: (url: string) => void;
   onSave: (value: string) => Promise<boolean> | boolean;
   onCancel: () => void;
 };
@@ -33,6 +35,7 @@ export function Editor({
   disabled = false,
   error = null,
   onDirtyChange,
+  onOpenLink,
   onSave,
   onCancel,
 }: EditorProps) {
@@ -80,7 +83,7 @@ export function Editor({
     <div role="group" aria-label={label} onKeyDown={onKeyDown} className="max-w-[72ch]">
       {preview ? (
         <div className="rounded border border-border bg-card p-3">
-          {draft.trim() === '' ? null : <Markdown>{draft}</Markdown>}
+          {draft.trim() === '' ? null : <Markdown onOpenLink={onOpenLink}>{draft}</Markdown>}
         </div>
       ) : multiline ? (
         <textarea

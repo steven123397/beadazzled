@@ -3,7 +3,11 @@ import { createRoot } from 'react-dom/client';
 
 import { App } from './app/App';
 import { readE2EState } from './app/e2e';
+import { blockWindowDrops } from './lib/navigation-guard';
 import './styles/globals.css';
+
+// A dropped link would navigate the webview away from the app shell.
+blockWindowDrops();
 
 const container = document.getElementById('root');
 if (container === null) {

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Outlet, useLocation, useNavigate, type NavigateOptions } from 'react-router-dom';
 
 import type { Issue } from '@/bindings/bd';
@@ -50,6 +50,10 @@ export function Shell({
     [routerNavigate]
   );
   const location = useLocation();
+  // The route on screen right now, for the traversal guard below: React Router
+  // has already moved to the popped entry when the popstate listener runs.
+  const locationRef = useRef(location);
+  locationRef.current = location;
   const project = activeWorkspace(snapshot);
   const onIssueRoute = /^\/w\/[^/]+\/issue\//.test(location.pathname);
   const [paletteOpen, setPaletteOpen] = useState(false);
@@ -69,6 +73,21 @@ export function Shell({
   useEffect(() => {
     saveSidebarCollapsed(sidebarCollapsed);
   }, [sidebarCollapsed]);
+
+  // Back/forward gestures reach the browser history directly, so navigate()
+  // never sees them. The traversal is already applied when popstate fires;
+  // an unconfirmed draft puts the route that was on screen back.
+  useEffect(() => {
+    const handler = () => {
+      if (confirmLeaveDraft()) {
+        return;
+      }
+      const previous = locationRef.current;
+      routerNavigate(`${previous.pathname}${previous.search}${previous.hash}`, { replace: true });
+    };
+    window.addEventListener('popstate', handler);
+    return () => window.removeEventListener('popstate', handler);
+  }, [routerNavigate]);
 
   const closeOverlay = useCallback(() => {
     setPaletteOpen(false);

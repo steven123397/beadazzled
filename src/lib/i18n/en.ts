@@ -152,6 +152,7 @@ export const en = {
   'detail.close': 'Close ticket',
   'detail.reopen': 'Reopen ticket',
   'detail.deleted': 'This ticket was deleted.',
+  'detail.link.failed': 'The link could not be opened in your browser.',
 
   'markdown.taskDone': 'Completed task',
   'markdown.taskOpen': 'Incomplete task',
