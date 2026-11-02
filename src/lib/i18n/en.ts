@@ -19,6 +19,18 @@ export const en = {
   'nav.board': 'Board',
   'nav.settings': 'Settings',
 
+  'list.issues': 'Issues',
+  'list.visibleCount': 'Issues: {count}',
+  'list.unassigned': 'Unassigned',
+  'list.moreLabels': '+{count}',
+  'list.status.open': 'Open',
+  'list.status.in_progress': 'In progress',
+  'list.status.blocked': 'Blocked',
+  'list.status.deferred': 'Deferred',
+  'list.status.closed': 'Closed',
+  'list.status.pinned': 'Pinned',
+  'list.status.hooked': 'Hooked',
+
   'welcome.title': 'Welcome to beadazzled',
   'welcome.retry': 'Try again',
   'welcome.checking': 'Checking for bd…',
@@ -30,7 +42,8 @@ export const en = {
   'welcome.workspaceMissing': 'That workspace is no longer available.',
   'welcome.switchFailed': 'The workspace could not be opened. Check its path and try again.',
   'welcome.missingWorkspaces': 'Workspaces no longer on disk: {paths}',
-  'welcome.corruptBackup': 'The workspace config was damaged; the previous file was kept at {path}.',
+  'welcome.corruptBackup':
+    'The workspace config was damaged; the previous file was kept at {path}.',
   'welcome.choose': 'Open a workspace',
   'welcome.bdNotReady': 'bd must be available before a workspace can be added.',
   'welcome.pathPlaceholder': 'C:\\path\\to\\repo',

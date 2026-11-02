@@ -21,6 +21,18 @@ export const zhCN: Record<keyof typeof en, string> = {
   'nav.board': '看板',
   'nav.settings': '设置',
 
+  'list.issues': '票',
+  'list.visibleCount': '票：{count}',
+  'list.unassigned': '未指派',
+  'list.moreLabels': '+{count}',
+  'list.status.open': '开放',
+  'list.status.in_progress': '进行中',
+  'list.status.blocked': '阻塞',
+  'list.status.deferred': '延期',
+  'list.status.closed': '已关闭',
+  'list.status.pinned': '置顶',
+  'list.status.hooked': '已挂接',
+
   'welcome.title': '欢迎使用 beadazzled',
   'welcome.retry': '重试',
   'welcome.checking': '正在检查 bd…',

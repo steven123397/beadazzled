@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { HashRouter, Navigate, Outlet, Route, Routes, useParams } from 'react-router-dom';
 
 import type { Issue, SyncState } from '@/bindings/bd';
+import { ListRoute } from '@/features/list/ListView';
 import { workspaceApi as defaultWorkspaceApi, type WorkspaceApi } from '@/lib/workspace/api';
 import { useWorkspace } from '@/lib/workspace/useWorkspace';
 import { I18nProvider, useI18n } from '@/lib/i18n/I18nProvider';
@@ -118,7 +119,7 @@ function AppFrame({
                 <Route path="welcome" element={<Welcome />} />
                 <Route path="w/:projectId" element={<ProjectGate />}>
                   <Route index element={<Navigate to="list" replace />} />
-                  <Route path="list" element={<Placeholder titleKey="nav.list" />} />
+                  <Route path="list" element={<ListRoute issues={shellIssues} />} />
                   <Route path="board" element={<Placeholder titleKey="nav.board" />} />
                   <Route path="issue/:issueId" element={<IssuePlaceholder />} />
                 </Route>

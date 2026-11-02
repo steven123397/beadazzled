@@ -37,6 +37,7 @@
     "verify:release": "node scripts/verify-release.mjs"
   },
   "dependencies": {
+    "@tanstack/react-virtual": "^3.14.25",
     "@tauri-apps/api": "^2.12.4",
     "clsx": "^2.1.1",
     "cmdk": "^1.1.1",
