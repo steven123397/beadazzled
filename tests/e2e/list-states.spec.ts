@@ -177,6 +177,22 @@ test('the filter bar updates the count and clears back to the full list', async 
   await expect(page.locator('[data-issue-id="bza-3"]')).toBeVisible();
 });
 
+test('clicking List in the sidebar keeps the active filters', async ({ page }) => {
+  await installFakeBridge(page, {
+    issues: [issue(1, { title: 'Fix scroll' }), issue(2, { title: 'Other work' })],
+    syncState: healthy,
+  });
+  await page.goto('/#/w/p1/list?q=fix');
+  await expect(page.getByText('1 / 2')).toBeVisible();
+
+  await page.getByRole('link', { name: 'List' }).click();
+
+  await expect(page).toHaveURL(/q=fix/);
+  await expect(page.getByRole('searchbox', { name: 'Search tickets' })).toHaveValue('fix');
+  await expect(page.getByText('1 / 2')).toBeVisible();
+  await expect(page.locator('[data-issue-id="bza-2"]')).toHaveCount(0);
+});
+
 test('group headers collapse their rows without changing the count', async ({ page }) => {
   await installFakeBridge(page, {
     issues: [issue(1, { status: 'open' }), issue(2, { status: 'closed' })],

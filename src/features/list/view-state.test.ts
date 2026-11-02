@@ -207,9 +207,19 @@ test('a query keeps its interior and trailing spaces through the URL', () => {
   expect(parseListViewState(params).filter.query).toBe('fix scroll ');
 });
 
+test('a whitespace-only query survives while it is being typed', () => {
+  const view = createListViewState();
+  view.filter.query = ' ';
+
+  const params = serializeListViewState(view);
+
+  expect(params.get('q')).toBe(' ');
+  expect(parseListViewState(params).filter.query).toBe(' ');
+});
+
 test('an empty query does not count as a view state', () => {
   expect(hasViewParams(new URLSearchParams('q='))).toBe(false);
-  expect(hasViewParams(new URLSearchParams('q=+'))).toBe(false);
+  expect(hasViewParams(new URLSearchParams('q=+'))).toBe(true);
   expect(hasViewParams(new URLSearchParams('q=fix'))).toBe(true);
 });
 

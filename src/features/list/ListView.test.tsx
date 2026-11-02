@@ -1,5 +1,5 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
+import { Link, MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { beforeEach, expect, test, vi } from 'vitest';
 
 import type { Issue, SyncState } from '@/bindings/bd';
@@ -75,18 +75,21 @@ function renderList({
   syncState = healthy,
   onRefresh,
   withInput = false,
+  withLink = false,
 }: {
   issues: readonly Issue[];
   entry?: string;
   syncState?: SyncState;
   onRefresh?: () => void;
   withInput?: boolean;
+  withLink?: boolean;
 }) {
   const refresh = onRefresh ?? vi.fn();
   render(
     <I18nProvider initialLanguage="en">
       <MemoryRouter initialEntries={[entry]}>
         {withInput ? <input aria-label="Other input" /> : null}
+        {withLink ? <Link to="/w/p1/list">Go to list</Link> : null}
         <Routes>
           <Route
             path="/w/:projectId/list"
@@ -366,6 +369,48 @@ test('typing in the filter bar narrows the rows and the count', async () => {
   expect(document.querySelector('[data-issue-id="b"]')).toBeNull();
   expect(screen.getByText('1 / 2')).toBeInTheDocument();
   expect(screen.getByTestId('location')).toHaveTextContent('q=fix');
+});
+
+test('clicking the list link keeps the active filters', async () => {
+  renderList({
+    issues: [issue('a', { title: 'Fix scroll' }), issue('b', { title: 'Other work' })],
+    entry: '/w/p1/list?q=fix',
+    withLink: true,
+  });
+
+  const search = screen.getByRole('searchbox', { name: 'Search tickets' });
+  expect(search).toHaveValue('fix');
+
+  fireEvent.click(screen.getByRole('link', { name: 'Go to list' }));
+
+  await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/w/p1/list?q=fix'));
+  expect(search).toHaveValue('fix');
+  expect(screen.getByText('1 / 2')).toBeInTheDocument();
+});
+
+test('J, K and slash stay inside an open modal dialog', () => {
+  renderList({ issues: [issue('bza-1'), issue('bza-2')] });
+
+  const dialog = document.createElement('div');
+  dialog.setAttribute('role', 'dialog');
+  dialog.setAttribute('aria-modal', 'true');
+  const button = document.createElement('button');
+  button.textContent = 'Close';
+  dialog.append(button);
+  document.body.append(dialog);
+  button.focus();
+
+  try {
+    fireEvent.keyDown(window, { key: 'j' });
+    fireEvent.keyDown(window, { key: 'k' });
+    fireEvent.keyDown(window, { key: '/' });
+
+    expect(button).toHaveFocus();
+    expect(row('bza-1')).not.toHaveFocus();
+    expect(screen.getByRole('searchbox', { name: 'Search tickets' })).not.toHaveFocus();
+  } finally {
+    dialog.remove();
+  }
 });
 
 test('a journal-degraded workspace still renders its list', () => {

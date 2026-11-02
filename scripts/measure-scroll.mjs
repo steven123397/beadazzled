@@ -35,9 +35,11 @@ const budgets = { p50: 20, p95: 24, max: 50 };
 // group headers in the window. 240px/frame mounts roughly 6.7 rows per frame,
 // close to the low end of a real fling; 48px/frame is a comfortable read.
 const scenarios = [
-  { name: 'steady', delta: 48, steps: 120, group: 'none' },
-  { name: 'fling', delta: 240, steps: 100, group: 'none' },
-  { name: 'grouped', delta: 48, steps: 120, group: 'status' },
+  { name: 'steady', delta: 48, steps: 120, group: 'none', from: 0, minDistance: 5_000 },
+  { name: 'fling', delta: 240, steps: 150, group: 'none', from: 0, minDistance: 25_000 },
+  // Start past the open bucket (about the first 570 rows) so the run crosses
+  // status-group headers and reaches the tail of the list.
+  { name: 'grouped', delta: 48, steps: 150, group: 'status', from: 20_000, minDistance: 6_000 },
 ];
 let port = 1431;
 
@@ -118,6 +120,18 @@ function build() {
 }
 
 async function serve() {
+  // Fail before spawning if something else already answers on the port; a
+  // later 200 from a foreign server must never be mistaken for our preview.
+  try {
+    await fetch(`http://localhost:${port}/`, { signal: AbortSignal.timeout(500) });
+    throw new Error(`port ${port} is already serving; set SCROLL_PORT to a free port`);
+  } catch (error) {
+    if (error instanceof Error && error.message.includes('already serving')) {
+      throw error;
+    }
+    // Nothing listening: expected.
+  }
+
   const child = spawn(
     process.execPath,
     [viteBin, 'preview', '--outDir', 'dist-e2e', '--port', String(port), '--strictPort'],
@@ -202,11 +216,18 @@ async function measureRun(browser, scenario, run) {
     );
 
     const result = await page.evaluate(
-      async ({ steps: count, delta: stepSize }) => {
+      async ({ steps: count, delta: stepSize, from: start }) => {
         const list = document.querySelector('[role="list"]');
         if (list === null) {
           throw new Error('list missing');
         }
+        // Jump to the scenario's starting point and let the window settle
+        // before sampling, so a batch of row mounts is not counted as jank.
+        list.scrollTop = start;
+        await new Promise((resolve) => requestAnimationFrame(() => resolve()));
+        await new Promise((resolve) => requestAnimationFrame(() => resolve()));
+        const startScroll = list.scrollTop;
+
         const frames = [];
         let previous = performance.now();
         for (let step = 0; step < count; step += 1) {
@@ -216,14 +237,18 @@ async function measureRun(browser, scenario, run) {
           frames.push(now - previous);
           previous = now;
         }
+        const endScroll = list.scrollTop;
         frames.sort((left, right) => left - right);
         return {
           p50: frames[Math.floor(frames.length * 0.5)],
           p95: frames[Math.floor(frames.length * 0.95)],
           max: frames[frames.length - 1],
+          startScroll,
+          endScroll,
+          distance: endScroll - startScroll,
         };
       },
-      { steps: scenario.steps, delta: scenario.delta }
+      { steps: scenario.steps, delta: scenario.delta, from: scenario.from }
     );
 
     return { run, ...result };
@@ -258,7 +283,10 @@ async function main() {
         delta: scenario.delta,
         steps: scenario.steps,
         group: scenario.group,
+        from: scenario.from,
         runs,
+        distance: runs[0]?.distance ?? 0,
+        minDistance: scenario.minDistance,
         median: {
           p50: median(runs.map((entry) => entry.p50)),
           p95: median(runs.map((entry) => entry.p95)),
@@ -270,7 +298,8 @@ async function main() {
       summary.passed =
         summary.median.p50 < budgets.p50 &&
         summary.median.p95 < budgets.p95 &&
-        summary.worstMax < budgets.max;
+        summary.worstMax < budgets.max &&
+        summary.distance >= summary.minDistance;
       results.push(summary);
     }
 
@@ -282,7 +311,7 @@ async function main() {
       console.log('scroll frame pacing (production bundle, 1000 issues)\n');
       for (const result of results) {
         console.log(
-          `  ${result.scenario}: ${result.delta}px/frame, group=${result.group}, ${result.steps} frames`
+          `  ${result.scenario}: ${result.delta}px/frame, group=${result.group}, ${result.steps} frames, from ${result.from}px`
         );
         console.log('  run    p50      p95      max');
         for (const entry of result.runs) {
@@ -295,7 +324,11 @@ async function main() {
         console.log(
           `  median p50 ${result.median.p50.toFixed(1)}ms, p95 ${result.median.p95.toFixed(
             1
-          )}ms; worst max ${result.worstMax.toFixed(1)}ms — ${result.passed ? 'PASS' : 'FAIL'}\n`
+          )}ms; worst max ${result.worstMax.toFixed(
+            1
+          )}ms; travelled ${result.distance}px (min ${result.minDistance}px) — ${
+            result.passed ? 'PASS' : 'FAIL'
+          }\n`
         );
       }
       console.log(

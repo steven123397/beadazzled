@@ -77,9 +77,10 @@ export function createListViewState(): ListViewState {
 /** True when the URL carries at least one known list-state key. */
 export function hasViewParams(params: URLSearchParams): boolean {
   for (const key of KNOWN_KEYS) {
-    // `?q=` is what an emptied search box leaves behind; it is not a view.
     if (key === 'q') {
-      if ((params.get('q') ?? '').trim() !== '') {
+      // A query made only of spaces is still an in-progress edit; keep it.
+      const raw = params.get('q');
+      if (raw !== null && raw !== '') {
         return true;
       }
       continue;
@@ -120,10 +121,11 @@ export function serializeListViewState(
 ): URLSearchParams {
   const known = new URLSearchParams();
   // Keep the raw value: the search box is controlled by what this function
-  // writes, so trimming here would eat every space as the user types it.
+  // writes, so trimming here would eat spaces as the user types them. A query
+  // that is only spaces still round-trips; matching trims it later.
   const query = view.filter.query;
 
-  if (query.trim() !== '') {
+  if (query !== '') {
     known.set('q', query);
   }
   for (const value of view.filter.status) {

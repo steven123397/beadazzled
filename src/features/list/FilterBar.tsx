@@ -1,7 +1,7 @@
 import { memo, useEffect, useMemo, useRef } from 'react';
 
 import type { Issue } from '@/bindings/bd';
-import { isEditableTarget } from '@/app/keyboard/resolve';
+import { isEditableTarget, isOverlayOpen } from '@/app/keyboard/resolve';
 import type { MessageKey } from '@/lib/i18n';
 import { useI18n } from '@/lib/i18n/I18nProvider';
 
@@ -68,7 +68,7 @@ export const FilterBar = memo(function FilterBar({
       if (event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey) {
         return;
       }
-      if (event.key !== '/' || isEditableTarget(event.target)) {
+      if (event.key !== '/' || isEditableTarget(event.target) || isOverlayOpen()) {
         return;
       }
       event.preventDefault();

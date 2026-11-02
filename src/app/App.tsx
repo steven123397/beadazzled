@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { HashRouter, Navigate, Outlet, Route, Routes, useParams } from 'react-router-dom';
 
-import type { Issue, SyncState } from '@/bindings/bd';
+import type { BdStatus, Issue, SyncState } from '@/bindings/bd';
 import { ListRoute } from '@/features/list/ListView';
 import { workspaceApi as defaultWorkspaceApi, type WorkspaceApi } from '@/lib/workspace/api';
 import { useWorkspace } from '@/lib/workspace/useWorkspace';
@@ -44,6 +44,34 @@ export type AppProps = {
 /** Stable defaults: a fresh array/object per render would invalidate memos. */
 const NO_ISSUES: readonly Issue[] = [];
 const LOADING: SyncState = { kind: 'loading', step: 'export' };
+
+/**
+ * The sync worker never starts while bd is not ready, so it cannot produce a
+ * `bd-unavailable` state on its own. Map a resolved non-ready bd status here;
+ * otherwise the list would show its loading skeleton forever.
+ */
+function bdUnavailable(bd: BdStatus | null): SyncState | null {
+  if (bd === null || bd.kind === 'ready') {
+    return null;
+  }
+  switch (bd.kind) {
+    case 'not-found':
+      return {
+        kind: 'bd-unavailable',
+        error: { code: 'BD_NOT_FOUND', message: 'bd was not found on PATH.' },
+      };
+    case 'unsupported':
+      return {
+        kind: 'bd-unavailable',
+        error: {
+          code: 'BD_VERSION_UNSUPPORTED',
+          message: `bd ${bd.found} is older than ${bd.min}.`,
+        },
+      };
+    case 'broken':
+      return { kind: 'bd-unavailable', error: bd.error };
+  }
+}
 
 export function App({
   workspaceApi = defaultWorkspaceApi,
@@ -93,7 +121,7 @@ function AppFrame({
     api: syncApi,
   });
   const shellIssues = syncEnabled ? sync.issues : issues;
-  const shellSyncState = syncEnabled ? sync.state : syncState;
+  const shellSyncState = syncEnabled ? (bdUnavailable(bd) ?? sync.state) : syncState;
   // The injected state is what unit tests and the browser e2e seam provide.
   const shellLastSeq = syncEnabled
     ? sync.lastSeq

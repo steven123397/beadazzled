@@ -3,7 +3,7 @@ import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useVirtualizer } from '@tanstack/react-virtual';
 
 import type { Issue, SyncState } from '@/bindings/bd';
-import { isEditableTarget } from '@/app/keyboard/resolve';
+import { isEditableTarget, isOverlayOpen } from '@/app/keyboard/resolve';
 import { useI18n } from '@/lib/i18n/I18nProvider';
 
 import { FilterBar } from './FilterBar';
@@ -67,39 +67,41 @@ export function ListView({ projectId, issues, syncState = HEALTHY, onRefresh }: 
   const search = searchParams.toString();
   const hasParams = useMemo(() => hasViewParams(new URLSearchParams(search)), [search]);
   const savedView = useMemo(() => loadSavedView(projectId), [projectId]);
-  const initializedRef = useRef(false);
+  const latestViewRef = useRef<ListViewState | null>(null);
 
-  // The URL wins; a workspace that has no view parameters yet opens with the
-  // filters it used last time.
+  // The URL wins; with no view parameters, keep the view the user was using.
+  // A sidebar "List" click or `g l` can strip the query string while this
+  // component stays mounted, and that must not clear the filters.
   const view = useMemo(() => {
     if (hasParams) {
       return parseListViewState(new URLSearchParams(search));
     }
-    if (!initializedRef.current && savedView !== null) {
-      return savedView;
-    }
-    return createListViewState();
+    return latestViewRef.current ?? savedView ?? createListViewState();
   }, [hasParams, savedView, search]);
 
   useEffect(() => {
-    if (initializedRef.current) {
-      return;
-    }
-    initializedRef.current = true;
-    if (!hasParams && savedView !== null) {
-      const next = serializeListViewState(savedView, new URLSearchParams(search));
-      if (next.toString() !== '') {
-        setSearchParams(next, { replace: true });
-      }
-    }
-  }, [hasParams, savedView, search, setSearchParams]);
-
-  useEffect(() => {
+    latestViewRef.current = view;
     saveSavedView(projectId, view);
   }, [projectId, view]);
 
+  // Write a remembered view back to the URL, on mount with a saved view or
+  // after a navigation dropped the query string. Unknown-only URLs compare
+  // equal and are left alone.
+  useEffect(() => {
+    if (hasParams) {
+      return;
+    }
+    const next = serializeListViewState(view, new URLSearchParams(search));
+    if (next.toString() !== '' && next.toString() !== search) {
+      setSearchParams(next, { replace: true });
+    }
+  }, [hasParams, search, setSearchParams, view]);
+
   const updateView = useCallback(
     (next: ListViewState) => {
+      // Keep the fallback in sync so an explicit clear (which empties the URL)
+      // is not mistaken for a navigation that dropped the parameters.
+      latestViewRef.current = next;
       setSearchParams((previous) => serializeListViewState(next, previous), {
         replace: true,
       });
@@ -253,8 +255,8 @@ export function ListView({ projectId, issues, syncState = HEALTHY, onRefresh }: 
     if (restoredRef.current || items.length === 0) {
       return;
     }
-    restoredRef.current = true;
     if (initialPosition === null) {
+      restoredRef.current = true;
       return;
     }
 
@@ -265,10 +267,14 @@ export function ListView({ projectId, issues, syncState = HEALTHY, onRefresh }: 
 
     requestAnimationFrame(() => {
       if (!element.isConnected) {
+        // The first non-empty snapshot was stale (e.g. the previous workspace)
+        // or the list went back to a state screen. Leave the flag false so the
+        // next snapshot retries the restore.
         return;
       }
       element.scrollTop = initialPosition.scrollTop;
       virtualizer.scrollToOffset(initialPosition.scrollTop);
+      restoredRef.current = true;
 
       if (initialPosition.focusedId !== null) {
         const meta = rowMetaRef.current.byId.get(initialPosition.focusedId);
@@ -323,6 +329,10 @@ export function ListView({ projectId, issues, syncState = HEALTHY, onRefresh }: 
         return;
       }
       if (isEditableTarget(event.target)) {
+        return;
+      }
+      // A dialog owns the keyboard; moving focus to a row would escape its trap.
+      if (isOverlayOpen()) {
         return;
       }
 
