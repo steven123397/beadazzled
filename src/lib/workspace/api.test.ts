@@ -14,6 +14,7 @@ test('every workspace action maps to its tauri command and arguments', async () 
   await api.bdStatus(true);
   await api.setBdPath('C:/tools/bd.exe');
   await api.setBdPath(null);
+  await api.setPreferences('zh-CN', 'dark');
   await api.add('D:/repo');
   await api.switchTo('D:/repo');
   await api.remove('D:/repo');
@@ -28,6 +29,7 @@ test('every workspace action maps to its tauri command and arguments', async () 
     ['bd_status', { refresh: true }],
     ['bd_set_path', { path: 'C:/tools/bd.exe' }],
     ['bd_set_path', { path: null }],
+    ['app_set_preferences', { language: 'zh-CN', theme: 'dark' }],
     ['workspace_add', { path: 'D:/repo' }],
     ['workspace_switch', { path: 'D:/repo' }],
     ['workspace_remove', { path: 'D:/repo' }],

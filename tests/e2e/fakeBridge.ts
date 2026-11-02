@@ -69,8 +69,10 @@ export async function installFakeBridge(
         config: {
           schemaVersion: 1,
           bdPath: null,
-          language: 'en',
-          theme: 'system',
+          // The registry is the source of truth for language/theme, so the
+          // options have to live here as well as on the e2e seam.
+          language: lang ?? 'en',
+          theme: pref ?? 'system',
           lastWorkspacePath: null,
           workspaces: active ? [workspace] : [],
         },

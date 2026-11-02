@@ -62,6 +62,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             commands::workspace::workspace_snapshot,
+            commands::workspace::app_set_preferences,
             commands::workspace::bd_status,
             commands::workspace::bd_set_path,
             commands::workspace::workspace_add,

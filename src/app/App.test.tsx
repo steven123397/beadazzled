@@ -64,6 +64,11 @@ function fakeApi(overrides: Partial<WorkspaceApi> = {}): WorkspaceApi {
     snapshot: async () => snapshot([], null),
     bdStatus: async () => bdReady,
     setBdPath: async () => bdReady,
+    setPreferences: async (language, theme) => ({
+      ...snapshot([], null).config,
+      language,
+      theme,
+    }),
     add: async () => entry('p1'),
     switchTo: async () => entry('p1'),
     remove: async () => true,
@@ -372,11 +377,16 @@ test('switching language from the palette updates the shell instantly', async ()
 test('the theme action applies the new theme immediately', async () => {
   window.location.hash = '#/settings';
 
-  render(<App workspaceApi={fakeApi()} initialTheme="light" />);
+  // The registry is the source of truth, so the light preference has to come
+  // from the snapshot rather than from the prop.
+  const light = snapshot([], null);
+  light.config.theme = 'light';
+  render(<App workspaceApi={fakeApi({ snapshot: async () => light })} />);
   await screen.findByRole('heading', { name: 'Settings' });
   expect(document.documentElement.classList.contains('dark')).toBe(false);
 
   fireEvent.keyDown(window, { key: 'k', ctrlKey: true });
+  await waitFor(() => expect(screen.getByText('Theme: Light')).toBeInTheDocument());
   fireEvent.click(screen.getByText('Theme: Light'));
 
   expect(document.documentElement.classList.contains('dark')).toBe(true);

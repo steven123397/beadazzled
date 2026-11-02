@@ -54,6 +54,7 @@ function fakeApi(): { api: WorkspaceApi; calls: string[]; setFound: (bd: BdStatu
       calls.push(`setBdPath:${String(path)}`);
       return found;
     },
+    setPreferences: async (language, theme) => ({ ...snapshot(null).config, language, theme }),
     add: async (path) => {
       calls.push(`add:${path}`);
       active = path;
@@ -98,6 +99,7 @@ test('an older reload cannot overwrite a newer one', async () => {
     snapshot: () => new Promise((resolve) => pending.push(resolve)),
     bdStatus: async () => READY,
     setBdPath: async () => READY,
+    setPreferences: async (language, theme) => ({ ...snapshot(null).config, language, theme }),
     add: async (path) => entry(path),
     switchTo: async (path) => entry(path),
     remove: async () => true,

@@ -17,7 +17,9 @@ use ts_rs::TS;
 use super::config_writer::ConfigWriter;
 use crate::bridge::{BdBridge, BridgeError, BridgeErrorCode, WriteCommand, WriteOutcome};
 use crate::workspace::discovery::{BdDiscovery, BdStatus, MIN_BD_VERSION};
-use crate::workspace::registry::{load, AddOutcome, AppConfig, Checkpoint, WorkspaceEntry};
+use crate::workspace::registry::{
+    load, AddOutcome, AppConfig, Checkpoint, Language, Theme, WorkspaceEntry,
+};
 use crate::workspace::validate::validate_workspace;
 
 /// What the workspace UI needs in one call.
@@ -113,6 +115,18 @@ impl WorkspaceService {
         };
         let probe = |path: &Path| BdBridge::new(path, PathBuf::from(".")).version();
         discovery.refresh(probe)
+    }
+
+    /// Applies the language/theme pair and queues it for persistence.
+    ///
+    /// Settings owns only these two fields; the rest of the config (bd path,
+    /// workspaces, checkpoints) stays exactly as loaded.
+    pub fn set_preferences(&self, language: Language, theme: Theme) -> AppConfig {
+        let mut state = lock(&self.state);
+        state.config.language = language;
+        state.config.theme = theme;
+        self.writer.queue(state.config.clone());
+        state.config.clone()
     }
 
     pub fn add_workspace(&self, directory: &str) -> Result<WorkspaceEntry, BridgeError> {
@@ -361,6 +375,15 @@ mod tests {
 // Plain sync commands run inline on the main thread, so a slow bd call would
 // freeze the window for its whole timeout. Every command that can spawn bd
 // (or block on a debounced flush) is marked async and runs on the thread pool.
+
+#[tauri::command]
+pub fn app_set_preferences(
+    service: tauri::State<'_, WorkspaceService>,
+    language: Language,
+    theme: Theme,
+) -> AppConfig {
+    service.set_preferences(language, theme)
+}
 
 #[tauri::command]
 pub fn workspace_snapshot(service: tauri::State<'_, WorkspaceService>) -> WorkspaceSnapshot {

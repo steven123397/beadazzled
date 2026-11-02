@@ -17,6 +17,7 @@ import { useWrite } from '@/lib/writes/useWrite';
 
 import { ErrorBoundary } from './shell/ErrorBoundary';
 import { Placeholder } from './shell/Placeholder';
+import { PreferencesBridge, type PreferencesApi } from './shell/PreferencesBridge';
 import { Shell } from './shell/Shell';
 import { SkeletonScreen } from './shell/SkeletonScreen';
 import { SyncStatusProvider } from './shell/SyncStatus';
@@ -138,6 +139,12 @@ function AppFrame({
   const { t } = useI18n();
   const workspace = useWorkspace(workspaceApi);
   const { reload, snapshot, bd } = workspace;
+  const preferencesApi = useMemo<PreferencesApi>(
+    () => ({
+      setPreferences: (language, theme) => workspaceApi.setPreferences(language, theme),
+    }),
+    [workspaceApi]
+  );
   const project = activeWorkspace(snapshot);
   const sync = useSync({
     workspace: project?.path ?? null,
@@ -201,68 +208,72 @@ function AppFrame({
     >
       <SyncStatusProvider state={shellSyncState}>
         <WorkspaceProvider workspace={workspace}>
-          <HashRouter>
-            <Routes>
-              <Route
-                element={<Shell issues={shellIssues} onRefresh={refresh} lastSeq={shellLastSeq} />}
-              >
-                <Route index element={<RootRedirect />} />
-                <Route path="welcome" element={<Welcome />} />
-                <Route path="w/:projectId" element={<ProjectGate />}>
-                  <Route index element={<Navigate to="list" replace />} />
-                  <Route
-                    path="list"
-                    element={
-                      <ListRoute
-                        issues={shellIssues}
-                        syncState={shellSyncState}
-                        onRefresh={refresh}
-                      />
-                    }
-                  />
-                  <Route
-                    path="board"
-                    element={
-                      <Suspense
-                        fallback={
-                          <p role="status" className="px-6 py-10 text-sm text-muted-foreground">
-                            {t('board.loading')}
-                          </p>
-                        }
-                      >
-                        <BoardRoute
+          <PreferencesBridge api={preferencesApi}>
+            <HashRouter>
+              <Routes>
+                <Route
+                  element={
+                    <Shell issues={shellIssues} onRefresh={refresh} lastSeq={shellLastSeq} />
+                  }
+                >
+                  <Route index element={<RootRedirect />} />
+                  <Route path="welcome" element={<Welcome />} />
+                  <Route path="w/:projectId" element={<ProjectGate />}>
+                    <Route index element={<Navigate to="list" replace />} />
+                    <Route
+                      path="list"
+                      element={
+                        <ListRoute
                           issues={shellIssues}
                           syncState={shellSyncState}
                           onRefresh={refresh}
-                          writes={syncEnabled ? writeState : undefined}
                         />
-                      </Suspense>
-                    }
-                  />
-                  <Route
-                    path="issue/:issueId"
-                    element={
-                      <Suspense
-                        fallback={
-                          <p role="status" className="px-6 py-10 text-sm text-muted-foreground">
-                            {t('detail.loading')}
-                          </p>
-                        }
-                      >
-                        <DetailRoute
-                          issues={shellIssues}
-                          loading={shellSyncState.kind === 'loading'}
-                          writes={syncEnabled ? writeState : undefined}
-                        />
-                      </Suspense>
-                    }
-                  />
+                      }
+                    />
+                    <Route
+                      path="board"
+                      element={
+                        <Suspense
+                          fallback={
+                            <p role="status" className="px-6 py-10 text-sm text-muted-foreground">
+                              {t('board.loading')}
+                            </p>
+                          }
+                        >
+                          <BoardRoute
+                            issues={shellIssues}
+                            syncState={shellSyncState}
+                            onRefresh={refresh}
+                            writes={syncEnabled ? writeState : undefined}
+                          />
+                        </Suspense>
+                      }
+                    />
+                    <Route
+                      path="issue/:issueId"
+                      element={
+                        <Suspense
+                          fallback={
+                            <p role="status" className="px-6 py-10 text-sm text-muted-foreground">
+                              {t('detail.loading')}
+                            </p>
+                          }
+                        >
+                          <DetailRoute
+                            issues={shellIssues}
+                            loading={shellSyncState.kind === 'loading'}
+                            writes={syncEnabled ? writeState : undefined}
+                          />
+                        </Suspense>
+                      }
+                    />
+                  </Route>
+                  <Route path="settings" element={<Placeholder titleKey="nav.settings" />} />
+                  <Route path="*" element={<Navigate to="/welcome" replace />} />
                 </Route>
-                <Route path="settings" element={<Placeholder titleKey="nav.settings" />} />
-                <Route path="*" element={<Navigate to="/welcome" replace />} />
-              </Route>
-            </Routes>
-          </HashRouter>
+              </Routes>
+            </HashRouter>
+          </PreferencesBridge>
         </WorkspaceProvider>
       </SyncStatusProvider>
     </ErrorBoundary>

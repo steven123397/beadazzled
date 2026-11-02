@@ -14,7 +14,7 @@ use beadazzled_lib::bridge::{BridgeErrorCode, UpdateSpec, WriteCommand};
 use beadazzled_lib::commands::config_writer::ConfigWriter;
 use beadazzled_lib::commands::WorkspaceService;
 use beadazzled_lib::workspace::discovery::BdStatus;
-use beadazzled_lib::workspace::registry::{self, AppConfig};
+use beadazzled_lib::workspace::registry::{self, AppConfig, Language, Theme};
 
 const PROJECT_ID: &str = "00000000-0000-4000-8000-000000000000";
 
@@ -520,4 +520,30 @@ fn writing_to_a_vanished_workspace_is_refused() {
         .expect_err("a missing workspace is refused");
 
     assert_eq!(error.code, BridgeErrorCode::WsInaccessible);
+}
+
+#[test]
+fn preferences_are_written_without_touching_the_rest_of_the_config() {
+    let dir = common::temp_dir("cmd-preferences");
+    let workspace = common::workspace(&dir);
+    let config_path = dir.join("config.json");
+    let service = service(&config_path);
+    service
+        .add_workspace(&path_string(&workspace))
+        .expect("add workspace");
+    let before = service.snapshot().config;
+
+    let written = service.set_preferences(Language::ZhCn, Theme::Dark);
+
+    assert_eq!(written.language, Language::ZhCn);
+    assert_eq!(written.theme, Theme::Dark);
+    assert_eq!(written.bd_path, before.bd_path);
+    assert_eq!(written.workspaces, before.workspaces);
+
+    service.flush().expect("flush config");
+    let reloaded = registry::load(&config_path).expect("load config").config;
+    assert_eq!(reloaded.language, Language::ZhCn);
+    assert_eq!(reloaded.theme, Theme::Dark);
+    assert_eq!(reloaded.bd_path, before.bd_path);
+    assert_eq!(reloaded.workspaces, before.workspaces);
 }
