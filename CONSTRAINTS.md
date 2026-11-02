@@ -37,7 +37,7 @@
 | 热启动→可交互 | ≤ 800ms | 同上 | CI | warn | 双击即开是核心卖点 | 可运行（未接 CI） |
 | 常驻内存（1000 条票） | ≤ 150 MB | `npm run measure:memory` | CI | warn | WebView2 常见占用 | 待接线 |
 | 详情页切换 | ≤ 50ms | `npm run measure:navigation` | CI | warn | 纯内存读取，只受渲染限制 | 脚本就绪（`docs/measurements/2026-11-02-navigation.md`）；CI 接线随 bza-bee |
-| 列表滚动（1000 条） | 60fps 不掉帧 | `npm run measure:scroll` | CI | warn | 虚拟滚动的基本盘 | 待接线 |
+| 列表滚动（1000 条） | 60fps 不掉帧 | `npm run measure:scroll`（看板加 `--view=board`） | CI | warn | 虚拟滚动的基本盘 | 脚本就绪（`docs/measurements/2026-11-02-list-scroll.md`、`2026-11-02-board-scroll.md`）；CI 接线随 bza-bee |
 | 正文对比度 | ≥ 4.5:1；大字号 ≥ 3:1 | axe（待有可运行 UI） | 交还前 | block | WCAG AA | 待接线 |
 | 核心流程无鼠标可达 | 必须 | E2E + 手动 | 交还前 | block | 产品定位是键盘优先 | 待接线 |
 

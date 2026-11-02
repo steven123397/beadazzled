@@ -1,12 +1,13 @@
 #!/usr/bin/env node
 /**
- * Measures scroll frame pacing of the production List view.
+ * Measures scroll frame pacing of the production List or Board view.
  *
  * The E2E suite runs against the Vite dev server, where React's development
  * build roughly doubles the cost of mounting rows; timing it there measures the
  * toolchain, not the artifact we ship. This script builds the real production
  * bundle (with the e2e data seam compiled in via VITE_E2E=1), serves it with
- * `vite preview`, and drives a 1000-issue list in Chromium.
+ * `vite preview`, and drives a 1000-issue list (or each board column) in
+ * Chromium.
  *
  * Each run scrolls a fixed distance per animation frame for two seconds and
  * records the gap between animation frames. Three scenarios cover a comfortable
@@ -17,7 +18,7 @@
  * tasks. Median-of-runs is reported for p50/p95; the max is the worst frame
  * across all runs, so one GC pause cannot hide behind the median.
  *
- * Usage: npm run measure:scroll -- [--runs=5] [--json]
+ * Usage: npm run measure:scroll -- [--runs=5] [--view=list|board] [--json]
  */
 import { spawn, spawnSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
@@ -41,6 +42,28 @@ const scenarios = [
   // status-group headers and reaches the tail of the list.
   { name: 'grouped', delta: 48, steps: 150, group: 'status', from: 20_000, minDistance: 6_000 },
 ];
+// The board virtualizes each column separately; Ready holds every open ticket
+// (about 570 of the 1000-issue fixture) and is the column under test.
+const boardScenarios = [
+  {
+    name: 'board-steady',
+    view: 'board',
+    column: 'ready',
+    delta: 48,
+    steps: 120,
+    from: 0,
+    minDistance: 5_000,
+  },
+  {
+    name: 'board-fling',
+    view: 'board',
+    column: 'ready',
+    delta: 240,
+    steps: 150,
+    from: 0,
+    minDistance: 25_000,
+  },
+];
 let port = 1431;
 
 function resolvePort(raw) {
@@ -57,7 +80,7 @@ function resolvePort(raw) {
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 function parseArgs(argv) {
-  const options = { runs: 5, json: false };
+  const options = { runs: 5, json: false, view: 'list' };
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
     const separator = arg.indexOf('=');
@@ -71,6 +94,12 @@ function parseArgs(argv) {
         throw new Error('--runs needs a positive integer');
       }
       options.runs = value;
+    } else if (name === '--view') {
+      const value = inline ?? argv[(index += 1)];
+      if (value !== 'list' && value !== 'board') {
+        throw new Error('--view must be list or board');
+      }
+      options.view = value;
     } else {
       throw new Error(`unknown option: ${arg}`);
     }
@@ -204,22 +233,28 @@ async function measureRun(browser, scenario, run) {
       { projectId: 'p1', tickets: issues() }
     );
 
+    const isBoard = scenario.view === 'board';
+    const selector = isBoard
+      ? `[data-column-id="${scenario.column}"] [role="list"]`
+      : '[role="list"]';
     const query = scenario.group === 'none' ? '' : `?group=${scenario.group}`;
-    await page.goto(`http://localhost:${port}/#/w/p1/list${query}`);
-    await page.waitForSelector('[data-testid="list-view"][data-state="ready"]', {
-      state: 'visible',
-      timeout: 15_000,
-    });
+    await page.goto(`http://localhost:${port}/#/w/p1/${isBoard ? 'board' : `list${query}`}`);
+    await page.waitForSelector(
+      isBoard
+        ? '[data-testid="board-view"][data-state="ready"]'
+        : '[data-testid="list-view"][data-state="ready"]',
+      { state: 'visible', timeout: 15_000 }
+    );
     // Let the first paint and mount pass finish before sampling.
     await page.evaluate(
       () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))
     );
 
     const result = await page.evaluate(
-      async ({ steps: count, delta: stepSize, from: start }) => {
-        const list = document.querySelector('[role="list"]');
+      async ({ steps: count, delta: stepSize, from: start, selector }) => {
+        const list = document.querySelector(selector);
         if (list === null) {
-          throw new Error('list missing');
+          throw new Error(`scroll container missing: ${selector}`);
         }
         // Jump to the scenario's starting point and let the window settle
         // before sampling, so a batch of row mounts is not counted as jank.
@@ -248,7 +283,7 @@ async function measureRun(browser, scenario, run) {
           distance: endScroll - startScroll,
         };
       },
-      { steps: scenario.steps, delta: scenario.delta, from: scenario.from }
+      { steps: scenario.steps, delta: scenario.delta, from: scenario.from, selector }
     );
 
     return { run, ...result };
@@ -273,16 +308,19 @@ async function main() {
     server = await serve();
     browser = await chromium.launch();
     const results = [];
-    for (const scenario of scenarios) {
+    const selected = options.view === 'board' ? boardScenarios : scenarios;
+    for (const scenario of selected) {
       const runs = [];
       for (let run = 1; run <= options.runs; run += 1) {
         runs.push(await measureRun(browser, scenario, run));
       }
       const summary = {
         scenario: scenario.name,
+        view: scenario.view ?? 'list',
         delta: scenario.delta,
         steps: scenario.steps,
-        group: scenario.group,
+        group: scenario.group ?? null,
+        column: scenario.column ?? null,
         from: scenario.from,
         runs,
         distance: runs[0]?.distance ?? 0,
@@ -311,7 +349,9 @@ async function main() {
       console.log('scroll frame pacing (production bundle, 1000 issues)\n');
       for (const result of results) {
         console.log(
-          `  ${result.scenario}: ${result.delta}px/frame, group=${result.group}, ${result.steps} frames, from ${result.from}px`
+          `  ${result.scenario}: ${result.delta}px/frame, ${
+            result.view === 'board' ? `column=${result.column}` : `group=${result.group}`
+          }, ${result.steps} frames, from ${result.from}px`
         );
         console.log('  run    p50      p95      max');
         for (const entry of result.runs) {
