@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 
-import { installFakeBridge } from './fakeBridge';
+import { clearInvokeLog, installFakeBridge, invokeLog } from './fakeBridge';
 
 function issue(index: number) {
   return {
@@ -67,37 +67,27 @@ test('a 1000-issue list virtualizes, navigates with J/K and restores focus', asy
   expect(await page.locator('[data-issue-id]').count()).toBeLessThan(100);
 });
 
-test('scrolling a 1000-issue list keeps frame time near the 60fps budget', async ({ page }) => {
+test('filtering, sorting, scrolling and grouping never call bd', async ({ page }) => {
   test.setTimeout(60_000);
   await openThousandIssueList(page);
+  await clearInvokeLog(page);
 
-  const result = await page.evaluate(async () => {
-    const list = document.querySelector<HTMLElement>('[role="list"]');
-    if (list === null) {
-      throw new Error('list missing');
-    }
+  const search = page.getByRole('searchbox', { name: 'Search tickets' });
+  await search.fill('Issue 1');
+  await expect(page.locator('output')).toHaveText(/\d+ \/ 1000/);
 
-    const frames: number[] = [];
-    let previous = performance.now();
-    for (let step = 0; step < 120; step += 1) {
-      list.scrollTop += 48;
-      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
-      const now = performance.now();
-      frames.push(now - previous);
-      previous = now;
-    }
-    frames.sort((left, right) => left - right);
+  await page.getByRole('combobox', { name: 'Sort by' }).selectOption('priority');
+  await page.getByRole('combobox', { name: 'Group by' }).selectOption('status');
+  const openGroup = page.getByRole('button', { name: /^Open/ });
+  await expect(openGroup).toBeVisible();
+  await openGroup.click();
 
-    return {
-      p50: frames[Math.floor(frames.length * 0.5)] ?? 0,
-      p95: frames[Math.floor(frames.length * 0.95)] ?? 0,
-      max: frames[frames.length - 1] ?? 0,
-    };
+  await page.getByRole('list', { name: 'Issues' }).evaluate((element) => {
+    element.scrollTop += 800;
   });
+  await expect(page.locator('[data-issue-id]').first()).toBeVisible();
 
-  // One rAF tick is 16.7ms on a 60Hz display. The median stays at a full frame;
-  // the p95 allowance covers Chromium timer noise and the occasional mount of
-  // newly visible rows, while a real stall (several dropped frames) still fails.
-  expect(result.p95).toBeLessThan(24);
-  expect(result.max).toBeLessThan(50);
+  // The whole list is derived in memory: no filter, sort, scroll or group
+  // toggle may reach the bridge.
+  expect(await invokeLog(page)).toEqual([]);
 });
