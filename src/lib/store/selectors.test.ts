@@ -1,0 +1,88 @@
+import { expect, test } from 'vitest';
+
+import type { Dependency, Issue } from '@/bindings/bd';
+
+import { getBlockedBy, getBlocks, getIssue, indexIssues } from './selectors';
+
+const TS = '2026-11-01T00:00:00Z';
+
+function issue(id: string, overrides: Partial<Issue> = {}): Issue {
+  return {
+    id,
+    title: `Issue ${id}`,
+    description: '',
+    status: 'open',
+    priority: 2,
+    issue_type: 'task',
+    created_at: TS,
+    updated_at: TS,
+    labels: [],
+    dependency_count: 0,
+    dependent_count: 0,
+    comment_count: 0,
+    ...overrides,
+  };
+}
+
+function dependsOn(...ids: string[]): Dependency[] {
+  return ids.map((dependsOnId) => ({
+    issue_id: 'b',
+    depends_on_id: dependsOnId,
+    type: 'blocks',
+    created_at: TS,
+  }));
+}
+
+test('getIssue returns the issue and undefined for an id that is gone', () => {
+  const index = indexIssues([issue('a')]);
+
+  expect(getIssue(index, 'a')?.title).toBe('Issue a');
+  expect(getIssue(index, 'missing')).toBeUndefined();
+});
+
+test('an issue id of constructor stays a normal lookup', () => {
+  const index = indexIssues([issue('constructor')]);
+
+  expect(getIssue(index, 'constructor')?.id).toBe('constructor');
+  expect(getIssue(index, 'toString')).toBeUndefined();
+});
+
+test('blocked by lists the targets of this issue dependencies in edge order', () => {
+  const index = indexIssues([
+    issue('a'),
+    issue('c'),
+    issue('b', { dependencies: dependsOn('c', 'a') }),
+  ]);
+
+  expect(getBlockedBy(index, 'b').map((ref) => ref.id)).toEqual(['c', 'a']);
+});
+
+test('blocked by keeps a target that is not in the store and marks it unresolved', () => {
+  const index = indexIssues([issue('b', { dependencies: dependsOn('gone') })]);
+
+  expect(getBlockedBy(index, 'b')).toEqual([{ id: 'gone', issue: undefined }]);
+});
+
+test('blocks scans every issue for an edge pointing at this one', () => {
+  const index = indexIssues([
+    issue('a'),
+    issue('b', { dependencies: dependsOn('a') }),
+    issue('c', { dependencies: dependsOn('a') }),
+  ]);
+
+  expect(getBlocks(index, 'a').map((ref) => ref.issue?.title)).toEqual(['Issue b', 'Issue c']);
+  expect(getBlocks(index, 'b')).toEqual([]);
+});
+
+test('a target outside the store still appears in the blocks list', () => {
+  const index = indexIssues([issue('b', { dependencies: dependsOn('gone') })]);
+
+  expect(getBlocks(index, 'gone')).toEqual([{ id: 'b', issue: index.byId['b'] }]);
+});
+
+test('duplicate edges are listed once per target', () => {
+  const index = indexIssues([issue('a'), issue('b', { dependencies: dependsOn('a', 'a') })]);
+
+  expect(getBlockedBy(index, 'b').map((ref) => ref.id)).toEqual(['a']);
+  expect(getBlocks(index, 'a').map((ref) => ref.id)).toEqual(['b']);
+});
