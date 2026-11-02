@@ -202,7 +202,7 @@ impl<S: SyncSource> SyncEngine<S> {
             Ok(issues) => issues,
             Err(error) => return self.unavailable(sink, &error),
         };
-        sink.snapshot(&issues);
+        sink.snapshot(&issues, since);
 
         self.set_state(
             sink,
@@ -254,7 +254,14 @@ impl<S: SyncSource> SyncEngine<S> {
                     &mut journal_since,
                     &mut truncation_retried,
                 ) {
-                    FailureAction::Retry => continue,
+                    FailureAction::Retry => {
+                        // The cursor jumped back to the truncation floor. The
+                        // store must learn that, or it keeps `lastSeq` at the
+                        // original `since`, treats the retried records as a
+                        // gap, and triggers a second full baseline.
+                        sink.snapshot(&issues, journal_since);
+                        continue;
+                    }
                     FailureAction::Done(outcome) => return outcome,
                 },
             }
@@ -684,8 +691,8 @@ mod tests {
     }
 
     impl SyncSink for CountingSink {
-        fn snapshot(&mut self, issues: &[Issue]) {
-            self.inner.snapshot(issues);
+        fn snapshot(&mut self, issues: &[Issue], _since: i64) {
+            self.inner.snapshot(issues, _since);
         }
 
         fn records(&mut self, records: &[JournalRecord]) {
@@ -821,6 +828,25 @@ mod tests {
         );
         assert!(sink.records.is_empty());
         assert_eq!(sink.states.last(), Some(&SyncState::JournalDisabled));
+    }
+
+    #[test]
+    fn truncation_recovery_re_emits_the_snapshot_at_the_floor() {
+        let source = FakeSource::with_export(vec![issue("a")])
+            .once(Err(truncated(5, 20)))
+            .once(Ok((5_i64..=6).map(|seq| record(seq, "a")).collect()));
+        let mut engine = engine(source, SyncConfig::default());
+        let mut sink = RecordingSink::default();
+
+        let outcome = engine.baseline(&mut sink, 0);
+
+        assert_eq!(outcome, BaselineOutcome::Healthy { applied: 2 });
+        assert_eq!(
+            sink.snapshot_since,
+            vec![0, 4],
+            "the store must be reseeded at floor - 1 or the retried records look like a gap"
+        );
+        assert_eq!(seqs(&sink.records), vec![5, 6]);
     }
 
     #[test]

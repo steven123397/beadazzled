@@ -1,7 +1,7 @@
 # Spec: board — 看板视图
 
 状态：v0.1.0 · 依赖：`shell`、`sync`、`writes`
-列模型：派生列（参考 Scotty 0.4，见 [ADR-0002](../docs/adr/0002-bd-bridge-concurrency-and-scotty-reuse.md)）
+列模型：派生列（参考 Scotty 0.4，见 [ADR-0002](../adr/0002-bd-bridge-concurrency-and-scotty-reuse.md)）
 
 ## Objective
 
@@ -145,7 +145,7 @@ src/features/board/
 - 卡片 props 只含显示所需字段与 id；状态从 store selector 取，避免整列重渲染。
 - 拖拽结果只表达「意图」，执行与错误处理全部交给 `writes`。
 
-参考实现（MIT，移植规则见 [ADR-0001](../docs/adr/0001-ui-foundation-and-linear-references.md)）：Scotty 的 `lib/board-columns.ts`（派生列模型，见 [ADR-0002](../docs/adr/0002-bd-bridge-concurrency-and-scotty-reuse.md)）；Circle 没有 issue 看板，卡片样式参考 `issues/issue-line.tsx`，拖拽与列布局参考 `projects/projects-board.tsx`。
+参考实现（MIT，移植规则见 [ADR-0001](../adr/0001-ui-foundation-and-linear-references.md)）：Scotty 的 `lib/board-columns.ts`（派生列模型，见 [ADR-0002](../adr/0002-bd-bridge-concurrency-and-scotty-reuse.md)）；Circle 没有 issue 看板，卡片样式参考 `issues/issue-line.tsx`，拖拽与列布局参考 `projects/projects-board.tsx`。
 
 ## Boundaries
 

@@ -1,7 +1,7 @@
 # Spec: bridge — bd 进程与数据契约
 
 状态：v0.1.0 · 依赖：无 · 被 `sync` / `writes` / `workspace` 消费
-依据：数据通路研究（见 [capability-map](capability-map.md)）；质量契约 [CONSTRAINTS.md](../CONSTRAINTS.md)
+依据：数据通路研究（见 [capability-map](capability-map.md)）；质量契约 [CONSTRAINTS.md](../../CONSTRAINTS.md)
 
 ## Objective
 
@@ -16,7 +16,7 @@
 
 ## 契约：类型
 
-Rust 为唯一事实来源；用 `ts-rs` 生成 TS（禁止手改 `src/bindings/`）。未知字段必须保留（`#[serde(flatten)]` 的 `extra`，Rust 侧实现为 `ExtraFields`），以保证 bd 升级不丢数据。`extra` 是实现细节：wire 上未知字段平铺在对象顶层，因此 TS 侧用索引签名表达，而不是嵌套属性（见 [ADR-0004](../docs/adr/0004-unknown-fields-and-ts-shape.md)）。
+Rust 为唯一事实来源；用 `ts-rs` 生成 TS（禁止手改 `src/bindings/`）。未知字段必须保留（`#[serde(flatten)]` 的 `extra`，Rust 侧实现为 `ExtraFields`），以保证 bd 升级不丢数据。`extra` 是实现细节：wire 上未知字段平铺在对象顶层，因此 TS 侧用索引签名表达，而不是嵌套属性（见 [ADR-0004](../adr/0004-unknown-fields-and-ts-shape.md)）。
 
 ```ts
 // src/bindings/bd.ts —— 由 Rust 生成，勿手改

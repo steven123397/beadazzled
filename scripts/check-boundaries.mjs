@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Enforces the architectural boundaries from spec/capability-map.md:
+// Enforces the architectural boundaries from docs/spec/capability-map.md:
 // - only src-tauri/src/bridge may spawn processes
 // - the frontend must not spawn processes or reach the bd command layer
 // - no code may read the embedded Dolt store directly

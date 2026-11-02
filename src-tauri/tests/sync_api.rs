@@ -16,13 +16,16 @@ use beadazzled_lib::sync::{
 #[derive(Default)]
 struct CollectingSink {
     snapshots: Vec<Vec<Issue>>,
+    /// The cursor each snapshot was emitted with, in order.
+    snapshot_since: Vec<i64>,
     records: Vec<JournalRecord>,
     states: Vec<SyncState>,
 }
 
 impl SyncSink for CollectingSink {
-    fn snapshot(&mut self, issues: &[Issue]) {
+    fn snapshot(&mut self, issues: &[Issue], since: i64) {
         self.snapshots.push(issues.to_vec());
+        self.snapshot_since.push(since);
     }
 
     fn records(&mut self, records: &[JournalRecord]) {
@@ -78,7 +81,11 @@ fn a_truncated_fixture_surfaces_the_error_instead_of_empty_data() {
             recovered: false,
         }
     );
-    assert_eq!(sink.snapshots.len(), 1, "the export snapshot is still kept");
+    assert_eq!(
+        sink.snapshot_since,
+        vec![0, 4],
+        "the export snapshot is kept and reseeded at the truncation floor"
+    );
     assert!(matches!(
         sink.states.last(),
         Some(SyncState::JournalTruncated {

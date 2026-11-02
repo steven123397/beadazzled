@@ -1,0 +1,299 @@
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Outlet, useLocation, useNavigate } from 'react-router-dom';
+
+import type { Issue } from '@/bindings/bd';
+import { HelpPanel } from '@/app/keyboard/HelpPanel';
+import type { Shortcut, ShortcutContext } from '@/app/keyboard/types';
+import { useShortcuts } from '@/app/keyboard/useShortcuts';
+import { CommandPalette } from '@/app/palette/CommandPalette';
+import { buildCommands } from '@/app/palette/commands';
+import { useI18n } from '@/lib/i18n/I18nProvider';
+import { copyText, type CopyResult } from '@/lib/clipboard';
+import { formatDiagnostics } from '@/lib/diagnostics';
+import { loadSidebarCollapsed, saveSidebarCollapsed } from '@/lib/shell/layout';
+import { useTheme } from '@/lib/theme/ThemeProvider';
+
+import { Diagnostics } from './Diagnostics';
+import { Sidebar } from './Sidebar';
+import { StatusBar } from './StatusBar';
+import { useSyncState } from './SyncStatus';
+import { TopBar } from './TopBar';
+import { activeWorkspace, useWorkspaceContext } from './WorkspaceProvider';
+
+export function Shell({
+  issues = [],
+  onRefresh,
+  lastSeq = 0,
+  pendingWrites = 0,
+}: {
+  issues?: readonly Issue[];
+  onRefresh?: () => void;
+  /** Journal position reported by the sync store; 0 when sync is not running. */
+  lastSeq?: number;
+  /** Writes waiting behind the in-flight one; the write flow lands in bza-um8. */
+  pendingWrites?: number;
+}) {
+  const { t, language, setLanguage } = useI18n();
+  const { preference, setPreference } = useTheme();
+  const { snapshot, bd, error, reload } = useWorkspaceContext();
+  const syncState = useSyncState();
+  const navigate = useNavigate();
+  const location = useLocation();
+  const project = activeWorkspace(snapshot);
+  const onIssueRoute = /^\/w\/[^/]+\/issue\//.test(location.pathname);
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
+  const [diagnosticsOpen, setDiagnosticsOpen] = useState(false);
+  // Read once at mount so a restored collapse never renders expanded first.
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(loadSidebarCollapsed);
+  const [lastRefreshAt, setLastRefreshAt] = useState(() => Date.now());
+  const [copyNotice, setCopyNotice] = useState<CopyResult | null>(null);
+
+  const refreshData = useMemo(() => onRefresh ?? (() => void reload()), [onRefresh, reload]);
+  const refresh = useCallback(() => {
+    refreshData();
+    setLastRefreshAt(Date.now());
+  }, [refreshData]);
+
+  useEffect(() => {
+    saveSidebarCollapsed(sidebarCollapsed);
+  }, [sidebarCollapsed]);
+
+  const closeOverlay = useCallback(() => {
+    setPaletteOpen(false);
+    setHelpOpen(false);
+    setDiagnosticsOpen(false);
+  }, []);
+  const openPalette = useCallback(() => setPaletteOpen(true), []);
+  const openDiagnostics = useCallback(() => setDiagnosticsOpen(true), []);
+  const toggleSidebar = useCallback(() => setSidebarCollapsed((collapsed) => !collapsed), []);
+
+  // A pointer switch is just navigation: ProjectGate performs (and reports) the
+  // real switch, exactly as it does for a deep link.
+  const switchWorkspace = useCallback(
+    (path: string) => {
+      const entry = snapshot?.config.workspaces.find((workspace) => workspace.path === path);
+      if (entry !== undefined) {
+        navigate(`/w/${entry.projectId}/list`, { replace: true });
+      }
+    },
+    [snapshot, navigate]
+  );
+
+  // One payload for the palette action and the diagnostics panel, so the two
+  // copies never drift apart.
+  const diagnosticsText = useCallback(
+    () =>
+      formatDiagnostics({
+        bd: bd?.kind === 'ready' ? bd.version : (bd?.kind ?? 'unknown'),
+        workspace: project?.path ?? '-',
+        project: project?.projectId ?? '-',
+        lastSeq,
+        sync: syncState.kind,
+        lastRefreshAt: new Date(lastRefreshAt).toISOString(),
+        pendingWrites,
+        error,
+        view: window.location.hash || '#/',
+      }),
+    [bd, project, lastSeq, syncState, lastRefreshAt, pendingWrites, error]
+  );
+
+  const copyDiagnostics = useCallback(() => {
+    void copyText(diagnosticsText()).then(setCopyNotice);
+  }, [diagnosticsText]);
+
+  useEffect(() => {
+    if (copyNotice === null) {
+      return undefined;
+    }
+    const timer = setTimeout(() => setCopyNotice(null), 2500);
+    return () => clearTimeout(timer);
+  }, [copyNotice]);
+
+  const context: ShortcutContext = {
+    navigate,
+    openPalette,
+    closeOverlay,
+    refresh,
+    toggleSidebar,
+  };
+
+  const shortcuts = useMemo<Shortcut[]>(() => {
+    const overlayOpen = paletteOpen || helpOpen || diagnosticsOpen;
+    const list: Shortcut[] = [
+      {
+        id: 'palette',
+        keys: 'mod+k',
+        labelKey: 'shortcut.palette',
+        group: 'General',
+        // One modal at a time: opening the palette under diagnostics would mount
+        // two focus traps and leave the newer backdrop covering the palette.
+        when: () => !overlayOpen,
+        run: (ctx) => ctx.openPalette(),
+      },
+      {
+        id: 'close-overlay',
+        keys: 'escape',
+        labelKey: 'shortcut.closeOverlay',
+        group: 'General',
+        when: () => overlayOpen,
+        run: (ctx) => ctx.closeOverlay(),
+      },
+      {
+        id: 'toggle-sidebar',
+        keys: 'mod+b',
+        labelKey: 'shortcut.toggleSidebar',
+        group: 'Views',
+        when: () => !overlayOpen,
+        run: (ctx) => ctx.toggleSidebar(),
+      },
+      {
+        id: 'refresh',
+        keys: 'mod+r',
+        labelKey: 'shortcut.refresh',
+        group: 'Data',
+        when: () => !overlayOpen,
+        run: (ctx) => ctx.refresh(),
+      },
+      {
+        id: 'help',
+        keys: '?',
+        labelKey: 'shortcut.help',
+        group: 'Help',
+        when: () => !overlayOpen,
+        run: () => setHelpOpen(true),
+      },
+    ];
+
+    if (project !== null) {
+      const projectId = project.projectId;
+      list.push(
+        {
+          id: 'go-list',
+          keys: ['g', 'l'],
+          labelKey: 'shortcut.list',
+          group: 'Navigation',
+          when: () => !overlayOpen,
+          run: (ctx) => ctx.navigate(`/w/${projectId}/list`),
+        },
+        {
+          id: 'go-board',
+          keys: ['g', 'b'],
+          labelKey: 'shortcut.board',
+          group: 'Navigation',
+          when: () => !overlayOpen,
+          run: (ctx) => ctx.navigate(`/w/${projectId}/board`),
+        },
+        {
+          id: 'list',
+          keys: 'mod+1',
+          labelKey: 'shortcut.list',
+          group: 'Navigation',
+          when: () => !overlayOpen,
+          run: (ctx) => ctx.navigate(`/w/${projectId}/list`),
+        },
+        {
+          id: 'board',
+          keys: 'mod+2',
+          labelKey: 'shortcut.board',
+          group: 'Navigation',
+          when: () => !overlayOpen,
+          run: (ctx) => ctx.navigate(`/w/${projectId}/board`),
+        }
+      );
+    }
+
+    list.push({
+      id: 'go-settings',
+      keys: ['g', 's'],
+      labelKey: 'shortcut.settings',
+      group: 'Navigation',
+      when: () => !overlayOpen,
+      run: (ctx) => ctx.navigate('/settings'),
+    });
+
+    if (project !== null && onIssueRoute) {
+      const projectId = project.projectId;
+      list.push({
+        id: 'back-to-list',
+        keys: 'escape',
+        labelKey: 'shortcut.back',
+        group: 'Navigation',
+        when: () => !overlayOpen,
+        run: (ctx) => ctx.navigate(`/w/${projectId}/list`),
+      });
+    }
+
+    return list;
+  }, [project, paletteOpen, helpOpen, diagnosticsOpen, onIssueRoute]);
+
+  useShortcuts(shortcuts, context);
+
+  const paletteCommands = useMemo(
+    () =>
+      buildCommands(issues, {
+        navigate,
+        refresh,
+        copyDiagnostics,
+        project,
+        t,
+        theme: preference,
+        setTheme: setPreference,
+        language,
+        setLanguage,
+      }),
+    [
+      issues,
+      navigate,
+      reload,
+      refresh,
+      copyDiagnostics,
+      project,
+      t,
+      preference,
+      setPreference,
+      language,
+      setLanguage,
+    ]
+  );
+
+  return (
+    <div className="flex h-screen flex-col bg-background text-foreground">
+      <TopBar
+        project={project}
+        workspaces={snapshot?.config.workspaces ?? []}
+        missing={snapshot?.missing ?? []}
+        onSwitch={switchWorkspace}
+        onRefresh={refresh}
+        onOpenPalette={openPalette}
+      />
+      <div className="flex min-h-0 flex-1">
+        <Sidebar project={project} collapsed={sidebarCollapsed} onToggle={toggleSidebar} />
+        <main className="min-w-0 flex-1 overflow-auto">
+          <Outlet />
+        </main>
+      </div>
+      <StatusBar lastRefreshAt={lastRefreshAt} open={diagnosticsOpen} onOpen={openDiagnostics} />
+      {helpOpen ? <HelpPanel shortcuts={shortcuts} onClose={closeOverlay} /> : null}
+      {paletteOpen ? <CommandPalette commands={paletteCommands} onClose={closeOverlay} /> : null}
+      {diagnosticsOpen ? (
+        <Diagnostics
+          lastSeq={lastSeq}
+          lastRefreshAt={lastRefreshAt}
+          pendingWrites={pendingWrites}
+          onCopy={copyDiagnostics}
+          onClose={closeOverlay}
+        />
+      ) : null}
+      {copyNotice !== null ? (
+        <p
+          role="status"
+          aria-live="polite"
+          className="pointer-events-none fixed bottom-8 left-1/2 z-40 -translate-x-1/2 rounded border border-border bg-card px-3 py-1 text-xs text-foreground shadow"
+        >
+          {t(copyNotice === 'copied' ? 'clipboard.copied' : 'clipboard.failed')}
+        </p>
+      ) : null}
+    </div>
+  );
+}

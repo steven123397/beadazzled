@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, test } from 'node:test';
@@ -146,4 +146,22 @@ test('a missing bindings file fails the check', () => {
 
   assert.equal(result.status, 1, result.stdout + result.stderr);
   assert.match(result.stderr, /bindings file is missing/);
+});
+
+test('a passing check restores the timestamp as well as the content', async () => {
+  const committed = 'type A = string;\n';
+  const root = makeRoot(committed);
+  const before = statSync(bindingsPath(root)).mtimeMs;
+  // Let the clock move so a leftover generator write would be visible.
+  await new Promise((resolve) => setTimeout(resolve, 60));
+
+  const result = run(root, { FAKE_BINDINGS: committed });
+
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.equal(readFileSync(bindingsPath(root), 'utf8'), committed);
+  const after = statSync(bindingsPath(root)).mtimeMs;
+  assert.ok(
+    Math.abs(after - before) < 5,
+    `check must not bump the mtime: ${before} -> ${after}`
+  );
 });

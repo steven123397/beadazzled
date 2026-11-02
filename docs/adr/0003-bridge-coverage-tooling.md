@@ -8,7 +8,7 @@
 `CONSTRAINTS.md` 要求 `bridge` 行覆盖 ≥ 80%，但原来的命令写的是
 `npm run test:unit -- --coverage`。`npm run test:unit` 跑的是 Vitest，只能统计
 TS/TSX；而 `bridge` 是 `src-tauri/src/bridge/` 下的 Rust 模块（见
-`spec/capability-map.md` 的 Module Map 与 Testing Strategy）。这条门槛因此
+`docs/spec/capability-map.md` 的 Module Map 与 Testing Strategy）。这条门槛因此
 无法测量它声称要测的代码，bridge 零测试时仍会显示「通过」——属于
 CONSTRAINTS 明令禁止的静默假绿。
 

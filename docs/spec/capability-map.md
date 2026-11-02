@@ -3,7 +3,7 @@
 状态：2026-10-31 经用户批准。模块边界、依赖方向或构建顺序如需变化，先改本文件再改模块 spec。
 首个发布：**v0.1.0**（用户指定，不从 v1 起算）。
 数据通路依据：`viking://user/win-dev/peers/github.com-steven123397-beadazzled/resources/community-data-paths/community-data-paths.md`
-质量契约：[CONSTRAINTS.md](../CONSTRAINTS.md)（本文件不得弱化其中任何一条）。
+质量契约：[CONSTRAINTS.md](../../CONSTRAINTS.md)（本文件不得弱化其中任何一条）。
 
 ## Objective
 
@@ -28,7 +28,7 @@ Windows 桌面应用，成为 **beads 前端在 Windows 上的最好选择**：L
 | 虚拟滚动 | `@tanstack/react-virtual` | 1000 条 60fps |
 | 状态 | Zustand + 归一化 ticket store | 无 HTTP，不引入 TanStack Query |
 | 路由 | react-router-dom v7（hash history） | 深链接与返回 |
-| UI 参考 | Circle（MIT）· Cuelark Linear 主题（MIT） | 按组件移植、记 NOTICE；见 [ADR-0001](../docs/adr/0001-ui-foundation-and-linear-references.md) |
+| UI 参考 | Circle（MIT）· Cuelark Linear 主题（MIT） | 按组件移植、记 NOTICE；见 [ADR-0001](../adr/0001-ui-foundation-and-linear-references.md) |
 | Markdown | react-markdown + remark-gfm + rehype-sanitize | 详情页文档阅读 |
 | 测试 | Vitest + Testing Library / cargo test / Playwright / tauri-driver | 见测试策略 |
 | 发布 | NSIS x64 + tauri-plugin-updater（minisign）+ GitHub Releases | 不做 Authenticode，见 `SPEC-release` |
@@ -78,8 +78,9 @@ scripts/              边界、体积、性能、发布校验脚本
 tests/
   fixtures/bd/        录制自真实 bd 的 export / events JSONL 样本
   e2e/                Playwright 与 tauri-driver 用例
-spec/                 本目录
-docs/adr/             架构决策记录（编号递增，不删旧）
+docs/
+  spec/               本目录
+  adr/                架构决策记录（编号递增，不删旧）
 ```
 
 ## Code Style

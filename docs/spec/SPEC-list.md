@@ -113,7 +113,7 @@ src/features/list/
 - `ListViewState` 是唯一视图状态来源；组件不各自持有筛选状态。
 - URL 序列化使用固定键名，未知键忽略并保留（前向兼容）。
 
-参考实现（MIT，移植规则见 [ADR-0001](../docs/adr/0001-ui-foundation-and-linear-references.md)）：Circle 的 `issue-line.tsx`（行布局）、`issue-filter-bar.tsx`（筛选）、`grouped-issues-view.tsx`（分组）。
+参考实现（MIT，移植规则见 [ADR-0001](../adr/0001-ui-foundation-and-linear-references.md)）：Circle 的 `issue-line.tsx`（行布局）、`issue-filter-bar.tsx`（筛选）、`grouped-issues-view.tsx`（分组）。
 
 ## Boundaries
 

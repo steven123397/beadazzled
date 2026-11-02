@@ -7,7 +7,7 @@
 // restores the snapshot: the working tree is never left modified, and a
 // failing check cannot make the next run pass.
 import { spawnSync } from 'node:child_process';
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, statSync, utimesSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -50,14 +50,18 @@ try {
   }
 
   const committed = readFileSync(bindings, 'utf8');
+  const before = statSync(bindings);
   const generator = path.join(root, 'scripts', 'gen-bindings.mjs');
   const result = spawnSync(process.execPath, [generator, '--root', root], { encoding: 'utf8' });
   const output = `${result.stdout ?? ''}${result.stderr ?? ''}`;
   const generated = result.status === 0 ? readFileSync(bindings, 'utf8') : committed;
 
   // Restore the snapshot even when generation failed: the check must not
-  // mutate the tree, and a partial write would hide the next drift.
+  // mutate the tree, and a partial write would hide the next drift. The
+  // timestamps come back too, so a check run cannot make the file look newer
+  // than a build that already included it (measure-startup uses mtimes).
   writeFileSync(bindings, committed);
+  utimesSync(bindings, before.atime, before.mtime);
 
   if (result.error) {
     throw new Error(`generator could not start: ${result.error.message}`);

@@ -1,6 +1,6 @@
 //! Stable error codes for every failure the bridge reports.
 //!
-//! The set is fixed by `spec/SPEC-bridge.md`; consumers branch on the code and
+//! The set is fixed by `docs/spec/SPEC-bridge.md`; consumers branch on the code and
 //! show the message. Unknown failures map to `BD_EXIT_NONZERO` rather than a
 //! guessed code.
 
