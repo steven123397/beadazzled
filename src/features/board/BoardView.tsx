@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   DndContext,
   KeyboardSensor,
@@ -43,6 +43,7 @@ import {
 import { BoardDragOverlay } from './DragOverlay';
 import { firstCardId, focusedCard, moveFocus, type FocusKey } from './keyboard';
 import { adjacentDroppableColumn, planMove, type MoveRejection } from './move';
+import { loadBoardPosition, saveBoardPosition } from './position';
 
 const HEALTHY: SyncState = { kind: 'healthy', lastSeq: 0, lastEventAt: null };
 
@@ -96,6 +97,9 @@ export function BoardView({
   const search = searchParams.toString();
   const hasParams = useMemo(() => hasViewParams(new URLSearchParams(search)), [search]);
   const savedView = useMemo(() => loadSavedView(projectId), [projectId]);
+  // Grouping and sorting are list-only; read the stored view once per mount
+  // instead of on every filter keystroke.
+  const storedView = useMemo(() => savedView ?? createListViewState(), [savedView]);
   const latestViewRef = useRef<ListViewState | null>(null);
 
   // Board and list share one filter state. The URL wins; without view params
@@ -111,9 +115,8 @@ export function BoardView({
     latestViewRef.current = view;
     // Keep the list's grouping and sorting: the board never changes them, and
     // switching back to the list must not reset the user's choice.
-    const stored = loadSavedView(projectId) ?? createListViewState();
-    saveSavedView(projectId, { ...stored, filter: view.filter });
-  }, [projectId, view]);
+    saveSavedView(projectId, { ...storedView, filter: view.filter });
+  }, [projectId, storedView, view]);
 
   // Mirror a saved filter into the URL when the board is opened without
   // parameters. Grouping and sorting are list-only and stay out of a board URL.
@@ -162,11 +165,33 @@ export function BoardView({
     return { cards, positions };
   }, [board]);
 
-  const [focusedId, setFocusedId] = useState<string | null>(null);
-  const [focusRequest, setFocusRequest] = useState(0);
+  // Position from the previous visit: the detail route unmounts the board, so
+  // scroll offsets and the focused card have to come back from storage.
+  const initialPosition = useMemo(() => loadBoardPosition(projectId), [projectId]);
+
+  const [focusedId, setFocusedId] = useState<string | null>(initialPosition?.focusedId ?? null);
+  const [focusRequest, setFocusRequest] = useState(initialPosition?.focusedId ? 1 : 0);
   const [activeDrag, setActiveDrag] = useState<DragState | null>(null);
   const [movingIds, setMovingIds] = useState<ReadonlySet<string>>(() => new Set());
   const [notice, setNotice] = useState<Notice | null>(null);
+
+  const focusedIdRef = useRef(focusedId);
+  focusedIdRef.current = focusedId;
+  const scrollTops = useRef<Record<string, number>>(initialPosition?.scroll ?? {});
+  const onScrollTop = useCallback((columnId: ColumnId, scrollTop: number) => {
+    scrollTops.current[columnId] = scrollTop;
+  }, []);
+
+  // Written in a layout cleanup, before the columns are detached. Reading the
+  // DOM at that point would see the container already gone.
+  useLayoutEffect(
+    () => () =>
+      saveBoardPosition(projectId, {
+        focusedId: focusedIdRef.current,
+        scroll: scrollTops.current,
+      }),
+    [projectId]
+  );
 
   // Keep one card tabbable even before the first H/L/J/K press.
   useEffect(() => {
@@ -197,7 +222,12 @@ export function BoardView({
   );
 
   const clearFilters = useCallback(() => {
-    updateView({ ...view, filter: createListViewState().filter });
+    // The board hides the status control but the URL keeps it for the list
+    // (SPEC-board "状态筛选在看板隐藏"); clearing must not silently drop it.
+    updateView({
+      ...view,
+      filter: { ...createListViewState().filter, status: view.filter.status },
+    });
   }, [updateView, view]);
 
   const attemptMove = useCallback(
@@ -226,23 +256,29 @@ export function BoardView({
 
       void (async () => {
         let failure: string | null = null;
-        for (const [position, command] of plan.commands.entries()) {
-          const outcome = await writes.submit({
-            key: `board:${issue.id}:${target}:${position}`,
-            issueId: issue.id,
-            build: () => command,
-          });
-          if (outcome.status !== 'ok') {
-            failure = describeError(outcome.error).message;
-            break;
+        try {
+          for (const [position, command] of plan.commands.entries()) {
+            const outcome = await writes.submit({
+              key: `board:${issue.id}:${target}:${position}`,
+              issueId: issue.id,
+              build: () => command,
+            });
+            if (outcome.status !== 'ok') {
+              failure = describeError(outcome.error).message;
+              break;
+            }
           }
+        } catch (error) {
+          // `submit` reports failures as results; a rejection here would leave
+          // the card pending forever without this guard.
+          failure = error instanceof Error ? error.message : String(error);
+        } finally {
+          setMovingIds((previous) => {
+            const next = new Set(previous);
+            next.delete(issue.id);
+            return next;
+          });
         }
-
-        setMovingIds((previous) => {
-          const next = new Set(previous);
-          next.delete(issue.id);
-          return next;
-        });
         setNotice(
           failure === null
             ? {
@@ -452,6 +488,8 @@ export function BoardView({
                 column={column}
                 focusedId={focusedId}
                 focusRequest={focusRequest}
+                initialScrollTop={initialPosition?.scroll[column.id]}
+                onScrollTop={onScrollTop}
                 isPending={isPending}
                 onOpen={openIssue}
                 onFocus={setFocusedId}
@@ -515,11 +553,11 @@ function isBoardTarget(target: EventTarget | null): boolean {
   if (!(target instanceof Element)) {
     return false;
   }
-  return (
-    target.closest('[data-issue-id]') !== null ||
-    target.getAttribute('role') === 'list' ||
-    target.closest('[data-testid="board-view"]') !== null
-  );
+  // Match the list's target set: a control inside the board (a filter
+  // summary, Clear, Retry) must keep its native Enter behavior. Matching the
+  // whole view root here used to swallow those activations and open the
+  // focused ticket instead.
+  return target.closest('[data-issue-id]') !== null || target.getAttribute('role') === 'list';
 }
 
 function LoadingBoard() {

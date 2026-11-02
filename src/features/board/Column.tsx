@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef } from 'react';
 import { useDroppable } from '@dnd-kit/core';
 import { useVirtualizer } from '@tanstack/react-virtual';
 
@@ -6,7 +6,7 @@ import type { Issue } from '@/bindings/bd';
 import { useI18n } from '@/lib/i18n/I18nProvider';
 
 import { Card, cardId } from './Card';
-import { COLUMN_LABEL_KEYS, type BoardColumn } from './columns';
+import { COLUMN_LABEL_KEYS, type BoardColumn, type ColumnId } from './columns';
 import { isDroppableColumn } from './move';
 
 /** Must match `--card-height` in tokens.css. */
@@ -20,6 +20,10 @@ export type ColumnProps = {
   focusedId: string | null;
   /** Bumped by keyboard navigation; avoids stealing focus on filter changes. */
   focusRequest: number;
+  /** Scroll offset restored when the board returns from the detail route. */
+  initialScrollTop?: number;
+  /** Reports the column's offset so the board can persist it on unmount. */
+  onScrollTop?: (columnId: ColumnId, scrollTop: number) => void;
   isPending: (issueId: string) => boolean;
   onOpen: (issue: Issue) => void;
   onFocus: (id: string) => void;
@@ -34,6 +38,8 @@ export function Column({
   column,
   focusedId,
   focusRequest,
+  initialScrollTop,
+  onScrollTop,
   isPending,
   onOpen,
   onFocus,
@@ -63,6 +69,26 @@ export function Column({
     initialRect: INITIAL_RECT,
   });
   const virtualItems = virtualizer.getVirtualItems();
+
+  // Restore the offset captured before the board unmounted. An empty column
+  // renders no scroll container, so wait until one exists before giving up.
+  const restoredRef = useRef(false);
+  useLayoutEffect(() => {
+    if (restoredRef.current) {
+      return;
+    }
+    const element = scrollRef.current;
+    if (element === null) {
+      return;
+    }
+    restoredRef.current = true;
+    if (initialScrollTop === undefined || initialScrollTop <= 0) {
+      return;
+    }
+    element.scrollTop = initialScrollTop;
+    virtualizer.scrollToOffset(initialScrollTop);
+    onScrollTop?.(column.id, initialScrollTop);
+  }, [column.cards.length, column.id, initialScrollTop, onScrollTop, virtualizer]);
 
   // Only an explicit keyboard focus request scrolls and focuses; a filter
   // change must not pull focus out of the search box.
@@ -124,6 +150,7 @@ export function Column({
           ref={scrollRef}
           role="list"
           aria-label={label}
+          onScroll={(event) => onScrollTop?.(column.id, event.currentTarget.scrollTop)}
           className="min-h-0 flex-1 overflow-auto p-1.5"
         >
           <div className="relative w-full" style={{ height: virtualizer.getTotalSize() }}>

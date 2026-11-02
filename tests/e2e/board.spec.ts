@@ -103,6 +103,36 @@ test('H/L/J/K move focus and Enter opens the card, without bd', async ({ page })
   expect(await invokeLog(page)).toEqual([]);
 });
 
+test('Enter on a filter control activates it instead of opening a ticket', async ({ page }) => {
+  await openBoard(page, FIXTURE);
+  const details = page.locator('details[aria-label="Priority"]');
+  await details.locator('summary').focus();
+
+  await page.keyboard.press('Enter');
+
+  // The native toggle wins; before the fix the global Enter handler opened the
+  // focused card and navigated away.
+  await expect(page).toHaveURL(/#\/w\/p1\/board$/);
+  expect(await details.evaluate((element) => (element as HTMLDetailsElement).open)).toBe(true);
+});
+
+test('returning from detail restores the column scroll offset', async ({ page }) => {
+  await openBoard(page, MANY);
+  const ready = page.locator('[data-column-id="ready"] [role="list"]');
+  await ready.evaluate((element) => {
+    element.scrollTop = 400;
+  });
+  await expect.poll(() => ready.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
+
+  await page.locator('[data-issue-id="bza-3"]').click();
+  await expect(page).toHaveURL(/#\/w\/p1\/issue\/bza-3$/);
+
+  await page.goBack();
+  await expect(page).toHaveURL(/#\/w\/p1\/board$/);
+  await expect.poll(() => ready.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
+  await expect(page.locator('[data-issue-id="bza-3"]')).toHaveAttribute('data-focused', 'true');
+});
+
 test('dragging and refusing a move never calls bd', async ({ page }) => {
   await openBoard(page, FIXTURE);
   await clearInvokeLog(page);

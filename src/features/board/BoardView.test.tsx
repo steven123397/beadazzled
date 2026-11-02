@@ -103,7 +103,7 @@ function renderBoard({
   syncState?: SyncState;
   writes?: UseWrite;
 }) {
-  render(
+  return render(
     <I18nProvider initialLanguage="en">
       <MemoryRouter initialEntries={[entry]}>
         <Routes>
@@ -131,6 +131,7 @@ function column(id: string): HTMLElement {
 
 beforeEach(() => {
   localStorage.clear();
+  sessionStorage.clear();
 });
 
 test('renders the five fixed columns with derived membership', () => {
@@ -387,6 +388,28 @@ test('a Done card reopens before taking the target status', async () => {
   });
 });
 
+test('a failure in the second command stops the sequence and is reported once', async () => {
+  const submit = vi
+    .fn()
+    .mockResolvedValueOnce({ status: 'ok' as const })
+    .mockResolvedValueOnce({
+      status: 'conflict' as const,
+      error: { code: 'WRITE_CONFLICT' as const, message: '' },
+    });
+  const writes = fakeWrites({ submit: submit as UseWrite['submit'] });
+  renderBoard({ issues: [issue('bza-1', { status: 'closed' })], writes });
+
+  // Done -> In Progress submits reopen, then the guarded update.
+  fireEvent.keyDown(window, { key: 'ArrowLeft', shiftKey: true });
+
+  await waitFor(() => expect(submit).toHaveBeenCalledTimes(2));
+  await waitFor(() =>
+    expect(screen.getByRole('alert')).toHaveTextContent('This issue changed elsewhere')
+  );
+  expect(submit).toHaveBeenCalledTimes(2);
+  expect(card('bza-1').closest('[data-column-id="done"]')).not.toBeNull();
+});
+
 test('without a write flow a move is refused visibly and never reaches bd', () => {
   renderBoard({ issues: [issue('bza-1')] });
 
@@ -425,4 +448,80 @@ test('a blocked-by target outside the current filter still keeps the card Blocke
 
   expect(within(column('blocked')).queryAllByRole('listitem')).toHaveLength(1);
   expect(within(column('ready')).queryAllByRole('listitem')).toHaveLength(0);
+});
+
+test('Enter on a filter summary opens the filter instead of the focused card', () => {
+  renderBoard({ issues: [issue('bza-1')] });
+  const summary = document.querySelector<HTMLElement>('details[aria-label="Priority"] summary');
+  expect(summary).not.toBeNull();
+  summary?.focus();
+
+  fireEvent.keyDown(summary!, { key: 'Enter' });
+
+  expect(screen.getByTestId('location')).not.toHaveTextContent('/issue/');
+});
+
+test('Enter on Clear keeps the control native and does not open a card', () => {
+  renderBoard({ issues: [issue('bza-1')], entry: '/w/p1/board?priority=2' });
+  const clear = screen.getByRole('button', { name: 'Clear filters' });
+  clear.focus();
+
+  fireEvent.keyDown(clear, { key: 'Enter' });
+
+  expect(screen.getByTestId('location')).not.toHaveTextContent('/issue/');
+});
+
+test('clearing board filters keeps the hidden status parameter', () => {
+  renderBoard({
+    issues: [issue('bza-1'), issue('bza-2', { status: 'closed' })],
+    entry: '/w/p1/board?status=closed&priority=2',
+  });
+
+  fireEvent.click(screen.getByRole('button', { name: 'Clear filters' }));
+
+  expect(screen.getByTestId('location')).toHaveTextContent('status=closed');
+  expect(screen.getByTestId('location')).not.toHaveTextContent('priority=');
+});
+
+test('a second move is ignored while the first is still pending', async () => {
+  let settle!: (result: { status: 'ok' }) => void;
+  const submit = vi.fn(
+    () =>
+      new Promise<{ status: 'ok' }>((resolve) => {
+        settle = resolve;
+      })
+  );
+  const writes = fakeWrites({ submit: submit as UseWrite['submit'] });
+  renderBoard({ issues: [issue('bza-1')], writes });
+
+  fireEvent.keyDown(window, { key: 'ArrowRight', shiftKey: true });
+  await waitFor(() => expect(card('bza-1')).toHaveAttribute('data-pending', 'true'));
+
+  fireEvent.keyDown(window, { key: 'ArrowRight', shiftKey: true });
+  expect(submit).toHaveBeenCalledTimes(1);
+
+  await act(async () => settle({ status: 'ok' }));
+});
+
+test('a card with a write in flight from elsewhere refuses a move', () => {
+  const writes = fakeWrites({ isPending: () => true });
+  renderBoard({ issues: [issue('bza-1')], writes });
+
+  fireEvent.keyDown(window, { key: 'ArrowRight', shiftKey: true });
+
+  expect(writes.submit).not.toHaveBeenCalled();
+});
+
+test('remounting the board restores the focused card', async () => {
+  const issues = [issue('bza-1'), issue('bza-2')];
+  const first = renderBoard({ issues });
+
+  fireEvent.keyDown(window, { key: 'j' });
+  await waitFor(() => expect(card('bza-2')).toHaveAttribute('data-focused', 'true'));
+
+  first.unmount();
+  renderBoard({ issues });
+
+  await waitFor(() => expect(card('bza-2')).toHaveAttribute('data-focused', 'true'));
+  expect(card('bza-2')).toHaveFocus();
 });
