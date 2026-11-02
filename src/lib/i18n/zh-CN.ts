@@ -131,6 +131,21 @@ export const zhCN: Record<keyof typeof en, string> = {
   'detail.dependencies.closed': '{count} 已关闭',
   'detail.dependencies.missing': '未找到',
 
+  'detail.edit.save': '保存',
+  'detail.edit.cancel': '取消',
+  'detail.edit.preview': '预览',
+  'detail.edit.edit': '编辑',
+  'detail.edit.saving': '保存中…',
+  'detail.edit.titleEmpty': '标题不能为空。',
+  'detail.edit.blockedByDependencies': '被 {ids} 阻塞；v0.1.0 需先在 CLI 解除依赖。',
+  'detail.edit.updatedElsewhere': '编辑期间这条票已在别处更新，草稿已保留。',
+  'detail.write.unavailable': 'bd 不可用，编辑已禁用。',
+  'detail.comment.placeholder': '写一条评论…',
+  'detail.comment.submit': '评论',
+  'detail.close': '关闭票',
+  'detail.reopen': '重开票',
+  'detail.deleted': '这条票已被删除。',
+
   'error.title': '出错了',
   'error.copy': '复制诊断信息',
 

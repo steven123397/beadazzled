@@ -130,6 +130,21 @@ export const en = {
   'detail.dependencies.closed': '{count} closed',
   'detail.dependencies.missing': 'Not found',
 
+  'detail.edit.save': 'Save',
+  'detail.edit.cancel': 'Cancel',
+  'detail.edit.preview': 'Preview',
+  'detail.edit.edit': 'Edit',
+  'detail.edit.saving': 'Saving…',
+  'detail.edit.titleEmpty': 'The title cannot be empty.',
+  'detail.edit.blockedByDependencies': 'Blocked by {ids}; resolve the dependency in the CLI first.',
+  'detail.edit.updatedElsewhere': 'Updated elsewhere while you were editing; your draft is kept.',
+  'detail.write.unavailable': 'bd is not available; editing is disabled.',
+  'detail.comment.placeholder': 'Write a comment…',
+  'detail.comment.submit': 'Comment',
+  'detail.close': 'Close ticket',
+  'detail.reopen': 'Reopen ticket',
+  'detail.deleted': 'This ticket was deleted.',
+
   'error.title': 'Something went wrong',
   'error.copy': 'Copy diagnostics',
 
