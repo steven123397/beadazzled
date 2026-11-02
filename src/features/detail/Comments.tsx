@@ -1,4 +1,4 @@
-import { useState, type KeyboardEvent } from 'react';
+import { useEffect, useState, type KeyboardEvent } from 'react';
 
 import type { Comment } from '@/bindings/bd';
 import { useI18n } from '@/lib/i18n/I18nProvider';
@@ -11,6 +11,8 @@ export type CommentsProps = {
   pending?: boolean;
   disabled?: boolean;
   error?: string | null;
+  /** Reports whether the composer holds unsaved text. */
+  onDirtyChange?: (dirty: boolean) => void;
 };
 
 export function Comments({
@@ -19,6 +21,7 @@ export function Comments({
   pending = false,
   disabled = false,
   error = null,
+  onDirtyChange,
 }: CommentsProps) {
   const { t, language } = useI18n();
   const [draft, setDraft] = useState('');
@@ -28,6 +31,10 @@ export function Comments({
   );
   const busy = pending || submitting;
   const canSubmit = !busy && !disabled && draft.trim() !== '';
+
+  useEffect(() => {
+    onDirtyChange?.(draft.trim() !== '');
+  }, [draft, onDirtyChange]);
 
   const submit = () => {
     if (!canSubmit || onSubmit === undefined) {

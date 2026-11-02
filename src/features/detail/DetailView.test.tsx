@@ -410,6 +410,9 @@ test('leaving with an open draft asks before discarding it', () => {
   const { onBack } = renderDetail(issue('bza-b', { title: 'Old title' }), undefined, writes);
 
   fireEvent.click(screen.getByRole('button', { name: 'Old title' }));
+  fireEvent.change(screen.getByRole('textbox', { name: 'Title' }), {
+    target: { value: 'Draft title' },
+  });
   fireEvent.click(screen.getByRole('button', { name: 'Back to list' }));
 
   expect(confirm).toHaveBeenCalledWith('Discard the unsaved draft?');
@@ -466,6 +469,79 @@ test('an open modal owns Escape, so the draft behind it survives', () => {
   // Without the modal, the same key falls back to cancelling the draft.
   fireEvent.keyDown(window, { key: 'Escape' });
   expect(screen.queryByRole('textbox', { name: 'Title' })).toBeNull();
+});
+
+test('a comment draft asks before the page is left', () => {
+  const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+  const writes = fakeWrites();
+  const { onBack } = renderDetail(issue('bza-b'), undefined, writes);
+
+  fireEvent.change(screen.getByRole('textbox', { name: 'Write a comment…' }), {
+    target: { value: 'Half a thought' },
+  });
+  fireEvent.click(screen.getByRole('button', { name: 'Back to list' }));
+
+  expect(confirm).toHaveBeenCalledWith('Discard the unsaved draft?');
+  expect(onBack).not.toHaveBeenCalled();
+
+  confirm.mockRestore();
+});
+
+test('an empty comment composer does not block navigation', () => {
+  const confirm = vi.spyOn(window, 'confirm');
+  const { onBack } = renderDetail(issue('bza-b'), undefined, fakeWrites());
+
+  fireEvent.change(screen.getByRole('textbox', { name: 'Write a comment…' }), {
+    target: { value: '   ' },
+  });
+  fireEvent.click(screen.getByRole('button', { name: 'Back to list' }));
+
+  expect(confirm).not.toHaveBeenCalled();
+  expect(onBack).toHaveBeenCalledTimes(1);
+  confirm.mockRestore();
+});
+
+test('an unchanged assignee editor does not block navigation', () => {
+  const confirm = vi.spyOn(window, 'confirm');
+  const { onBack } = renderDetail(issue('bza-b'), undefined, fakeWrites());
+
+  fireEvent.click(screen.getByRole('button', { name: 'Edit assignee' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Back to list' }));
+
+  expect(confirm).not.toHaveBeenCalled();
+  expect(onBack).toHaveBeenCalledTimes(1);
+  confirm.mockRestore();
+});
+
+test('the assignee editor asks before the page is left once its draft differs', () => {
+  const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+  const { onBack } = renderDetail(issue('bza-b'), undefined, fakeWrites());
+
+  fireEvent.click(screen.getByRole('button', { name: 'Edit assignee' }));
+  fireEvent.change(screen.getByRole('textbox', { name: 'Assignee' }), {
+    target: { value: 'ada' },
+  });
+  fireEvent.click(screen.getByRole('button', { name: 'Back to list' }));
+
+  expect(confirm).toHaveBeenCalledWith('Discard the unsaved draft?');
+  expect(onBack).not.toHaveBeenCalled();
+
+  confirm.mockRestore();
+});
+
+test('a half-typed label asks before the page is left', () => {
+  const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+  const { onBack } = renderDetail(issue('bza-b'), undefined, fakeWrites());
+
+  fireEvent.change(screen.getByRole('textbox', { name: 'New label' }), {
+    target: { value: 'ui' },
+  });
+  fireEvent.click(screen.getByRole('button', { name: 'Back to list' }));
+
+  expect(confirm).toHaveBeenCalledWith('Discard the unsaved draft?');
+  expect(onBack).not.toHaveBeenCalled();
+
+  confirm.mockRestore();
 });
 
 test('a write that misses its echo says the view was refreshed', async () => {

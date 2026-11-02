@@ -1,4 +1,4 @@
-import { useState, type KeyboardEvent } from 'react';
+import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
 
 import { useI18n } from '@/lib/i18n/I18nProvider';
 
@@ -13,6 +13,8 @@ export type EditorProps = {
   disabled?: boolean;
   /** Write or validation failure; the draft stays editable. */
   error?: string | null;
+  /** Reports whether the local draft differs from the stored value. */
+  onDirtyChange?: (dirty: boolean) => void;
   onSave: (value: string) => Promise<boolean> | boolean;
   onCancel: () => void;
 };
@@ -30,6 +32,7 @@ export function Editor({
   pending = false,
   disabled = false,
   error = null,
+  onDirtyChange,
   onSave,
   onCancel,
 }: EditorProps) {
@@ -38,6 +41,14 @@ export function Editor({
   const [preview, setPreview] = useState(false);
   const [saving, setSaving] = useState(false);
   const busy = pending || saving;
+  // The parent's navigation guard cares about unsaved content, not about the
+  // editor merely being open.
+  const dirtyCallback = useRef(onDirtyChange);
+  dirtyCallback.current = onDirtyChange;
+  useEffect(() => {
+    dirtyCallback.current?.(draft !== value);
+  }, [draft, value]);
+  useEffect(() => () => dirtyCallback.current?.(false), []);
 
   const save = () => {
     if (busy || disabled) {

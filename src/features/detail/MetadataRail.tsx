@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 import type { Issue, WriteCommand } from '@/bindings/bd';
 import { useI18n } from '@/lib/i18n/I18nProvider';
@@ -20,16 +20,25 @@ export function MetadataRail({
   index,
   onOpenIssue,
   writes,
+  onDirtyChange,
 }: {
   issue: Issue;
   index: IssueIndex;
   onOpenIssue?: (id: string) => void;
   writes?: UseWrite;
+  /** Reports whether the rail holds unsaved input. */
+  onDirtyChange?: (dirty: boolean) => void;
 }) {
   const { t, language } = useI18n();
   const [editingAssignee, setEditingAssignee] = useState(false);
+  const [assigneeDirty, setAssigneeDirty] = useState(false);
   const [newLabel, setNewLabel] = useState('');
   const [localError, setLocalError] = useState<string | null>(null);
+
+  const dirty = assigneeDirty || newLabel.trim() !== '';
+  useEffect(() => {
+    onDirtyChange?.(dirty);
+  }, [dirty, onDirtyChange]);
 
   const pending = writes?.isPending(issue.id) ?? false;
   const canEdit = writes?.canWrite === true;
@@ -204,6 +213,7 @@ export function MetadataRail({
               pending={pending}
               disabled={!canEdit}
               error={localError ?? writes?.error ?? null}
+              onDirtyChange={setAssigneeDirty}
               onSave={saveAssignee}
               onCancel={() => setEditingAssignee(false)}
             />

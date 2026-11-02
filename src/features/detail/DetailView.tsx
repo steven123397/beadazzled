@@ -45,6 +45,11 @@ export function DetailView({
   const index = useMemo(() => indexIssues(issues), [issues]);
   const issue = getIssue(index, issueId);
   const [editing, setEditing] = useState<EditableField | null>(null);
+  // Every local draft on the page reports up, so navigation asks once no
+  // matter which surface holds unsaved input.
+  const [fieldDirty, setFieldDirty] = useState(false);
+  const [commentDirty, setCommentDirty] = useState(false);
+  const [railDirty, setRailDirty] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
   const [commentError, setCommentError] = useState<string | null>(null);
   // The updated_at when editing began: a newer value means someone else wrote
@@ -54,12 +59,14 @@ export function DetailView({
   const [notice, setNotice] = useState<string | null>(null);
   const lastSeen = useRef<Issue | null>(null);
   const canEdit = writes?.canWrite === true;
+  const hasDraft = fieldDirty || commentDirty || railDirty;
 
   const beginEdit = useCallback(
     (field: EditableField) => {
       writes?.clearError();
       setValidationError(null);
       setNotice(null);
+      setFieldDirty(false);
       setEditBase(issue?.updated_at ?? null);
       setEditing(field);
     },
@@ -70,6 +77,7 @@ export function DetailView({
     writes?.clearError();
     setValidationError(null);
     setEditBase(null);
+    setFieldDirty(false);
     setEditing(null);
   }, [writes]);
 
@@ -83,18 +91,18 @@ export function DetailView({
   // Shell navigation (sidebar, palette, workspace switch) consults the same
   // guard before it unmounts this page.
   useEffect(() => {
-    if (editing === null) {
+    if (!hasDraft) {
       setDraftGuard(null);
       return undefined;
     }
     setDraftGuard(() => window.confirm(t('detail.edit.discard')));
     return () => setDraftGuard(null);
-  }, [editing, t]);
+  }, [hasDraft, t]);
 
   // A browser reload or window close is the one navigation React Router
   // cannot intercept; ask the platform to confirm while a draft is open.
   useEffect(() => {
-    if (editing === null) {
+    if (!hasDraft) {
       return undefined;
     }
     const handler = (event: BeforeUnloadEvent) => {
@@ -103,7 +111,7 @@ export function DetailView({
     };
     window.addEventListener('beforeunload', handler);
     return () => window.removeEventListener('beforeunload', handler);
-  }, [editing]);
+  }, [hasDraft]);
 
   // A ticket that was on screen and then vanished was deleted; one that never
   // appeared may simply still be deep-linked from another workspace.
@@ -316,6 +324,7 @@ export function DetailView({
             pending={pending}
             disabled={!canEdit}
             error={editorError}
+            onDirtyChange={setFieldDirty}
             onSave={(next) => saveField('title', next)}
             onCancel={cancelEdit}
           />
@@ -359,6 +368,7 @@ export function DetailView({
                   pending={pending}
                   disabled={!canEdit}
                   error={editorError}
+                  onDirtyChange={setFieldDirty}
                   onSave={(next) => saveField('description', next)}
                   onCancel={cancelEdit}
                 />
@@ -386,6 +396,7 @@ export function DetailView({
                   pending={pending}
                   disabled={!canEdit}
                   error={editorError}
+                  onDirtyChange={setFieldDirty}
                   onSave={(next) => saveField('acceptance', next)}
                   onCancel={cancelEdit}
                 />
@@ -425,10 +436,17 @@ export function DetailView({
             pending={pending}
             disabled={!canEdit}
             error={commentError}
+            onDirtyChange={setCommentDirty}
           />
         </div>
 
-        <MetadataRail issue={issue} index={index} onOpenIssue={onOpenIssue} writes={writes} />
+        <MetadataRail
+          issue={issue}
+          index={index}
+          onOpenIssue={onOpenIssue}
+          writes={writes}
+          onDirtyChange={setRailDirty}
+        />
       </div>
     </article>
   );
