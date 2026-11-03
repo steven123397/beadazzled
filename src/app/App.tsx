@@ -19,7 +19,7 @@ import { ErrorBoundary } from './shell/ErrorBoundary';
 import { PreferencesBridge, type PreferencesApi } from './shell/PreferencesBridge';
 import { Shell } from './shell/Shell';
 import { SkeletonScreen } from './shell/SkeletonScreen';
-import { SyncStatusProvider, type SyncErrorRecord } from './shell/SyncStatus';
+import { recordSyncError, SyncStatusProvider, type SyncErrorRecord } from './shell/SyncStatus';
 import { Welcome } from './shell/Welcome';
 import {
   activeWorkspace,
@@ -171,18 +171,25 @@ function AppFrame({
       : 0;
   // A bd failure disappears from SyncState the moment it recovers, but
   // Settings still owes the user the last error, its time and its summary.
+  // A record belongs to one workspace and to one failure episode: switching
+  // workspaces or failing again after a recovery starts a new record.
   const [lastSyncError, setLastSyncError] = useState<SyncErrorRecord | null>(null);
+  const previousSyncKind = useRef<string | null>(null);
+  const previousSyncWorkspace = useRef<string | null>(null);
+  const activePath = project?.path ?? null;
   useEffect(() => {
-    if (shellSyncState.kind !== 'bd-unavailable') {
-      return;
-    }
-    const error = shellSyncState.error;
+    // Snapshot the prior transition before the updater runs; the updater itself
+    // may be evaluated later, after these refs have moved on.
+    const previousState = {
+      kind: previousSyncKind.current,
+      workspace: previousSyncWorkspace.current,
+    };
+    previousSyncKind.current = shellSyncState.kind;
+    previousSyncWorkspace.current = activePath;
     setLastSyncError((previous) =>
-      previous !== null && previous.code === error.code && previous.message === error.message
-        ? previous
-        : { code: error.code, at: Date.now(), message: error.message, detail: error.detail }
+      recordSyncError(previous, shellSyncState, activePath, previousState, Date.now())
     );
-  }, [shellSyncState]);
+  }, [shellSyncState, activePath]);
   const refresh = useCallback(() => {
     void reload();
     sync.refresh();

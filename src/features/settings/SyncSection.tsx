@@ -28,10 +28,11 @@ export function SyncSection({ copy = copyText }: { copy?: (text: string) => Prom
   const lastSeq = sync.kind === 'healthy' ? sync.lastSeq : null;
   const lastEventAt = sync.kind === 'healthy' ? sync.lastEventAt : null;
   // A live failure wins; otherwise the remembered one keeps its timestamp.
+  const activePath = snapshot?.active ?? null;
+  // A remembered failure belongs to the workspace that produced it.
+  const historyError = lastError !== null && lastError.workspace === activePath ? lastError : null;
   const shownError =
-    sync.kind === 'bd-unavailable'
-      ? { ...sync.error, at: lastError?.at ?? null }
-      : (lastError ?? null);
+    sync.kind === 'bd-unavailable' ? { ...sync.error, at: historyError?.at ?? null } : historyError;
 
   return (
     <section aria-labelledby="settings-sync" className="space-y-3">

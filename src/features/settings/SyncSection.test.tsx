@@ -120,12 +120,36 @@ test('a bd failure shows its code, message and detail', () => {
         detail: { command: 'export', timeout_ms: 20000 },
       },
     },
-    { lastError: { code: 'BD_TIMEOUT', at: NOW, message: 'bd timed out after 20000ms' } }
+    {
+      lastError: {
+        code: 'BD_TIMEOUT',
+        at: NOW,
+        message: 'bd timed out after 20000ms',
+        workspace: '/repo/alpha',
+      },
+    }
   );
 
   expect(screen.getByText('BD_TIMEOUT — bd timed out after 20000ms')).toBeInTheDocument();
   expect(screen.getByText('Details')).toBeInTheDocument();
   expect(screen.getByText(/^at /)).toBeInTheDocument();
+});
+
+test('an error from another workspace stays hidden', () => {
+  renderSection(
+    { kind: 'healthy', lastSeq: 7, lastEventAt: null },
+    {
+      lastError: {
+        code: 'BD_TIMEOUT',
+        at: NOW,
+        message: 'bd timed out after 20000ms',
+        workspace: '/repo/beta',
+      },
+    }
+  );
+
+  expect(screen.queryByText('Last sync error')).not.toBeInTheDocument();
+  expect(screen.queryByText('BD_TIMEOUT — bd timed out after 20000ms')).not.toBeInTheDocument();
 });
 
 test('an error that recovered stays visible with when it happened', () => {
@@ -137,6 +161,7 @@ test('an error that recovered stays visible with when it happened', () => {
         at: NOW,
         message: 'bd timed out after 20000ms',
         detail: { command: 'export' },
+        workspace: '/repo/alpha',
       },
     }
   );

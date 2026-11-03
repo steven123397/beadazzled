@@ -62,6 +62,8 @@ export type SyncErrorRecord = {
   at: number;
   message: string;
   detail?: BridgeError['detail'];
+  /** The workspace the failure belongs to; another workspace never shows it. */
+  workspace: string | null;
 };
 
 const SyncErrorContext = createContext<SyncErrorRecord | null>(null);
@@ -88,4 +90,33 @@ export function useSyncState(): SyncState {
 
 export function useSyncErrorHistory(): SyncErrorRecord | null {
   return useContext(SyncErrorContext);
+}
+
+/**
+ * The record after `state` arrives in `workspace`.
+ *
+ * A record describes one failure episode of one workspace: a new episode
+ * (entering `bd-unavailable` from another state, or a different workspace)
+ * gets a fresh timestamp, while a continuing failure keeps the first one.
+ */
+export function recordSyncError(
+  previous: SyncErrorRecord | null,
+  state: SyncState,
+  workspace: string | null,
+  previousState: { kind: string | null; workspace: string | null },
+  now: number
+): SyncErrorRecord | null {
+  if (state.kind !== 'bd-unavailable') {
+    return previous;
+  }
+  if (previousState.kind === 'bd-unavailable' && previousState.workspace === workspace) {
+    return previous;
+  }
+  return {
+    code: state.error.code,
+    at: now,
+    message: state.error.message,
+    detail: state.error.detail,
+    workspace,
+  };
 }
