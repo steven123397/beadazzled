@@ -85,9 +85,8 @@ test('dependency-blocked cards name the blockers and the cause', () => {
   );
 
   expect(screen.getByText('Blocked by 2')).toBeInTheDocument();
-  expect(screen.getByText('bza-a, bza-b')).toBeInTheDocument();
-  expect(screen.getByText('dependency')).toBeInTheDocument();
-  expect(screen.queryByText('marked blocked')).not.toBeInTheDocument();
+  expect(screen.getByTitle('bza-a, bza-b')).toBeInTheDocument();
+  expect(screen.queryByText('Manually blocked')).not.toBeInTheDocument();
 });
 
 test('manually blocked cards are labelled as such', () => {
@@ -99,7 +98,7 @@ test('manually blocked cards are labelled as such', () => {
     })
   );
 
-  expect(screen.getByText('marked blocked')).toBeInTheDocument();
+  expect(screen.getByText('Manually blocked')).toBeInTheDocument();
   expect(screen.queryByText(/^Blocked by/)).not.toBeInTheDocument();
 });
 

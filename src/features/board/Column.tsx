@@ -3,6 +3,7 @@ import { useDroppable } from '@dnd-kit/core';
 import { useVirtualizer } from '@tanstack/react-virtual';
 
 import type { Issue } from '@/bindings/bd';
+import { StatusIcon } from '@/components/ui/status-icon';
 import { useI18n } from '@/lib/i18n/I18nProvider';
 
 import { Card, cardId } from './Card';
@@ -14,6 +15,16 @@ export const CARD_HEIGHT = 120;
 const CARD_GAP = 8;
 const OVERSCAN = 4;
 const INITIAL_RECT = { width: 288, height: 600 };
+
+/** The bd status each column stands for, used for the header glyph. */
+const COLUMN_STATUS: Record<ColumnId, string> = {
+  backlog: 'deferred',
+  ready: 'open',
+  'in-progress': 'in_progress',
+  blocked: 'blocked',
+  done: 'closed',
+  other: 'pinned',
+};
 
 export type ColumnProps = {
   column: BoardColumn;
@@ -149,6 +160,7 @@ export function Column({
       }`}
     >
       <header className="flex shrink-0 items-center gap-2 border-b border-border px-2 py-1.5">
+        <StatusIcon status={COLUMN_STATUS[column.id]} />
         <h2 className="text-xs font-semibold">{label}</h2>
         <span className="text-2xs tabular-nums text-muted-foreground">{column.cards.length}</span>
       </header>
@@ -163,7 +175,7 @@ export function Column({
           role="list"
           aria-label={label}
           onScroll={(event) => onScrollTop?.(column.id, event.currentTarget.scrollTop)}
-          className="min-h-0 flex-1 overflow-auto p-1.5"
+          className="thin-scrollbar min-h-0 flex-1 overflow-auto p-1.5"
         >
           <div className="relative w-full" style={{ height: virtualizer.getTotalSize() }}>
             {virtualItems.map((item) => {

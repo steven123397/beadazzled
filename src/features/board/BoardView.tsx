@@ -12,9 +12,12 @@ import {
   type DragStartEvent,
 } from '@dnd-kit/core';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { Inbox, TriangleAlert } from 'lucide-react';
 
 import type { Issue, SyncState } from '@/bindings/bd';
 import { isEditableTarget, isOverlayOpen } from '@/app/keyboard/resolve';
+import { Button } from '@/components/ui/button';
+import { StateBadge } from '@/components/ui/state-badge';
 import { FilterBar } from '@/components/filter-bar';
 import { describeError } from '@/lib/errors';
 import type { MessageKey } from '@/lib/i18n';
@@ -429,8 +432,8 @@ export function BoardView({
       data-sync={syncState.kind}
       className="flex h-full min-h-0 flex-col"
     >
-      <header className="flex shrink-0 items-center justify-between border-b border-border px-3 py-2">
-        <h1 className="text-sm font-semibold">{t('nav.board')}</h1>
+      <header className="flex shrink-0 items-center justify-between border-b border-border px-4 py-2">
+        <h1 className="text-base font-semibold">{t('nav.board')}</h1>
       </header>
 
       {total > 0 ? (
@@ -453,13 +456,14 @@ export function BoardView({
         >
           <span className="min-w-0 flex-1">{t('list.state.stale')}</span>
           {onRefresh === undefined ? null : (
-            <button
-              type="button"
+            <Button
+              size="xs"
+              variant="secondary"
               onClick={onRefresh}
-              className="rounded border border-destructive/40 px-2 py-1"
+              className="border-destructive/40 text-destructive hover:bg-destructive/10"
             >
               {t('list.state.retry')}
-            </button>
+            </Button>
           )}
         </div>
       ) : null}
@@ -495,7 +499,7 @@ export function BoardView({
           onDragEnd={onDragEnd}
           onDragCancel={onDragCancel}
         >
-          <div className="flex min-h-0 flex-1 gap-3 overflow-x-auto p-3">
+          <div className="thin-scrollbar flex min-h-0 flex-1 gap-3 overflow-x-auto p-3">
             {board.columns.map((column) => (
               <Column
                 key={column.id}
@@ -602,9 +606,10 @@ function LoadingBoard() {
 function EmptyState() {
   const { t } = useI18n();
   return (
-    <div className="flex flex-1 flex-col items-center justify-center gap-2 p-6 text-center">
+    <div className="flex flex-1 flex-col items-center justify-center gap-2.5 p-6 text-center">
+      <StateBadge icon={<Inbox aria-hidden="true" className="size-4" />} />
       <p className="text-sm font-medium">{t('list.state.empty.title')}</p>
-      <p className="text-xs text-muted-foreground">{t('list.state.empty.body')}</p>
+      <p className="max-w-sm text-xs text-muted-foreground">{t('list.state.empty.body')}</p>
     </div>
   );
 }
@@ -614,19 +619,16 @@ function ErrorState({ message, onRefresh }: { message: string; onRefresh?: () =>
   return (
     <div
       role="alert"
-      className="flex flex-1 flex-col items-center justify-center gap-2 p-6 text-center"
+      className="flex flex-1 flex-col items-center justify-center gap-2.5 p-6 text-center"
     >
+      <StateBadge tone="danger" icon={<TriangleAlert aria-hidden="true" className="size-4" />} />
       <p className="text-sm font-medium text-destructive">{t('list.state.error.title')}</p>
       <p className="text-xs text-muted-foreground">{t('list.state.error.body')}</p>
       <p className="max-w-md text-xs text-muted-foreground">{message}</p>
       {onRefresh === undefined ? null : (
-        <button
-          type="button"
-          onClick={onRefresh}
-          className="rounded border border-border px-3 py-1 text-xs"
-        >
+        <Button size="md" variant="secondary" onClick={onRefresh} className="mt-1">
           {t('list.state.retry')}
-        </button>
+        </Button>
       )}
     </div>
   );

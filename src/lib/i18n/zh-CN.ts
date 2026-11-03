@@ -29,7 +29,6 @@ export const zhCN: Record<keyof typeof en, string> = {
   'board.column.other': '其他',
   'board.column.empty': '暂无票',
   'board.card.blockedBy': '被 {count} 项阻塞',
-  'board.card.dependencyBlocked': '依赖阻塞',
   'board.card.manualBlocked': '手动标记',
   'board.card.saving': '保存中…',
   'board.card.drag': '拖动 {id}',

@@ -6,7 +6,7 @@ import {
   type ReactNode,
 } from 'react';
 import { useDraggable } from '@dnd-kit/core';
-import { GripVertical } from 'lucide-react';
+import { Ban, GripVertical } from 'lucide-react';
 
 import type { Issue } from '@/bindings/bd';
 import { Badge } from '@/components/ui/badge';
@@ -56,31 +56,48 @@ export function CardBody({
     [extraLabels, t]
   );
   const blockedIds = blockers.join(', ');
-  const blockedLabel = t('board.card.blockedBy', { count: blockers.length });
+  const blockedLabel =
+    blockers.length > 0
+      ? t('board.card.blockedBy', { count: blockers.length })
+      : t('board.card.manualBlocked');
+  const blocked = manual || blockers.length > 0;
   // Secondary text sits on `--selected` while focused; the muted tone only
   // reaches 4.1:1 there at 11px, below the 4.5:1 floor for small text.
   const secondary = focused ? 'text-selected-foreground' : 'text-muted-foreground';
-  const blockedTone = focused ? 'text-selected-foreground' : 'text-destructive';
 
   return (
     <>
       <div className={`flex items-center gap-1.5 text-2xs ${secondary}`}>
         <PriorityIcon priority={issue.priority} />
         <span className="tabular-nums">P{issue.priority}</span>
-        <span className="truncate font-mono">{issue.id}</span>
+        <span className="min-w-0 truncate font-mono">{issue.id}</span>
+        {blocked ? (
+          <span
+            className={`flex min-w-0 shrink-0 items-center gap-0.5 rounded-sm px-1 ${
+              focused
+                ? 'bg-selected-foreground/10 text-selected-foreground'
+                : 'bg-warning/12 text-warning'
+            }`}
+            title={blockedIds === '' ? undefined : blockedIds}
+          >
+            <Ban aria-hidden="true" className="size-3 shrink-0" />
+            <span className="truncate">{blockedLabel}</span>
+          </span>
+        ) : null}
+        <span className="ml-auto" />
         {pending ? (
-          <span role="status" className="ml-auto shrink-0">
+          <span role="status" className="shrink-0">
             {t('board.card.saving')}
           </span>
         ) : null}
         {dragHandle}
       </div>
 
-      <p className="mt-1 line-clamp-3 leading-snug" title={issue.title}>
+      <p className="mt-1 line-clamp-3 text-sm font-medium leading-snug" title={issue.title}>
         {issue.title}
       </p>
 
-      <div className="mt-1.5 flex items-center gap-1 overflow-hidden">
+      <div className="mt-auto flex items-center gap-1 overflow-hidden pt-1.5">
         {visibleLabels.map((label, index) => (
           <Badge key={`${label}-${index}`} className="min-w-0 truncate">
             {label}
@@ -97,27 +114,6 @@ export function CardBody({
           {issue.assignee ?? t('list.unassigned')}
         </span>
       </div>
-
-      {manual || blockers.length > 0 ? (
-        <p
-          className={`mt-1 flex items-center gap-1 overflow-hidden text-2xs ${blockedTone}`}
-          title={blockedIds}
-        >
-          {blockers.length > 0 ? (
-            <>
-              <span className="shrink-0 font-medium">{blockedLabel}</span>
-              <span className="truncate font-mono">{blockedIds}</span>
-            </>
-          ) : null}
-          <span
-            className={`ml-auto shrink-0 rounded-sm border px-1 ${
-              focused ? 'border-selected-foreground/30' : 'border-destructive/30'
-            }`}
-          >
-            {manual ? t('board.card.manualBlocked') : t('board.card.dependencyBlocked')}
-          </span>
-        </p>
-      ) : null}
     </>
   );
 }
@@ -161,7 +157,7 @@ export const Card = memo(function Card({
       onClick={() => onOpen(issue)}
       onFocus={() => onFocus(issue.id)}
       onPointerDown={listeners?.onPointerDown as PointerEventHandler<HTMLDivElement> | undefined}
-      className={`absolute left-0 w-full cursor-grab overflow-hidden rounded-md border bg-raised p-2 text-xs shadow-xs transition-colors ${
+      className={`absolute left-0 flex w-full cursor-grab flex-col overflow-hidden rounded-md border bg-raised p-2 text-xs shadow-xs transition-colors ${
         focused
           ? 'border-ring bg-selected text-selected-foreground'
           : 'border-border hover:bg-hover'

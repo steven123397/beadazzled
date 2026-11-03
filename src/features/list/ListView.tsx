@@ -1,12 +1,4 @@
-import {
-  useCallback,
-  useEffect,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-  useState,
-  type ReactNode,
-} from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { Inbox, SearchX, TriangleAlert } from 'lucide-react';
@@ -14,9 +6,9 @@ import { Inbox, SearchX, TriangleAlert } from 'lucide-react';
 import type { Issue, SyncState } from '@/bindings/bd';
 import { isEditableTarget, isOverlayOpen } from '@/app/keyboard/resolve';
 import { Button } from '@/components/ui/button';
+import { StateBadge } from '@/components/ui/state-badge';
 import { FilterBar } from '@/components/filter-bar';
 import { useI18n } from '@/lib/i18n/I18nProvider';
-import { cn } from '@/lib/utils';
 import { buildSearchIndex, hasActiveFilters } from '@/lib/view/filter';
 import {
   createListViewState,
@@ -553,21 +545,6 @@ function ErrorState({ message, onRefresh }: { message: string; onRefresh?: () =>
         </Button>
       )}
     </div>
-  );
-}
-
-/** The quiet mark above an empty/no-match/error explanation. */
-function StateBadge({ icon, tone = 'muted' }: { icon: ReactNode; tone?: 'muted' | 'danger' }) {
-  return (
-    <span
-      aria-hidden="true"
-      className={cn(
-        'flex size-9 items-center justify-center rounded-full',
-        tone === 'danger' ? 'bg-destructive/10 text-destructive' : 'bg-muted text-muted-foreground'
-      )}
-    >
-      {icon}
-    </span>
   );
 }
 

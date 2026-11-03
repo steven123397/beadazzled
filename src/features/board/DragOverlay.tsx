@@ -13,7 +13,7 @@ export function BoardDragOverlay({ card }: { card: BoardCard | null }) {
       {card === null ? null : (
         <div
           data-testid="board-drag-overlay"
-          className="w-72 rotate-1 rounded-md border border-border bg-raised p-2 text-xs opacity-95 shadow-md"
+          className="flex w-72 rotate-2 scale-[1.02] flex-col rounded-md border border-border bg-raised p-2 text-xs opacity-95 shadow-popover"
           style={{ height: 'var(--card-height)' }}
         >
           <CardBody card={card} />
