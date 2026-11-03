@@ -8,11 +8,11 @@ import { SyncSection } from './SyncSection';
 import { WorkspaceSection } from './WorkspaceSection';
 
 /**
- * The settings surface for v0.1.0's general/bd/about blocks. Workspace,
- * sync and diagnostics blocks arrive with bza-082.
+ * The full settings surface: general, bd, workspaces, sync, diagnostics and
+ * about.
  *
  * Opening this page performs no bd call: only the explicit actions inside
- * BdSection do.
+ * BdSection and loading the diagnostics report do.
  */
 export function SettingsView() {
   const { t } = useI18n();
