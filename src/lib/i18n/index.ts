@@ -1,13 +1,22 @@
 import { en } from './en';
 import { zhCN } from './zh-CN';
 
-export type MessageKey = keyof typeof en;
+// Type-only: the settings chunk registers its own copy at runtime.
+import type { SettingsMessageKey } from '@/features/settings/messages';
+
+export type MessageKey = keyof typeof en | SettingsMessageKey;
 export type Language = 'en' | 'zh-CN';
 
-export const catalogs: Record<Language, Record<MessageKey, string>> = {
-  en,
-  'zh-CN': zhCN,
+export const catalogs: Record<Language, Record<string, string>> = {
+  // Copies, so a lazily registered screen never mutates the source modules.
+  en: { ...en },
+  'zh-CN': { ...zhCN },
 };
+
+/** Adds a lazily loaded screen's copy to the catalogs it belongs to. */
+export function registerCatalog(language: Language, messages: Record<string, string>): void {
+  Object.assign(catalogs[language], messages);
+}
 
 export const LANGUAGES: Language[] = ['en', 'zh-CN'];
 

@@ -3,9 +3,23 @@ import { expect, test } from 'vitest';
 import { catalogs, loadLanguage, saveLanguage, translate, type MessageKey } from './index';
 import { en } from './en';
 import { zhCN } from './zh-CN';
+import { settingsEn, settingsZhCN } from '@/features/settings/messages';
 
 test('en and zh-CN expose the same key set', () => {
   expect(Object.keys(zhCN).sort()).toEqual(Object.keys(en).sort());
+});
+
+test('the settings catalog is complete in both languages and registered on import', () => {
+  expect(Object.keys(settingsZhCN).sort()).toEqual(Object.keys(settingsEn).sort());
+  expect(catalogs.en['settings.general']).toBe(settingsEn['settings.general']);
+  expect(catalogs['zh-CN']['settings.general']).toBe(settingsZhCN['settings.general']);
+});
+
+test('the entry catalog keeps only the settings loading label', () => {
+  // Every other settings string ships with the settings route chunk.
+  expect(Object.keys(en).filter((key) => key.startsWith('settings.'))).toEqual([
+    'settings.loading',
+  ]);
 });
 
 test('no catalog value is empty or a placeholder', () => {

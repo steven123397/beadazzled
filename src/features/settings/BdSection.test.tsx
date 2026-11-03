@@ -7,6 +7,7 @@ import { I18nProvider } from '@/lib/i18n/I18nProvider';
 import type { UseWorkspace } from '@/lib/workspace/useWorkspace';
 
 import { BdSection } from './BdSection';
+import './messages';
 
 const READY: BdStatus = { kind: 'ready', path: 'C:/tools/bd.exe', version: '1.3.2' };
 
