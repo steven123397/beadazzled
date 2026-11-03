@@ -12,13 +12,15 @@ export const buttonVariants = cva(
   {
     variants: {
       variant: {
-        primary: 'bg-primary text-primary-foreground shadow-xs hover:bg-primary/90 active:bg-primary/80',
+        primary:
+          'bg-primary text-primary-foreground shadow-xs hover:bg-primary/90 active:bg-primary/80',
         secondary:
           'border border-border bg-raised text-foreground shadow-xs hover:bg-hover active:bg-selected',
         ghost: 'text-foreground hover:bg-hover active:bg-selected',
         subtle: 'bg-muted text-foreground hover:bg-hover active:bg-selected',
-        danger: 'bg-destructive text-white shadow-xs hover:bg-destructive/90 active:bg-destructive/80',
-        link: 'text-primary underline-offset-4 hover:underline',
+        danger:
+          'bg-destructive text-white shadow-xs hover:bg-destructive/90 active:bg-destructive/80',
+        link: 'text-primary-text underline-offset-4 hover:underline',
       },
       size: {
         xs: 'h-control-xs px-1.5 text-2xs',

@@ -78,7 +78,9 @@ export const Row = memo(function Row({
       <span className="flex w-6 shrink-0 items-center justify-center" title={statusLabel}>
         <StatusIcon status={issue.status} label={statusLabel} className="size-4" />
       </span>
-      <span className="w-20 shrink-0 truncate font-mono text-muted-foreground">{issue.id}</span>
+      <span className="w-24 shrink-0 truncate font-mono text-muted-foreground" title={issue.id}>
+        {issue.id}
+      </span>
       <span className="min-w-0 flex-1 truncate text-base font-medium" title={issue.title}>
         {issue.title}
       </span>

@@ -53,11 +53,32 @@ test('the dark theme has no serious or critical violations', async ({ page }) =>
   await installFakeBridge(page, {
     theme: 'dark',
     syncState: { kind: 'healthy', lastSeq: 1, lastEventAt: null },
+    issues: [
+      {
+        id: 'bza-ryr.49.6',
+        title: 'Contrast probe',
+        description: 'See the [docs](https://example.com) for the long form.',
+        status: 'open',
+        priority: 1,
+        issue_type: 'task',
+        assignee: 'Steven Liang',
+        labels: ['polish', 'release'],
+        created_at: '2026-11-01T00:00:00Z',
+        updated_at: '2026-11-01T00:00:00Z',
+        dependency_count: 0,
+        dependent_count: 0,
+        comment_count: 0,
+      },
+    ],
   });
   await page.goto('/');
   await expect(page.getByRole('heading', { name: 'List' })).toBeVisible();
   await expect(page.locator('html')).toHaveClass(/dark/);
 
+  expect(await seriousViolations(page)).toEqual([]);
+
+  await page.goto('/#/w/p1/issue/bza-ryr.49.6');
+  await expect(page.getByRole('heading', { name: 'Contrast probe' })).toBeVisible();
   expect(await seriousViolations(page)).toEqual([]);
 
   for (const section of ['general', 'bd', 'workspaces', 'sync', 'diagnostics', 'about']) {
