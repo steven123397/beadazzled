@@ -25,10 +25,9 @@ const REPORT: DiagnosticsSnapshot = {
   bd: { kind: 'ready', path: 'C:/tools/bd.exe', version: '1.3.2' },
   workspace: 'C:/repo/alpha',
   context: {
-    project_id: 'p1',
-    bd_version: '1.3.2',
-    dolt_mode: 'embedded',
-    schema_version: 3,
+    projectId: 'p1',
+    doltMode: 'embedded',
+    schemaVersion: 3,
   },
   contextError: null,
   calls: [
@@ -82,7 +81,9 @@ function renderSection(
 ) {
   render(
     <I18nProvider initialLanguage="en">
-      <SyncStatusProvider state={{ kind: 'healthy', lastSeq: 42, lastEventAt: null } satisfies SyncState}>
+      <SyncStatusProvider
+        state={{ kind: 'healthy', lastSeq: 42, lastEventAt: null } satisfies SyncState}
+      >
         <WorkspaceProvider workspace={workspace()}>
           <AppRefreshProvider value={{ lastRefreshAt: NOW, refresh: vi.fn() }}>
             <DiagnosticsSection api={api} copy={copy} />
@@ -135,6 +136,22 @@ test('copying builds the fixed report and includes context values', async () => 
     `sync: healthy · lastSeq=42 · lastRefresh=${new Date(NOW).toISOString()}`,
     'error: -',
   ]);
+});
+
+test('an empty call history says so instead of rendering an empty table', async () => {
+  renderSection({
+    load: async () => ({
+      ...REPORT,
+      context: null,
+      contextError: null,
+      calls: [],
+    }),
+  });
+
+  fireEvent.click(screen.getByRole('button', { name: 'Load diagnostics' }));
+
+  expect(await screen.findByText('No bd calls recorded yet.')).toBeInTheDocument();
+  expect(screen.queryByRole('table', { name: 'Recent bd calls' })).not.toBeInTheDocument();
 });
 
 test('a failed load is visible and copying does nothing', async () => {

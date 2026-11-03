@@ -22,7 +22,7 @@ const CALL_LIMIT: usize = 200;
 #[serde(rename_all = "camelCase")]
 pub struct DiagnosticsCall {
     pub command: String,
-    /// Arguments with user text elided; never a full issue body.
+    /// Arguments with user-written values redacted; never a full issue body.
     pub argv: String,
     #[ts(type = "number")]
     pub duration_ms: u64,
@@ -38,11 +38,35 @@ pub struct DiagnosticsSnapshot {
     /// The active workspace path, when one is registered.
     pub workspace: Option<String>,
     /// `bd context --json` for the active workspace, when it answered.
-    pub context: Option<WorkspaceContext>,
+    pub context: Option<DiagnosticsContext>,
     /// Why the context call failed, when it did.
     pub context_error: Option<BridgeError>,
     /// Newest first.
     pub calls: Vec<DiagnosticsCall>,
+}
+
+/// The `bd context` fields the report actually shows.
+///
+/// `WorkspaceContext` flattens every unknown `bd context --json` field into
+/// `extra`; forwarding that across the IPC boundary would ship config values
+/// we never render, so the report projects an allowlist instead.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct DiagnosticsContext {
+    pub project_id: String,
+    pub dolt_mode: String,
+    #[ts(type = "number")]
+    pub schema_version: i64,
+}
+
+impl From<&WorkspaceContext> for DiagnosticsContext {
+    fn from(context: &WorkspaceContext) -> Self {
+        Self {
+            project_id: context.project_id.clone(),
+            dolt_mode: context.dolt_mode.clone(),
+            schema_version: context.schema_version,
+        }
+    }
 }
 
 pub fn collect(service: &WorkspaceService) -> DiagnosticsSnapshot {
@@ -53,7 +77,7 @@ pub fn collect(service: &WorkspaceService) -> DiagnosticsSnapshot {
     let (context, context_error) = match (&workspace, &bd) {
         (Some(directory), BdStatus::Ready { path, .. }) if Path::new(directory).is_dir() => {
             match BdBridge::new(path, directory).context() {
-                Ok(context) => (Some(context), None),
+                Ok(context) => (Some(DiagnosticsContext::from(&context)), None),
                 Err(error) => (None, Some(error)),
             }
         }

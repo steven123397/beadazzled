@@ -3,7 +3,6 @@ import { useState } from 'react';
 import type { BdStatus, DiagnosticsSnapshot } from '@/bindings/bd';
 import { useAppRefresh } from '@/app/shell/AppRefresh';
 import { useSyncState } from '@/app/shell/SyncStatus';
-import { useWorkspaceContext } from '@/app/shell/WorkspaceProvider';
 import { Button } from '@/components/ui/button';
 import { useAppVersion } from '@/lib/app-version';
 import { copyText, type CopyResult } from '@/lib/clipboard';
@@ -24,15 +23,11 @@ export type DiagnosticsSectionProps = {
  * A copyable report built on demand. Loading it spawns `bd context` once, so
  * the section says so and never runs anything while merely being opened.
  */
-export function DiagnosticsSection({
-  api = defaultApi,
-  copy = copyText,
-}: DiagnosticsSectionProps) {
+export function DiagnosticsSection({ api = defaultApi, copy = copyText }: DiagnosticsSectionProps) {
   const { t } = useI18n();
   const appVersion = useAppVersion();
   const sync = useSyncState();
   const { lastRefreshAt } = useAppRefresh();
-  const { error: workspaceError } = useWorkspaceContext();
   const [report, setReport] = useState<DiagnosticsSnapshot | null>(null);
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -46,6 +41,9 @@ export function DiagnosticsSection({
       setReport(next);
       return next;
     } catch (reason) {
+      // A failed reload must not leave the previous report to be copied as if
+      // it described the current state.
+      setReport(null);
       setLoadError(messageOf(reason));
       return null;
     } finally {
@@ -69,13 +67,14 @@ export function DiagnosticsSection({
       bdVersion: bd.kind === 'ready' ? bd.version : bd.kind,
       bdPath: 'path' in bd ? bd.path : null,
       workspace: snapshot.workspace,
-      project: context?.project_id ?? null,
-      doltMode: context?.dolt_mode ?? null,
-      schema: context?.schema_version ?? null,
+      project: context?.projectId ?? null,
+      doltMode: context?.doltMode ?? null,
+      schema: context?.schemaVersion ?? null,
       sync: sync.kind,
       lastSeq: sync.kind === 'healthy' ? sync.lastSeq : null,
       lastRefreshAt: new Date(lastRefreshAt).toISOString(),
-      error: errorText(snapshot, loadError ?? workspaceError),
+      // Only the bridge's mapped sentence: raw bd stderr stays on screen.
+      error: errorText(snapshot),
     });
   }
 
@@ -118,17 +117,11 @@ export function DiagnosticsSection({
               </p>
             ) : (
               <>
-                <Row
-                  label={t('settings.diagnostics.project')}
-                  value={report.context.project_id}
-                />
-                <Row
-                  label={t('settings.diagnostics.doltMode')}
-                  value={report.context.dolt_mode}
-                />
+                <Row label={t('settings.diagnostics.project')} value={report.context.projectId} />
+                <Row label={t('settings.diagnostics.doltMode')} value={report.context.doltMode} />
                 <Row
                   label={t('settings.diagnostics.schema')}
-                  value={String(report.context.schema_version)}
+                  value={String(report.context.schemaVersion)}
                 />
               </>
             )}
@@ -136,11 +129,12 @@ export function DiagnosticsSection({
           <div className="space-y-1">
             <h3 className="text-xs font-medium">{t('settings.diagnostics.calls')}</h3>
             {report.calls.length === 0 ? (
-              <p className="text-xs text-muted-foreground">
-                {t('settings.diagnostics.noCalls')}
-              </p>
+              <p className="text-xs text-muted-foreground">{t('settings.diagnostics.noCalls')}</p>
             ) : (
-              <table className="w-full text-left text-xs" aria-label={t('settings.diagnostics.calls')}>
+              <table
+                className="w-full text-left text-xs"
+                aria-label={t('settings.diagnostics.calls')}
+              >
                 <thead className="text-muted-foreground">
                   <tr>
                     <th scope="col" className="py-1 pr-2 font-medium">
@@ -193,11 +187,11 @@ function describeBd(bd: BdStatus): string {
   }
 }
 
-function errorText(snapshot: DiagnosticsSnapshot, fallback: string | null): string | null {
+function errorText(snapshot: DiagnosticsSnapshot): string | null {
   if (snapshot.contextError !== null) {
     return `${snapshot.contextError.code} — ${snapshot.contextError.message}`;
   }
-  return fallback;
+  return null;
 }
 
 function Row({ label, value }: { label: string; value: string }) {

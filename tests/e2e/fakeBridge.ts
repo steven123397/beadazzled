@@ -103,7 +103,7 @@ export async function installFakeBridge(
       const snapshot = {
         config: {
           schemaVersion: 1,
-          bdPath: null,
+          bdPath: null as string | null,
           // The registry is the source of truth for language/theme, so the
           // options have to live here as well as on the e2e seam.
           language: lang ?? 'en',
@@ -117,6 +117,8 @@ export async function installFakeBridge(
       };
 
       const log: string[] = [];
+      // `bd_set_path` replaces what later cached reads resolve to.
+      let currentBd = bd;
       (window as unknown as { __invokeLog: string[] }).__invokeLog = log;
       (window as unknown as { __TAURI_INTERNALS__: unknown }).__TAURI_INTERNALS__ = {
         invoke: async (command: string, args?: Record<string, unknown>) => {
@@ -129,7 +131,18 @@ export async function installFakeBridge(
             return snapshot;
           }
           if (command === 'bd_status') {
-            return bd;
+            return currentBd;
+          }
+          if (command === 'bd_set_path') {
+            const next = args?.path;
+            if (typeof next === 'string' && next.trim() !== '') {
+              snapshot.config.bdPath = next;
+              currentBd = { kind: 'ready', path: next, version: '1.3.2' };
+            } else {
+              snapshot.config.bdPath = null;
+              currentBd = bd;
+            }
+            return currentBd;
           }
           if (command === 'app_set_preferences') {
             return snapshot.config;
@@ -145,10 +158,9 @@ export async function installFakeBridge(
                 snapshot.active === null
                   ? null
                   : {
-                      project_id: id,
-                      bd_version: '1.3.2',
-                      dolt_mode: 'embedded',
-                      schema_version: 1,
+                      projectId: id,
+                      doltMode: 'embedded',
+                      schemaVersion: 1,
                     },
               contextError: null,
               calls: [

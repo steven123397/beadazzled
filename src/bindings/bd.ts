@@ -121,9 +121,11 @@ corruptBackup: string | null, };
 
 export type DiagnosticsCall = { command: string, 
 /**
- * Arguments with user text elided; never a full issue body.
+ * Arguments with user-written values redacted; never a full issue body.
  */
 argv: string, durationMs: number, exitCode: number | null, errorCode: BridgeErrorCode | null, };
+
+export type DiagnosticsContext = { projectId: string, doltMode: string, schemaVersion: number, };
 
 export type DiagnosticsSnapshot = { bd: BdStatus, 
 /**
@@ -133,7 +135,7 @@ workspace: string | null,
 /**
  * `bd context --json` for the active workspace, when it answered.
  */
-context: WorkspaceContext | null, 
+context: DiagnosticsContext | null, 
 /**
  * Why the context call failed, when it did.
  */

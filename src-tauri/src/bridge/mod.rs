@@ -521,7 +521,7 @@ fn remember_tail(tail: &mut Vec<u8>, chunk: &[u8]) {
 mod tests {
     use super::*;
     use crate::bridge::argv::{AssigneeChange, CreateSpec, UpdateSpec, WriteCommand};
-    use crate::commands::diagnostics::{DiagnosticsCall, DiagnosticsSnapshot};
+    use crate::commands::diagnostics::{DiagnosticsCall, DiagnosticsContext, DiagnosticsSnapshot};
     use crate::commands::workspace::WorkspaceSnapshot;
     use crate::sync::state::{LoadingStep, SyncState};
     use crate::workspace::discovery::BdStatus;
@@ -561,6 +561,7 @@ mod tests {
             WriteOutcome::decl(),
             WorkspaceSnapshot::decl(),
             DiagnosticsCall::decl(),
+            DiagnosticsContext::decl(),
             DiagnosticsSnapshot::decl(),
         ];
 
@@ -601,6 +602,7 @@ mod tests {
             "WriteOutcome",
             "WorkspaceSnapshot",
             "DiagnosticsCall",
+            "DiagnosticsContext",
             "DiagnosticsSnapshot",
         ] {
             assert!(

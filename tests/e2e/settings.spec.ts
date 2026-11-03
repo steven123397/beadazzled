@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test';
 
 import { clearInvokeLog, installFakeBridge, invokeLog } from './fakeBridge';
 
-test('opening settings makes no bd call and preferences persist', async ({ page }) => {
+test('opening settings makes no bd call and writes preferences', async ({ page }) => {
   await installFakeBridge(page);
   await page.goto('/#/settings');
   await expect(page.getByRole('heading', { name: 'Settings' })).toBeVisible();
@@ -39,6 +39,46 @@ test('cancelling the bd picker leaves the configuration alone', async ({ page })
   await expect(page.getByRole('alert')).toHaveCount(0);
   const calls = await invokeLog(page);
   expect(calls.filter((command) => command.startsWith('bd_status'))).toEqual([]);
+});
+
+test('choosing a bd executable probes it and becomes the configured path', async ({ page }) => {
+  await installFakeBridge(page, { dialogPath: 'C:\\tools\\bd.exe' });
+  await page.goto('/#/settings');
+  await expect(page.getByRole('main').getByText('bd 1.3.2')).toBeVisible();
+  await clearInvokeLog(page);
+
+  await page.getByRole('button', { name: 'Choose bd…' }).click();
+
+  await expect(page.getByRole('main').getByText('Path: C:\\tools\\bd.exe')).toBeVisible();
+  await expect(page.getByRole('main').getByText('Configured path')).toBeVisible();
+
+  const calls = await invokeLog(page);
+  expect(calls).toContain('bd_set_path');
+  // The probe belongs to bd_set_path; the follow-up read is cached.
+  expect(calls.filter((command) => command === 'bd_status:refresh')).toEqual([]);
+});
+
+test('the bd controls are reachable and operable with the keyboard alone', async ({ page }) => {
+  await installFakeBridge(page);
+  await page.goto('/#/settings');
+  await expect(page.getByRole('main').getByText('bd 1.3.2')).toBeVisible();
+  await clearInvokeLog(page);
+
+  // Tab from the page start until "Detect again" has focus; the bound keeps a
+  // focus-trap regression from hanging the test instead of failing it.
+  const detect = page.getByRole('button', { name: 'Detect again' });
+  for (let presses = 0; presses < 60; presses += 1) {
+    if (await detect.evaluate((element) => element === document.activeElement)) {
+      break;
+    }
+    await page.keyboard.press('Tab');
+  }
+  await expect(detect).toBeFocused();
+
+  await page.keyboard.press('Enter');
+  await expect
+    .poll(async () => (await invokeLog(page)).includes('bd_status:refresh'), { timeout: 5000 })
+    .toBe(true);
 });
 
 test('diagnostics load on demand and copy the fixed report', async ({ page }) => {
