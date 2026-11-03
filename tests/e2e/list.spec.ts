@@ -106,8 +106,13 @@ test('filtering, sorting, scrolling and grouping never call bd', async ({ page }
   await search.fill('Issue 1');
   await expect(page.locator('output')).toHaveText(/\d+ \/ 1000/);
 
-  await page.getByRole('combobox', { name: 'Sort by' }).selectOption('priority');
-  await page.getByRole('combobox', { name: 'Group by' }).selectOption('status');
+  const sortGroup = page.getByRole('group', { name: 'Sort by' });
+  await sortGroup.getByLabel('Sort by: Updated').click();
+  await sortGroup.getByRole('radio', { name: 'Priority' }).check();
+
+  const groupGroup = page.getByRole('group', { name: 'Group by' });
+  await groupGroup.getByLabel('Group by: No grouping').click();
+  await groupGroup.getByRole('radio', { name: 'Status' }).check();
   const openGroup = page.getByRole('button', { name: /^Open/ });
   await expect(openGroup).toBeVisible();
   await openGroup.click();

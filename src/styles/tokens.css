@@ -1,31 +1,31 @@
 :root {
   color-scheme: light;
 
-  --background: #f9f8f9;
+  --background: #f1f0f2;
   --foreground: #282a30;
-  --card: #ffffff;
-  --muted: #f1f0f2;
-  --muted-foreground: #6f6e77;
-  --border: #e9e8ea;
-  --border-subtle: #f0eff1;
-  --border-strong: #d7d6d9;
-  --input: #dcdbdd;
+  --card: #fbfbfc;
+  --muted: #e9e7eb;
+  --muted-foreground: #67666e;
+  --border: #e2e0e4;
+  --border-subtle: #e8e6ea;
+  --border-strong: #d2d0d5;
+  --input: #d8d7db;
   --primary: #5e6ad2;
   --primary-foreground: #ffffff;
   --ring: #7170ff;
   --destructive: #c4362f;
-  --warning: #9a6400;
+  --warning: #8a5a00;
   --success: #1d7a4a;
   /* Interaction surfaces: hover on chrome rows, selected/current items. */
-  --hover: #efeff1;
-  --selected: #e8e8ec;
+  --hover: #e7e5e9;
+  --selected: #dfdde2;
   --selected-foreground: #282a30;
 
   /* Density: control heights for the compact UI, row height for lists. */
   --control-xs: 22px;
   --control-sm: 26px;
   --control-md: 30px;
-  --row-height: 36px;
+  --row-height: 42px;
   /* Fixed so each board column can virtualize without measuring cards. */
   --card-height: 120px;
 
@@ -100,8 +100,8 @@
   --spacing-control-md: var(--control-md);
   --spacing-row: var(--row-height);
 
-  --text-2xs: 11px;
-  --text-xs: 12px;
+  --text-2xs: 12px;
+  --text-xs: 13px;
   --text-sm: var(--ui-font);
   --text-base: 14px;
   --text-lg: var(--doc-font);

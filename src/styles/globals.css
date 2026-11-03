@@ -12,6 +12,37 @@ body {
   outline-offset: 2px;
 }
 
+/* List rows paint their own selected surface plus a left accent bar, so the
+   shared ring would double the focus treatment on the same card. */
+[data-issue-id]:focus-visible {
+  outline: none;
+}
+
+/* Windows scrollbars are wide by default; filter popovers and the list use a
+   slim, rounded thumb that matches the panel. */
+.thin-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) transparent;
+}
+
+.thin-scrollbar::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.thin-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.thin-scrollbar::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: 999px;
+}
+
+.thin-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: var(--muted-foreground);
+}
+
 /* Document surface for issue bodies. Kept global so the sanitize pipeline
    stays the only renderer and every detail surface looks the same. */
 .markdown-body {

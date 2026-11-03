@@ -1,9 +1,7 @@
-import { ChevronLeft, ChevronRight, LayoutGrid, List, Settings } from 'lucide-react';
+import { LayoutGrid, List, Settings } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { NavLink } from 'react-router-dom';
 
-import { Button } from '@/components/ui/button';
-import { Tooltip } from '@/components/ui/tooltip';
 import type { WorkspaceEntry } from '@/bindings/bd';
 import { confirmLeaveDraft } from '@/lib/draft-guard';
 import { useI18n } from '@/lib/i18n/I18nProvider';
@@ -21,64 +19,43 @@ function guardDraft(event: React.MouseEvent<HTMLAnchorElement>): void {
   }
 }
 
-function ViewLink({
-  to,
-  label,
-  icon,
-  collapsed,
-}: {
-  to: string;
-  label: string;
-  icon: ReactNode;
-  collapsed: boolean;
-}) {
-  const link = (
+function ViewLink({ to, label, icon }: { to: string; label: string; icon: ReactNode }) {
+  return (
     <NavLink
       to={to}
       onClick={guardDraft}
-      title={collapsed ? label : undefined}
       className={({ isActive }) => cn(LINK_CLASS, isActive ? ACTIVE_CLASS : IDLE_CLASS)}
     >
       {icon}
-      <span className={collapsed ? 'sr-only' : 'truncate'}>{label}</span>
+      <span className="truncate">{label}</span>
     </NavLink>
-  );
-
-  return collapsed ? (
-    <Tooltip label={label} side="right" className="block w-full">
-      {link}
-    </Tooltip>
-  ) : (
-    link
   );
 }
 
 export function Sidebar({
   project,
   collapsed = false,
-  onToggle,
 }: {
   project: WorkspaceEntry | null;
   collapsed?: boolean;
-  /** The rail stays reachable by mouse; Ctrl+B is not the only way back. */
-  onToggle?: () => void;
 }) {
   const { t } = useI18n();
 
   return (
     <aside
+      id="app-sidebar"
       aria-label={t('shell.sidebar')}
+      aria-hidden={collapsed ? true : undefined}
+      inert={collapsed ? true : undefined}
       data-collapsed={collapsed}
       className={cn(
-        'flex shrink-0 flex-col gap-0.5 border-r border-border-subtle bg-background p-2',
-        collapsed ? 'w-11' : 'w-44'
+        'flex shrink-0 flex-col gap-0.5 overflow-hidden bg-background transition-[width,opacity,padding] duration-200 ease-out',
+        collapsed ? 'pointer-events-none w-0 p-0 opacity-0' : 'w-44 p-2'
       )}
     >
       {project === null ? (
-        <p className="flex h-control-sm items-center gap-2 px-2 text-xs text-muted-foreground">
-          <span className={collapsed ? 'sr-only' : 'truncate'}>
-            {t('shell.workspace.noneOpen')}
-          </span>
+        <p className="flex h-control-sm items-center gap-2 px-2 text-sm text-muted-foreground">
+          <span className="truncate">{t('shell.workspace.noneOpen')}</span>
         </p>
       ) : (
         <nav aria-label={t('shell.views')} className="flex flex-col gap-0.5">
@@ -86,13 +63,11 @@ export function Sidebar({
             to={`/w/${project.projectId}/list`}
             label={t('nav.list')}
             icon={<List aria-hidden="true" className="size-3.5 shrink-0" />}
-            collapsed={collapsed}
           />
           <ViewLink
             to={`/w/${project.projectId}/board`}
             label={t('nav.board')}
             icon={<LayoutGrid aria-hidden="true" className="size-3.5 shrink-0" />}
-            collapsed={collapsed}
           />
         </nav>
       )}
@@ -104,36 +79,8 @@ export function Sidebar({
           to="/settings"
           label={t('nav.settings')}
           icon={<Settings aria-hidden="true" className="size-3.5 shrink-0" />}
-          collapsed={collapsed}
         />
       </nav>
-      {onToggle === undefined ? null : (
-        <div className="mt-auto">
-          <Tooltip
-            label={t(collapsed ? 'shell.sidebar.expand' : 'shell.sidebar.collapse')}
-            side="right"
-            className="block w-full"
-          >
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={onToggle}
-              aria-label={t(collapsed ? 'shell.sidebar.expand' : 'shell.sidebar.collapse')}
-              aria-expanded={!collapsed}
-              className="w-full justify-start px-2 text-xs text-muted-foreground"
-            >
-              {collapsed ? (
-                <ChevronRight aria-hidden="true" className="size-3.5" />
-              ) : (
-                <ChevronLeft aria-hidden="true" className="size-3.5" />
-              )}
-              <span className={collapsed ? 'sr-only' : 'truncate'}>
-                {t(collapsed ? 'shell.sidebar.expand' : 'shell.sidebar.collapse')}
-              </span>
-            </Button>
-          </Tooltip>
-        </div>
-      )}
     </aside>
   );
 }

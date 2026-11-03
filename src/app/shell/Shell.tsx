@@ -302,13 +302,17 @@ export function Shell({
         project={project}
         workspaces={snapshot?.config.workspaces ?? []}
         missing={snapshot?.missing ?? []}
+        sidebarCollapsed={sidebarCollapsed}
+        onToggleSidebar={toggleSidebar}
         onSwitch={switchWorkspace}
         onRefresh={refresh}
         onOpenPalette={openPalette}
       />
-      <div className="flex min-h-0 flex-1">
-        <Sidebar project={project} collapsed={sidebarCollapsed} onToggle={toggleSidebar} />
-        <main className="min-w-0 flex-1 overflow-auto">
+      <div className="flex min-h-0 flex-1 pb-2 pr-2">
+        <Sidebar project={project} collapsed={sidebarCollapsed} />
+        {/* The content column is its own panel: the sidebar sits on the app
+            background, and every screen paints inside this card. */}
+        <main className="thin-scrollbar ml-2 mt-2 min-w-0 flex-1 overflow-auto rounded-lg border border-border bg-card shadow-xs">
           <AppRefreshProvider value={appRefresh}>
             <Outlet />
           </AppRefreshProvider>

@@ -530,20 +530,14 @@ test('ctrl+b collapses the sidebar and the choice survives a restart', async () 
 
   fireEvent.keyDown(window, { key: 'b', ctrlKey: true });
 
-  expect(screen.getByRole('complementary', { name: 'Sidebar' })).toHaveAttribute(
-    'data-collapsed',
-    'true'
-  );
+  expect(document.querySelector('#app-sidebar')).toHaveAttribute('data-collapsed', 'true');
   expect(localStorage.getItem('beadazzled.sidebar.collapsed')).toBe('true');
 
   first.unmount();
   render(<App workspaceApi={api} />);
   await screen.findByRole('heading', { name: 'List' });
 
-  expect(screen.getByRole('complementary', { name: 'Sidebar' })).toHaveAttribute(
-    'data-collapsed',
-    'true'
-  );
+  expect(document.querySelector('#app-sidebar')).toHaveAttribute('data-collapsed', 'true');
 });
 
 test('an unrecognised stored sidebar value falls back to expanded', async () => {
@@ -565,7 +559,7 @@ test('an unrecognised stored sidebar value falls back to expanded', async () => 
   );
 });
 
-test('a collapsed sidebar keeps labelled targets, icons and a mouse toggle', async () => {
+test('a collapsed sidebar gets out of the way and the top bar toggle restores it', async () => {
   window.location.hash = '#/w/p1/list';
 
   render(
@@ -578,16 +572,16 @@ test('a collapsed sidebar keeps labelled targets, icons and a mouse toggle', asy
   await screen.findByRole('heading', { name: 'List' });
 
   const sidebar = screen.getByRole('complementary', { name: 'Sidebar' });
-  fireEvent.click(within(sidebar).getByRole('button', { name: 'Collapse sidebar' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Collapse sidebar' }));
 
   expect(sidebar).toHaveAttribute('data-collapsed', 'true');
-  expect(within(sidebar).getByRole('link', { name: 'List' })).toBeInTheDocument();
-  expect(within(sidebar).getByRole('link', { name: 'Board' })).toBeInTheDocument();
-  expect(within(sidebar).getByRole('link', { name: 'Settings' })).toBeInTheDocument();
-  expect(sidebar.querySelectorAll('svg').length).toBeGreaterThanOrEqual(4);
+  expect(sidebar).toHaveAttribute('aria-hidden', 'true');
+  expect(screen.getByRole('button', { name: 'Expand sidebar' })).toBeInTheDocument();
 
-  fireEvent.click(within(sidebar).getByRole('button', { name: 'Expand sidebar' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Expand sidebar' }));
+
   expect(sidebar).toHaveAttribute('data-collapsed', 'false');
+  expect(within(sidebar).getByRole('link', { name: 'List' })).toBeInTheDocument();
 });
 
 async function openDiagnostics() {

@@ -24,7 +24,7 @@ import { loadListPosition, saveListPosition } from './position';
 import { Row, rowId } from './Row';
 
 /** Must match `--row-height` in tokens.css. */
-const ROW_HEIGHT = 36;
+const ROW_HEIGHT = 42;
 const OVERSCAN = 10;
 const INITIAL_RECT = { width: 0, height: 600 };
 
@@ -117,6 +117,10 @@ export function ListView({ projectId, issues, syncState = HEALTHY, onRefresh }: 
     [issues, view, searchText]
   );
   const activeFilters = hasActiveFilters(view.filter);
+  const showType = useMemo(
+    () => new Set(visible.map((issue) => issue.issue_type)).size > 1,
+    [visible]
+  );
 
   const [focusedId, setFocusedId] = useState<string | null>(initialPosition?.focusedId ?? null);
   const [collapsedGroups, setCollapsedGroups] = useState<ReadonlySet<string>>(new Set());
@@ -375,8 +379,8 @@ export function ListView({ projectId, issues, syncState = HEALTHY, onRefresh }: 
       data-sync={syncState.kind}
       className="flex h-full min-h-0 flex-col"
     >
-      <header className="flex shrink-0 items-center justify-between border-b border-border px-3 py-2">
-        <h1 className="text-sm font-semibold">{t('nav.list')}</h1>
+      <header className="flex shrink-0 items-center justify-between border-b border-border px-4 py-2">
+        <h1 className="text-base font-semibold">{t('nav.list')}</h1>
       </header>
       {total > 0 ? (
         <FilterBar
@@ -420,7 +424,7 @@ export function ListView({ projectId, issues, syncState = HEALTHY, onRefresh }: 
           role="list"
           aria-label={t('list.issues')}
           tabIndex={0}
-          className="min-h-0 flex-1 overflow-auto"
+          className="min-h-0 flex-1 overflow-auto thin-scrollbar pb-2"
         >
           <div className="relative w-full" style={{ height: virtualizer.getTotalSize() }}>
             {virtualItems.map((item) => {
@@ -450,6 +454,7 @@ export function ListView({ projectId, issues, syncState = HEALTHY, onRefresh }: 
                   issue={entry.issue}
                   start={item.start}
                   focused={entry.issue.id === focusedId}
+                  showType={showType}
                   onOpen={openIssue}
                   onFocus={setFocusedId}
                 />
@@ -475,7 +480,8 @@ function LoadingRows({ label }: { label: string }) {
           key={index}
           data-testid="list-skeleton-row"
           aria-hidden="true"
-          className="flex h-9 items-center gap-3 border-b border-border px-3"
+          className="mx-1 flex items-center gap-3 bg-muted/30 px-3"
+          style={{ height: 'var(--row-height)' }}
         >
           <span className="h-3 w-24 rounded bg-muted" />
           <span className="h-3 w-16 rounded bg-muted" />
