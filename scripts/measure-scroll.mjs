@@ -40,9 +40,18 @@ const budgets = { p50: 18, p95: 22, max: 50 };
 const scenarios = [
   { name: 'steady', delta: 48, steps: 120, group: 'none', from: 0, minDistance: 5_000 },
   { name: 'fling', delta: 240, steps: 150, group: 'none', from: 0, minDistance: 25_000 },
-  // Start past the open bucket (about the first 570 rows) so the run crosses
-  // status-group headers and reaches the tail of the list.
-  { name: 'grouped', delta: 48, steps: 150, group: 'status', from: 20_000, minDistance: 6_000 },
+  // The open bucket runs to about 26,200px (624 rows x 42px), so start just
+  // past it and travel far enough to finish at the bottom of the list, which
+  // covers the remaining group headers instead of stopping mid-group.
+  {
+    name: 'grouped',
+    delta: 48,
+    steps: 330,
+    group: 'status',
+    from: 26_500,
+    minDistance: 14_000,
+    reachBottom: true,
+  },
 ];
 // The board virtualizes each column separately; Ready holds every open ticket
 // (about 570 of the 1000-issue fixture) and is the column under test.
@@ -306,6 +315,7 @@ async function measureRun(browser, scenario, run) {
           previous = now;
         }
         const endScroll = list.scrollTop;
+        const maxScroll = list.scrollHeight - list.clientHeight;
         frames.sort((left, right) => left - right);
         return {
           p50: frames[Math.floor(frames.length * 0.5)],
@@ -313,6 +323,7 @@ async function measureRun(browser, scenario, run) {
           max: frames[frames.length - 1],
           startScroll,
           endScroll,
+          maxScroll,
           distance: endScroll - startScroll,
         };
       },
@@ -358,6 +369,11 @@ async function main() {
         runs,
         distance: runs[0]?.distance ?? 0,
         minDistance: scenario.minDistance,
+        // A scenario that claims to cover the tail has to actually arrive
+        // there, or the distance gate alone can pass in the middle of a group.
+        reachedBottom:
+          scenario.reachBottom !== true ||
+          runs.every((entry) => entry.maxScroll - entry.endScroll <= 1),
         median: {
           p50: median(runs.map((entry) => entry.p50)),
           p95: median(runs.map((entry) => entry.p95)),
@@ -370,7 +386,8 @@ async function main() {
         summary.median.p50 < budgets.p50 &&
         summary.median.p95 < budgets.p95 &&
         summary.worstMax < budgets.max &&
-        summary.distance >= summary.minDistance;
+        summary.distance >= summary.minDistance &&
+        summary.reachedBottom;
       results.push(summary);
     }
 
@@ -399,9 +416,9 @@ async function main() {
             1
           )}ms; worst max ${result.worstMax.toFixed(
             1
-          )}ms; travelled ${result.distance}px (min ${result.minDistance}px) — ${
-            result.passed ? 'PASS' : 'FAIL'
-          }\n`
+          )}ms; travelled ${result.distance}px (min ${result.minDistance}px)${
+            result.reachedBottom ? '' : '; stopped short of the tail'
+          } — ${result.passed ? 'PASS' : 'FAIL'}\n`
         );
       }
       console.log(

@@ -11,6 +11,7 @@
 - 预算收紧为 `p50 < 18ms、p95 < 22ms、max < 50ms`，与 60Hz 帧预算对齐；p95 允许一帧余量，max 吸收单次 GC/编译停顿。
 - 1000 条 fixture 每 11 条出一条 `blocked`（约 91 张），其中一半带真实依赖（`depends_on_id = bza-1`），同时覆盖手动阻塞和依赖阻塞两种 chip。
 - 看板新增 `board-blocked` 场景，专门滚阻塞列（每卡多一行 chip，DOM 最重）。
+- grouped 场景随行高与状态分布重新对齐：open 桶约 624 行 × 42px ≈ 26.2k，起点从 20k 移到 26.5k，步数 150 → 330，并用 `reachBottom` 断言终点落在列表底部（此前停在 open 桶内、距底部约 1.5 万 px）。
 
 ## 结果（生产构建，1000 条，`--runs=3`）
 
@@ -20,7 +21,7 @@
 |---|---|---|---|
 | steady 48px/帧 | 16.7ms | 18.5ms | 36.8ms |
 | fling 240px/帧 | 16.8ms | 20.0ms | 29.0ms |
-| grouped 48px/帧 | 16.6ms | 18.3ms | 19.5ms |
+| grouped 48px/帧 | 16.7ms | 18.3ms | 21.5ms |
 
 看板（`--view=board`）：
 
@@ -30,7 +31,7 @@
 | board-fling（Ready） | 16.7ms | 19.1ms | 32.9ms |
 | board-blocked（Blocked） | 17.0ms | 19.0ms | 30.9ms |
 
-均通过新门禁；p50 距 18ms 预算约 1.3ms，p95 距 22ms 约 2.0ms。
+均通过新门禁；p50 距 18ms 预算约 1.3ms，p95 距 22ms 约 2.4ms。
 
 ## 结论
 

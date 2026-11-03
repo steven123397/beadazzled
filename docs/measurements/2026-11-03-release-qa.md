@@ -14,12 +14,12 @@
 | 项 | 结果 |
 |---|---|
 | `check:fast` | PASS |
-| 单测 | 595 PASS |
+| 单测 | 601 PASS |
 | E2E（含 axe） | 57 PASS |
 | axe 真实数据（9 路由 × 2 主题 = 18 次扫描） | 0 serious / 0 critical |
 | 关键文本对比度 | PASS（修复 2 处，见下） |
 | 1000px / 640px 窄窗 | 无裁切；List 筛选栏换行、Board 横向滚动、Detail 右栏在 <1000px 落到正文下方 |
-| 首屏 JS | 145.7 KB gzip（预算 150）PASS |
+| 首屏 JS | 145.8 KB gzip（预算 150）PASS |
 | 详情打开 | P95 44.0ms（预算 50）PASS，open 期间 bd 调用 0 |
 | 64 KiB 首次渲染 | 最终空闲轮 P50 92.6ms（预算 100）PASS；见“波动”一节 |
 | 滚动帧率 | List 与 Board 全部场景 PASS（预算 p50 < 18 / p95 < 22 / max < 50，见 `2026-11-03-scroll-budget-alignment.md`） |
@@ -32,6 +32,10 @@
 4. **视觉回归基线**：`docs/design/2026-11-03-release/` 入库 17 张（8 张主视图浅/深、4 张状态、1 张 64 KiB 长文、4 张窄窗）。
 
 axe 深色用例现在带 assignee、层级 id、标签和正文链接，防止两处对比度修复回退。
+
+## PR 评审后续
+
+Qodo 在 PR #11 上提出 7 条发现，逐条对照代码核验后全部成立，合并前修复：选择后面板把焦点还给 trigger、写入失败重挂载后恢复焦点、summary 获得焦点时屏蔽单键快捷键、看板阻塞 chip 的键盘可达性与双重原因、工作区选择器改为受控值、以及 grouped 滚动基准的起点与终点。新增 6 条单测（595 → 601），`measure:scroll` grouped 场景按 42px 行高重算并重新测量。
 
 ## 64 KiB 渲染波动
 

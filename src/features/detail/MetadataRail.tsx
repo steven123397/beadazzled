@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -52,6 +52,24 @@ export function MetadataRail({
   // on the value that is actually stored.
   const [statusReset, setStatusReset] = useState(0);
   const [priorityReset, setPriorityReset] = useState(0);
+  // A failed write remounts the select on the stored value. Remember whether
+  // the keyboard was on it so the replacement trigger takes focus back.
+  const restoreStatusFocus = useRef(false);
+  const restorePriorityFocus = useRef(false);
+
+  useEffect(() => {
+    if (restoreStatusFocus.current) {
+      restoreStatusFocus.current = false;
+      document.getElementById('detail-status')?.focus();
+    }
+  }, [statusReset]);
+
+  useEffect(() => {
+    if (restorePriorityFocus.current) {
+      restorePriorityFocus.current = false;
+      document.getElementById('detail-priority')?.focus();
+    }
+  }, [priorityReset]);
 
   const dirty = assigneeDirty || (editingLabels && newLabel.trim() !== '');
   useEffect(() => {
@@ -124,6 +142,7 @@ export function MetadataRail({
       'status',
     ]).then((saved) => {
       if (!saved) {
+        restoreStatusFocus.current = true;
         setStatusReset((value) => value + 1);
       }
     });
@@ -249,6 +268,7 @@ export function MetadataRail({
                     ['priority']
                   ).then((saved) => {
                     if (!saved) {
+                      restorePriorityFocus.current = true;
                       setPriorityReset((value) => value + 1);
                     }
                   })

@@ -81,12 +81,27 @@ test('dependency-blocked cards name the blockers and the cause', () => {
       issue: issue({ title: 'Waiting' }),
       blockers: ['bza-a', 'bza-b'],
       manual: false,
-    })
+    }),
+    { focused: true }
   );
 
   expect(screen.getByText('Blocked by 2')).toBeInTheDocument();
-  expect(screen.getByTitle('bza-a, bza-b')).toBeInTheDocument();
+  // The ids live on a focusable chip, not a hover-only title.
+  expect(screen.getByLabelText('Blocked by 2: bza-a, bza-b')).toHaveAttribute('tabindex', '0');
   expect(screen.queryByText('Manually blocked')).not.toBeInTheDocument();
+});
+
+test('a card blocked by hand and by dependencies keeps both causes', () => {
+  renderCard(
+    card({
+      issue: issue({ status: 'blocked' }),
+      blockers: ['bza-a'],
+      manual: true,
+    })
+  );
+
+  expect(screen.getByText('Blocked by 1')).toBeInTheDocument();
+  expect(screen.getByLabelText('Manually blocked · Blocked by 1: bza-a')).toBeInTheDocument();
 });
 
 test('manually blocked cards are labelled as such', () => {

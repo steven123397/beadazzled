@@ -60,6 +60,10 @@ export function TopBar({
           label={t('topbar.workspace')}
           value={project?.path ?? ''}
           size="sm"
+          // A switch that is rejected (missing directory, failed switch)
+          // leaves the active workspace unchanged; the trigger must follow
+          // that value instead of the workspace that was clicked.
+          controlled
           options={[
             ...(project === null
               ? [{ value: '', label: t('shell.workspace.none'), disabled: true }]

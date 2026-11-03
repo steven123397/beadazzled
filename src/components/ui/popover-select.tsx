@@ -24,6 +24,12 @@ export type PopoverSelectProps = {
   /** Applied to the summary, so a screen can focus it by id. */
   id?: string;
   disabled?: boolean;
+  /**
+   * Follow `value` on every render instead of holding the clicked option.
+   * Use it when a rejected change must snap the trigger back to the value
+   * that is actually stored.
+   */
+  controlled?: boolean;
 };
 
 /** Each size carries its own height and type scale, so the trigger reads the
@@ -50,16 +56,19 @@ export function PopoverSelect({
   panelClassName,
   id,
   disabled = false,
+  controlled = false,
 }: PopoverSelectProps) {
   const name = useId();
   const detailsRef = useRef<HTMLDetailsElement>(null);
   // The URL round-trip is asynchronous. Keeping the choice locally makes the
   // radio check on the same click, instead of snapping back during the render
-  // that still carries the previous value.
-  const [current, setCurrent] = useState(value);
+  // that still carries the previous value. A controlled select skips this
+  // state: a rejected change must fall back to the value that is stored.
+  const [localCurrent, setLocalCurrent] = useState(value);
   useEffect(() => {
-    setCurrent(value);
+    setLocalCurrent(value);
   }, [value]);
+  const current = controlled ? value : localCurrent;
 
   useEffect(() => {
     function onPointerDown(event: PointerEvent): void {
@@ -138,11 +147,17 @@ export function PopoverSelect({
                 if (option.disabled === true) {
                   return;
                 }
-                setCurrent(option.value);
+                if (!controlled) {
+                  setLocalCurrent(option.value);
+                }
                 onChange(option.value);
                 const details = event.currentTarget.closest('details');
                 if (details !== null) {
                   details.open = false;
+                  // The radio is now inside a closed panel; leaving focus there
+                  // strands the keyboard user, so hand it back to the trigger
+                  // exactly as the Escape path does.
+                  details.querySelector('summary')?.focus();
                 }
               }}
             />

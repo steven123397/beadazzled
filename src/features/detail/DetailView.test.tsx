@@ -423,6 +423,21 @@ test('detail single-key shortcuts open editors and focus controls', () => {
   fireEvent.keyDown(window, { key: 'p' });
   expect(document.getElementById('detail-priority')).toHaveFocus();
 });
+
+test('single-key shortcuts stay out of a focused metadata dropdown', () => {
+  renderDetail(issue('bza-b'), undefined, fakeWrites());
+  const status = document.getElementById('detail-status');
+  if (status === null) {
+    throw new Error('no status trigger');
+  }
+
+  // A summary now owns the keys a native select used to; `e` must not jump
+  // into the title editor while the dropdown trigger has focus.
+  status.focus();
+  fireEvent.keyDown(status, { key: 'e' });
+
+  expect(screen.queryByRole('textbox', { name: 'Title' })).toBeNull();
+});
 test('a saved title stays old until the journal echo updates the store', async () => {
   const writes = fakeWrites();
   const target = issue('bza-b', { title: 'Old title' });

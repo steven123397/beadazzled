@@ -209,6 +209,39 @@ test('a failed status write reports the error and leaves the control usable', as
   await vi.waitFor(() => expect(writes.submit).toHaveBeenCalledTimes(2));
 });
 
+test('a failed status write returns focus to the status trigger', async () => {
+  const writes = fakeWrites({
+    submit: vi.fn(async () => ({
+      status: 'failed' as const,
+      error: { code: 'BD_LOCKED' as const, message: 'the database is busy' },
+    })),
+  });
+  renderRail(issue('bza-b'), undefined, writes);
+  document.getElementById('detail-status')?.focus();
+
+  choose('Status', /In progress/);
+
+  expect(await screen.findByRole('alert')).toBeInTheDocument();
+  // The remount must hand focus back instead of dropping it to the body.
+  await vi.waitFor(() => expect(document.getElementById('detail-status')).toHaveFocus());
+});
+
+test('a failed priority write returns focus to the priority trigger', async () => {
+  const writes = fakeWrites({
+    submit: vi.fn(async () => ({
+      status: 'failed' as const,
+      error: { code: 'BD_LOCKED' as const, message: 'the database is busy' },
+    })),
+  });
+  renderRail(issue('bza-b'), undefined, writes);
+  document.getElementById('detail-priority')?.focus();
+
+  choose('Priority', /^P1$/);
+
+  expect(await screen.findByRole('alert')).toBeInTheDocument();
+  await vi.waitFor(() => expect(document.getElementById('detail-priority')).toHaveFocus());
+});
+
 test('a conflict while adding a label keeps the typed label', async () => {
   const writes = fakeWrites({
     submit: vi.fn(async () => ({

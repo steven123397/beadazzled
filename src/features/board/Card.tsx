@@ -11,6 +11,7 @@ import { Ban, GripVertical } from 'lucide-react';
 import type { Issue } from '@/bindings/bd';
 import { Badge } from '@/components/ui/badge';
 import { PriorityIcon } from '@/components/ui/priority-icon';
+import { Tooltip } from '@/components/ui/tooltip';
 import { useI18n } from '@/lib/i18n/I18nProvider';
 
 import type { BoardCard, ColumnId } from './columns';
@@ -56,11 +57,21 @@ export function CardBody({
     [extraLabels, t]
   );
   const blockedIds = blockers.join(', ');
-  const blockedLabel =
-    blockers.length > 0
-      ? t('board.card.blockedBy', { count: blockers.length })
-      : t('board.card.manualBlocked');
+  const blockedBy =
+    blockers.length > 0 ? t('board.card.blockedBy', { count: blockers.length }) : '';
+  const blockedLabel = blockers.length > 0 ? blockedBy : t('board.card.manualBlocked');
+  // A card can be blocked by hand and by dependencies at once. The chip stays
+  // compact, but the full cause and the blocker ids go in a focusable hint.
+  const blockedDetail =
+    blockedIds === ''
+      ? ''
+      : manual
+        ? `${t('board.card.manualBlocked')} · ${blockedBy}: ${blockedIds}`
+        : `${blockedBy}: ${blockedIds}`;
   const blocked = manual || blockers.length > 0;
+  const chipClass = `flex min-w-0 shrink-0 items-center gap-0.5 rounded-sm px-1 ${
+    focused ? 'bg-selected-foreground/10 text-selected-foreground' : 'bg-warning/12 text-warning'
+  }`;
   // Secondary text sits on `--selected` while focused; the muted tone only
   // reaches 4.1:1 there at 11px, below the 4.5:1 floor for small text.
   const secondary = focused ? 'text-selected-foreground' : 'text-muted-foreground';
@@ -72,17 +83,25 @@ export function CardBody({
         <span className="tabular-nums">P{issue.priority}</span>
         <span className="min-w-0 truncate font-mono">{issue.id}</span>
         {blocked ? (
-          <span
-            className={`flex min-w-0 shrink-0 items-center gap-0.5 rounded-sm px-1 ${
-              focused
-                ? 'bg-selected-foreground/10 text-selected-foreground'
-                : 'bg-warning/12 text-warning'
-            }`}
-            title={blockedIds === '' ? undefined : blockedIds}
-          >
-            <Ban aria-hidden="true" className="size-3 shrink-0" />
-            <span className="truncate">{blockedLabel}</span>
-          </span>
+          blockedDetail === '' ? (
+            <span className={chipClass}>
+              <Ban aria-hidden="true" className="size-3 shrink-0" />
+              <span className="truncate">{blockedLabel}</span>
+            </span>
+          ) : (
+            <Tooltip label={blockedDetail} className="min-w-0 shrink-0">
+              <span
+                // The board uses a roving tabindex, so the chip joins the tab
+                // order only while its card is the focused one.
+                tabIndex={focused ? 0 : -1}
+                aria-label={blockedDetail}
+                className={chipClass}
+              >
+                <Ban aria-hidden="true" className="size-3 shrink-0" />
+                <span className="truncate">{blockedLabel}</span>
+              </span>
+            </Tooltip>
+          )
         ) : null}
         <span className="ml-auto" />
         {pending ? (

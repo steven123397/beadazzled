@@ -44,6 +44,55 @@ test('Escape closes the menu without reaching the shell', () => {
   window.removeEventListener('keydown', shellListener);
 });
 
+test('choosing an option returns focus to the trigger', () => {
+  render(<PopoverSelect label="Status" value="open" options={OPTIONS} onChange={vi.fn()} />);
+  const details = document.querySelector('details');
+  if (details === null) {
+    throw new Error('no menu');
+  }
+  details.open = true;
+
+  fireEvent.click(screen.getByRole('radio', { name: 'Closed' }));
+
+  // The radio now sits in a closed panel; focus has to come back out.
+  expect(screen.getByLabelText('Status: Closed')).toHaveFocus();
+});
+
+test('a controlled select follows the value prop instead of the clicked option', () => {
+  const onChange = vi.fn();
+  const { rerender } = render(
+    <PopoverSelect
+      controlled
+      label="Workspace"
+      value="open"
+      options={OPTIONS}
+      onChange={onChange}
+    />
+  );
+  const details = document.querySelector('details');
+  if (details === null) {
+    throw new Error('no menu');
+  }
+  details.open = true;
+
+  fireEvent.click(screen.getByRole('radio', { name: 'In progress' }));
+
+  expect(onChange).toHaveBeenCalledWith('in_progress');
+  // A rejected change never reaches the store, so the trigger stays put.
+  expect(screen.getByLabelText('Workspace: Open')).toBeInTheDocument();
+
+  rerender(
+    <PopoverSelect
+      controlled
+      label="Workspace"
+      value="in_progress"
+      options={OPTIONS}
+      onChange={onChange}
+    />
+  );
+  expect(screen.getByLabelText('Workspace: In progress')).toBeInTheDocument();
+});
+
 test('a disabled select cannot be opened or focused', () => {
   render(
     <PopoverSelect label="Status" value="open" options={OPTIONS} onChange={vi.fn()} disabled />

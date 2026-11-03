@@ -77,10 +77,17 @@ export function isEditableTarget(target: EventTarget | null): boolean {
   if (element.isContentEditable === true) {
     return true;
   }
-  // A contenteditable host often contains focusable descendants (spans, code
-  // blocks); checking only the event target would let single-key shortcuts
-  // fire inside an editor.
   if (typeof element.closest === 'function') {
+    // A `<summary>` is the trigger of a dropdown or disclosure. It replaces
+    // the native `<select>` in the detail rail and the filter bar, so it has
+    // to keep the same protection: while it owns focus, single-key shortcuts
+    // must not act on the page behind it.
+    if (element.closest('summary') !== null) {
+      return true;
+    }
+    // A contenteditable host often contains focusable descendants (spans, code
+    // blocks); checking only the event target would let single-key shortcuts
+    // fire inside an editor.
     const host = element.closest('[contenteditable]');
     if (host !== null) {
       return host.getAttribute('contenteditable') !== 'false';
