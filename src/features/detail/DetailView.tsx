@@ -1,3 +1,4 @@
+import { ChevronRight } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 
@@ -453,9 +454,13 @@ export function DetailView({
             </section>
 
             {design === null ? null : (
-              <details className="mt-6">
-                <summary className="cursor-pointer text-sm font-semibold">
+              <details className="group mt-6">
+                <summary className="flex w-fit cursor-pointer list-none items-center gap-1.5 text-sm font-semibold">
                   {t('detail.design')}
+                  <ChevronRight
+                    aria-hidden="true"
+                    className="size-3.5 text-muted-foreground transition-transform group-open:rotate-90"
+                  />
                 </summary>
                 <div className="mt-2">
                   <Markdown onOpenLink={openLink}>{design}</Markdown>
@@ -464,9 +469,13 @@ export function DetailView({
             )}
 
             {notes === null ? null : (
-              <details className="mt-4">
-                <summary className="cursor-pointer text-sm font-semibold">
+              <details className="group mt-6">
+                <summary className="flex w-fit cursor-pointer list-none items-center gap-1.5 text-sm font-semibold">
                   {t('detail.notes')}
+                  <ChevronRight
+                    aria-hidden="true"
+                    className="size-3.5 text-muted-foreground transition-transform group-open:rotate-90"
+                  />
                 </summary>
                 <div className="mt-2">
                   <Markdown onOpenLink={openLink}>{notes}</Markdown>

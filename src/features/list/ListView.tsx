@@ -1,11 +1,22 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useVirtualizer } from '@tanstack/react-virtual';
+import { Inbox, SearchX, TriangleAlert } from 'lucide-react';
 
 import type { Issue, SyncState } from '@/bindings/bd';
 import { isEditableTarget, isOverlayOpen } from '@/app/keyboard/resolve';
+import { Button } from '@/components/ui/button';
 import { FilterBar } from '@/components/filter-bar';
 import { useI18n } from '@/lib/i18n/I18nProvider';
+import { cn } from '@/lib/utils';
 import { buildSearchIndex, hasActiveFilters } from '@/lib/view/filter';
 import {
   createListViewState,
@@ -399,13 +410,14 @@ export function ListView({ projectId, issues, syncState = HEALTHY, onRefresh }: 
         >
           <span className="min-w-0 flex-1">{t('list.state.stale')}</span>
           {onRefresh === undefined ? null : (
-            <button
-              type="button"
+            <Button
+              size="xs"
+              variant="secondary"
               onClick={onRefresh}
-              className="rounded border border-destructive/40 px-2 py-1"
+              className="border-destructive/40 text-destructive hover:bg-destructive/10"
             >
               {t('list.state.retry')}
-            </button>
+            </Button>
           )}
         </div>
       ) : null}
@@ -480,7 +492,7 @@ function LoadingRows({ label }: { label: string }) {
           key={index}
           data-testid="list-skeleton-row"
           aria-hidden="true"
-          className="mx-1 flex items-center gap-3 bg-muted/30 px-3"
+          className="mx-1 flex items-center gap-3 rounded-md bg-muted/30 px-3"
           style={{ height: 'var(--row-height)' }}
         >
           <span className="h-3 w-24 rounded bg-muted" />
@@ -496,16 +508,13 @@ function LoadingRows({ label }: { label: string }) {
 function EmptyState() {
   const { t } = useI18n();
   return (
-    <div className="flex flex-1 flex-col items-center justify-center gap-2 p-6 text-center">
+    <div className="flex flex-1 flex-col items-center justify-center gap-2.5 p-6 text-center">
+      <StateBadge icon={<Inbox aria-hidden="true" className="size-4" />} />
       <p className="text-sm font-medium">{t('list.state.empty.title')}</p>
-      <p className="text-xs text-muted-foreground">{t('list.state.empty.body')}</p>
-      <button
-        type="button"
-        disabled
-        className="rounded border border-border px-3 py-1 text-xs text-muted-foreground disabled:opacity-60"
-      >
+      <p className="max-w-sm text-xs text-muted-foreground">{t('list.state.empty.body')}</p>
+      <Button size="md" variant="secondary" disabled className="mt-1">
         {t('list.state.empty.create')}
-      </button>
+      </Button>
       <p className="max-w-sm text-xs text-muted-foreground">
         {t('list.state.empty.createDisabled')}
       </p>
@@ -516,16 +525,13 @@ function EmptyState() {
 function NoMatchState({ onClear }: { onClear: () => void }) {
   const { t } = useI18n();
   return (
-    <div className="flex flex-1 flex-col items-center justify-center gap-2 p-6 text-center">
+    <div className="flex flex-1 flex-col items-center justify-center gap-2.5 p-6 text-center">
+      <StateBadge icon={<SearchX aria-hidden="true" className="size-4" />} />
       <p className="text-sm font-medium">{t('list.state.noMatch.title')}</p>
-      <p className="text-xs text-muted-foreground">{t('list.state.noMatch.body')}</p>
-      <button
-        type="button"
-        onClick={onClear}
-        className="rounded border border-border px-3 py-1 text-xs"
-      >
+      <p className="max-w-sm text-xs text-muted-foreground">{t('list.state.noMatch.body')}</p>
+      <Button size="md" variant="secondary" onClick={onClear} className="mt-1">
         {t('list.state.noMatch.clear')}
-      </button>
+      </Button>
     </div>
   );
 }
@@ -535,21 +541,33 @@ function ErrorState({ message, onRefresh }: { message: string; onRefresh?: () =>
   return (
     <div
       role="alert"
-      className="flex flex-1 flex-col items-center justify-center gap-2 p-6 text-center"
+      className="flex flex-1 flex-col items-center justify-center gap-2.5 p-6 text-center"
     >
+      <StateBadge tone="danger" icon={<TriangleAlert aria-hidden="true" className="size-4" />} />
       <p className="text-sm font-medium text-destructive">{t('list.state.error.title')}</p>
       <p className="text-xs text-muted-foreground">{t('list.state.error.body')}</p>
       <p className="max-w-md text-xs text-muted-foreground">{message}</p>
       {onRefresh === undefined ? null : (
-        <button
-          type="button"
-          onClick={onRefresh}
-          className="rounded border border-border px-3 py-1 text-xs"
-        >
+        <Button size="md" variant="secondary" onClick={onRefresh} className="mt-1">
           {t('list.state.retry')}
-        </button>
+        </Button>
       )}
     </div>
+  );
+}
+
+/** The quiet mark above an empty/no-match/error explanation. */
+function StateBadge({ icon, tone = 'muted' }: { icon: ReactNode; tone?: 'muted' | 'danger' }) {
+  return (
+    <span
+      aria-hidden="true"
+      className={cn(
+        'flex size-9 items-center justify-center rounded-full',
+        tone === 'danger' ? 'bg-destructive/10 text-destructive' : 'bg-muted text-muted-foreground'
+      )}
+    >
+      {icon}
+    </span>
   );
 }
 
