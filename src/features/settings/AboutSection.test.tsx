@@ -1,7 +1,12 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
 import { expect, test, vi } from 'vitest';
 
+import type { WorkspaceEntry, WorkspaceSnapshot } from '@/bindings/bd';
+import { WorkspaceProvider } from '@/app/shell/WorkspaceProvider';
 import { I18nProvider } from '@/lib/i18n/I18nProvider';
+import { ThemeProvider } from '@/lib/theme/ThemeProvider';
+import type { UseWorkspace } from '@/lib/workspace/useWorkspace';
 
 import { AboutSection } from './AboutSection';
 import './messages';
@@ -16,10 +21,57 @@ vi.mock('@/lib/links', () => ({
   openExternal: vi.fn(async () => undefined),
 }));
 
+const TS = '2026-11-01T00:00:00Z';
+
+const entry: WorkspaceEntry = {
+  path: '/repo/p1',
+  name: 'alpha',
+  projectId: 'p1',
+  isWorktree: false,
+  lastOpenedAt: TS,
+  checkpoint: null,
+};
+
+const snapshot: WorkspaceSnapshot = {
+  config: {
+    schemaVersion: 1,
+    bdPath: null,
+    language: 'en',
+    theme: 'system',
+    lastWorkspacePath: entry.path,
+    workspaces: [entry],
+  },
+  missing: [],
+  active: entry.path,
+  corruptBackup: null,
+};
+
+function workspace(): UseWorkspace {
+  return {
+    snapshot,
+    bd: { kind: 'ready', path: 'bd', version: '1.3.2' },
+    loading: false,
+    error: null,
+    reload: vi.fn(),
+    refreshBd: vi.fn(),
+    add: vi.fn(async () => true),
+    switchTo: vi.fn(async () => true),
+    remove: vi.fn(async () => true),
+    relocate: vi.fn(async () => true),
+    setBdPath: vi.fn(async () => null),
+  };
+}
+
 function renderSection() {
   return render(
     <I18nProvider initialLanguage="en">
-      <AboutSection />
+      <ThemeProvider initialPreference="system">
+        <MemoryRouter>
+          <WorkspaceProvider workspace={workspace()}>
+            <AboutSection />
+          </WorkspaceProvider>
+        </MemoryRouter>
+      </ThemeProvider>
     </I18nProvider>
   );
 }
@@ -28,8 +80,11 @@ test('the app version comes from the runtime', async () => {
   getVersion.mockResolvedValue('0.1.0');
   renderSection();
 
-  expect(await screen.findByText('Version 0.1.0')).toBeInTheDocument();
-  expect(screen.getByText('MIT license')).toBeInTheDocument();
+  expect(await screen.findByText(/Version 0\.1\.0/)).toBeInTheDocument();
+  expect(screen.getByRole('link', { name: 'GitHub' })).toHaveAttribute(
+    'href',
+    'https://github.com/steven123397/beadazzled'
+  );
 });
 
 test('the update check is shown disabled until the updater ships', () => {
@@ -45,10 +100,23 @@ test('the update check is shown disabled until the updater ships', () => {
   ).toBeInTheDocument();
 });
 
-test('a webview without the app plugin omits the version row', async () => {
+test('a webview without the app plugin omits the version', async () => {
   getVersion.mockRejectedValue(new Error('plugin:app not available'));
   renderSection();
 
-  await waitFor(() => expect(screen.getByText('MIT license')).toBeInTheDocument());
-  expect(screen.queryByText(/^Version /)).not.toBeInTheDocument();
+  await screen.findByRole('heading', { name: 'beadazzled' });
+  expect(screen.queryByText(/Version /)).not.toBeInTheDocument();
+});
+
+test('runtime details describe the active workspace and bd', async () => {
+  getVersion.mockResolvedValue('0.1.0');
+  renderSection();
+
+  await screen.findByText(/Version 0\.1\.0/);
+  expect(screen.getByText('1.3.2 · bd')).toBeInTheDocument();
+  expect(screen.getByText('/repo/p1')).toBeInTheDocument();
+  expect(screen.getByRole('link', { name: 'Open full diagnostics' })).toHaveAttribute(
+    'href',
+    '/settings/diagnostics'
+  );
 });

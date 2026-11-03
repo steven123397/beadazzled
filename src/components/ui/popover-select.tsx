@@ -19,6 +19,8 @@ export type PopoverSelectProps = {
   className?: string;
   /** Applied to the summary, for example to stretch it to a fixed width. */
   triggerClassName?: string;
+  /** Applied to the option panel, for example to match a full-width trigger. */
+  panelClassName?: string;
   /** Applied to the summary, so a screen can focus it by id. */
   id?: string;
   disabled?: boolean;
@@ -45,6 +47,7 @@ export function PopoverSelect({
   size = 'md',
   className,
   triggerClassName,
+  panelClassName,
   id,
   disabled = false,
 }: PopoverSelectProps) {
@@ -100,7 +103,7 @@ export function PopoverSelect({
         aria-disabled={disabled || undefined}
         tabIndex={disabled ? -1 : undefined}
         className={cn(
-          'flex cursor-pointer list-none items-center gap-1.5 rounded-md border border-border bg-raised text-foreground shadow-xs',
+          'flex cursor-pointer list-none items-center gap-1.5 rounded-md border border-border bg-raised text-foreground shadow-xs focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring',
           SIZE_CLASS[size],
           disabled ? 'pointer-events-none opacity-50' : 'hover:bg-hover',
           triggerClassName
@@ -109,7 +112,12 @@ export function PopoverSelect({
         <span className="max-w-48 truncate">{selected?.label ?? label}</span>
         <ChevronDown aria-hidden="true" className="size-3.5 shrink-0 text-muted-foreground" />
       </summary>
-      <div className="thin-scrollbar absolute left-0 top-full z-40 mt-1 max-h-64 w-48 overflow-auto rounded-md border border-border bg-raised p-1 shadow-popover">
+      <div
+        className={cn(
+          'thin-scrollbar absolute left-0 top-full z-40 mt-1 max-h-64 w-48 overflow-auto rounded-md border border-border bg-raised p-1 shadow-popover',
+          panelClassName
+        )}
+      >
         {options.map((option) => (
           <label
             key={option.value}

@@ -7,7 +7,7 @@ test('without bd the page still opens, shows winget and can copy it', async ({ p
   await installFakeBridge(page, {
     bdStatus: { kind: 'not-found', searched: ['C:/tools/bd.exe'] },
   });
-  await page.goto('/#/settings');
+  await page.goto('/#/settings/bd');
 
   // Acceptance 3: the page is usable with no bd at all.
   await expect(page.getByRole('heading', { name: 'Settings' })).toBeVisible();
@@ -24,7 +24,7 @@ test('without bd the page still opens, shows winget and can copy it', async ({ p
 
 test('detect again is the thing that probes, and only when asked', async ({ page }) => {
   await installFakeBridge(page);
-  await page.goto('/#/settings');
+  await page.goto('/#/settings/bd');
   await expect(page.getByRole('main').getByText('bd 1.3.2')).toBeVisible();
   await clearInvokeLog(page);
 
@@ -41,7 +41,7 @@ test('detect again is the thing that probes, and only when asked', async ({ page
 test('a disabled journal explains how to enable it and copies the command', async ({ page }) => {
   await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
   await installFakeBridge(page, { syncState: { kind: 'journal-disabled' } });
-  await page.goto('/#/settings');
+  await page.goto('/#/settings/sync');
 
   await expect(page.getByText('Real-time updates are off for this workspace.')).toBeVisible();
   await expect(page.getByText('Enable the journal, then refresh once:')).toBeVisible();
@@ -63,7 +63,7 @@ test('switching to another registered workspace goes through the command', async
     ],
     active: false,
   });
-  await page.goto('/#/settings');
+  await page.goto('/#/settings/workspaces');
   await expect(page.getByRole('heading', { name: 'Settings' })).toBeVisible();
   await clearInvokeLog(page);
 

@@ -25,7 +25,7 @@ test('shell routes have no serious or critical accessibility violations', async 
   await expect(page.getByRole('heading', { name: 'Board' })).toBeVisible();
   expect(await seriousViolations(page)).toEqual([]);
 
-  await page.goto('/#/settings');
+  await page.goto('/#/settings/general');
   await expect(page.getByRole('heading', { name: 'Settings' })).toBeVisible();
   expect(await seriousViolations(page)).toEqual([]);
 
@@ -60,9 +60,11 @@ test('the dark theme has no serious or critical violations', async ({ page }) =>
 
   expect(await seriousViolations(page)).toEqual([]);
 
-  await page.goto('/#/settings');
-  await expect(page.getByRole('heading', { name: 'Settings' })).toBeVisible();
-  expect(await seriousViolations(page)).toEqual([]);
+  for (const section of ['general', 'bd', 'workspaces', 'sync', 'diagnostics', 'about']) {
+    await page.goto(`/#/settings/${section}`);
+    await expect(page.getByRole('heading', { name: 'Settings' })).toBeVisible();
+    expect(await seriousViolations(page), section).toEqual([]);
+  }
 
   await page.keyboard.press('?');
   await expect(page.getByRole('dialog', { name: 'Keyboard shortcuts' })).toBeVisible();

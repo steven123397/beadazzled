@@ -17,19 +17,28 @@ function renderSection() {
   );
 }
 
+function choose(trigger: string, option: string): void {
+  const details = screen.getByLabelText(trigger).closest('details');
+  if (details !== null) {
+    details.open = true;
+  }
+  fireEvent.click(screen.getByRole('radio', { name: option }));
+}
+
 test('changing the language applies immediately', () => {
   renderSection();
 
-  fireEvent.change(screen.getByLabelText('Language'), { target: { value: 'zh-CN' } });
+  choose('Language: English', '中文');
 
-  expect(screen.getByLabelText('语言')).toHaveValue('zh-CN');
+  expect(screen.getByLabelText('语言: 中文')).toBeInTheDocument();
   expect(document.documentElement.lang).toBe('zh-CN');
 });
 
 test('changing the theme applies immediately', () => {
   renderSection();
 
-  fireEvent.change(screen.getByLabelText('Theme'), { target: { value: 'dark' } });
+  choose('Theme: System', 'Dark');
 
+  expect(screen.getByLabelText('Theme: Dark')).toBeInTheDocument();
   expect(document.documentElement.classList.contains('dark')).toBe(true);
 });

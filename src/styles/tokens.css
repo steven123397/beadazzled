@@ -4,9 +4,9 @@
   --background: #f1f0f2;
   --foreground: #282a30;
   --card: #fbfbfc;
-  /* Raised surfaces: buttons, board cards, popovers. Same as the card in
-     light mode; a separate step in dark mode. */
-  --raised: #fbfbfc;
+  /* Raised surfaces: buttons, board cards, popovers. A step above the card in
+     both themes, so a control never melts into the panel behind it. */
+  --raised: #ffffff;
   --muted: #e9e7eb;
   --muted-foreground: #67666e;
   --border: #e2e0e4;
@@ -14,6 +14,9 @@
   --border-strong: #d2d0d5;
   --input: #d8d7db;
   --primary: #5e6ad2;
+  /* `--primary` as text: darkened in light and lightened in dark so a coloured
+     label still clears 4.5:1 at 12px. Button backgrounds keep `--primary`. */
+  --primary-text: #4b54b8;
   --primary-foreground: #ffffff;
   --ring: #7170ff;
   --destructive: #c4362f;
@@ -27,7 +30,8 @@
   /* Density: control heights for the compact UI, row height for lists. */
   --control-xs: 22px;
   --control-sm: 26px;
-  --control-md: 30px;
+  /* 32px: the height of a form field, its button and its select. */
+  --control-md: 32px;
   --row-height: 42px;
   /* Fixed so each board column can virtualize without measuring cards. */
   --card-height: 120px;
@@ -63,6 +67,7 @@
   --border-strong: #4a4b52;
   --input: #3d3e45;
   --primary: #5e6ad2;
+  --primary-text: #a7aefe;
   --ring: #7170ff;
   /* #c4362f only reaches 3.7:1 on the dark background; error text is 12px. */
   --destructive: #f87171;
@@ -92,6 +97,7 @@
   --color-border-strong: var(--border-strong);
   --color-input: var(--input);
   --color-primary: var(--primary);
+  --color-primary-text: var(--primary-text);
   --color-primary-foreground: var(--primary-foreground);
   --color-ring: var(--ring);
   --color-destructive: var(--destructive);

@@ -80,15 +80,15 @@ export function DiagnosticsSection({ api = defaultApi, copy = copyText }: Diagno
 
   return (
     <section aria-labelledby="settings-diagnostics" className="space-y-3">
-      <h2 id="settings-diagnostics" className="text-sm font-semibold">
+      <h2 id="settings-diagnostics" className="text-lg font-semibold">
         {t('settings.diagnostics')}
       </h2>
       <p className="text-xs text-muted-foreground">{t('settings.diagnostics.hint')}</p>
       <div className="flex flex-wrap gap-2">
-        <Button onClick={() => void load()} disabled={loading}>
+        <Button size="md" onClick={() => void load()} disabled={loading}>
           {loading ? t('settings.diagnostics.loading') : t('settings.diagnostics.load')}
         </Button>
-        <Button variant="ghost" onClick={() => void copyReport()} disabled={loading}>
+        <Button size="md" variant="ghost" onClick={() => void copyReport()} disabled={loading}>
           {t('settings.diagnostics.copy')}
         </Button>
       </div>

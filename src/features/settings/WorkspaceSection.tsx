@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 
 import type { WorkspaceEntry } from '@/bindings/bd';
 import { useWorkspaceContext } from '@/app/shell/WorkspaceProvider';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { messageOf } from '@/lib/errors';
@@ -104,10 +105,15 @@ export function WorkspaceSection({ pickDirectory = defaultPicker }: WorkspaceSec
   return (
     <section aria-labelledby="settings-workspaces" className="space-y-3">
       <div className="flex items-center justify-between">
-        <h2 id="settings-workspaces" className="text-sm font-semibold">
+        <h2 id="settings-workspaces" className="text-lg font-semibold">
           {t('settings.workspaces')}
+          {workspaces.length > 0 ? (
+            <span className="ml-1.5 font-normal tabular-nums text-muted-foreground">
+              {workspaces.length}
+            </span>
+          ) : null}
         </h2>
-        <Button onClick={() => void addWorkspace()} disabled={busy}>
+        <Button size="md" onClick={() => void addWorkspace()} disabled={busy}>
           {t('settings.workspaces.add')}
         </Button>
       </div>
@@ -124,56 +130,50 @@ export function WorkspaceSection({ pickDirectory = defaultPicker }: WorkspaceSec
             const isActive = entry.path === active;
             const isMissing = missing.has(entry.path);
             return (
-              <li key={entry.path} className="flex flex-wrap items-center gap-2 p-3 text-xs">
-                <div className="min-w-0 flex-1 space-y-0.5">
+              <li
+                key={entry.path}
+                className="group flex items-center gap-2 px-3 py-2 text-xs hover:bg-hover"
+              >
+                <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-1.5">
-                    <span className="font-medium">{entry.name}</span>
+                    <span className="truncate font-medium">{entry.name}</span>
                     {isActive ? (
-                      <span className="rounded bg-muted px-1 text-2xs text-foreground">
-                        {t('settings.workspaces.current')}
-                      </span>
+                      <Badge variant="accent">{t('settings.workspaces.current')}</Badge>
                     ) : null}
-                    {entry.isWorktree ? (
-                      <span className="rounded bg-muted px-1 text-2xs text-muted-foreground">
-                        {t('settings.workspaces.worktree')}
-                      </span>
-                    ) : null}
+                    {entry.isWorktree ? <Badge>{t('settings.workspaces.worktree')}</Badge> : null}
                     {isMissing ? (
-                      <span className="rounded bg-destructive/10 px-1 text-2xs text-destructive">
-                        {t('settings.workspaces.missing')}
-                      </span>
+                      <Badge variant="danger">{t('settings.workspaces.missing')}</Badge>
                     ) : null}
                   </div>
-                  <p className="break-all text-muted-foreground">{entry.path}</p>
-                  <p className="text-muted-foreground">
-                    {t('settings.workspaces.project', { id: shortId(entry.projectId) })} ·{' '}
-                    {t('settings.workspaces.lastOpened', {
-                      time: formatRelativeTime(entry.lastOpenedAt, language),
-                    })}
+                  <p className="mt-0.5 flex min-w-0 items-center gap-1 text-muted-foreground">
+                    <span className="truncate" title={entry.path}>
+                      {entry.path}
+                    </span>
+                    <span className="shrink-0">
+                      · {t('settings.workspaces.project', { id: shortId(entry.projectId) })}
+                    </span>
+                    <span className="shrink-0">
+                      ·{' '}
+                      {t('settings.workspaces.lastOpened', {
+                        time: formatRelativeTime(entry.lastOpenedAt, language),
+                      })}
+                    </span>
                   </p>
                 </div>
-                <div className="flex shrink-0 gap-1.5">
-                  <Button
-                    size="xs"
-                    onClick={() => void openWorkspace(entry)}
-                    disabled={busy || isMissing}
-                  >
+                {/* The row stays quiet until pointed at; keyboard focus reveals
+                    the same actions, so tabbing never hides them. */}
+                <div className="flex shrink-0 gap-1.5 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
+                  <Button onClick={() => void openWorkspace(entry)} disabled={busy || isMissing}>
                     {t('settings.workspaces.open')}
                   </Button>
                   <Button
-                    size="xs"
                     variant="ghost"
                     onClick={() => void relocateWorkspace(entry)}
                     disabled={busy}
                   >
                     {t('settings.workspaces.relocate')}
                   </Button>
-                  <Button
-                    size="xs"
-                    variant="ghost"
-                    onClick={() => setConfirming(entry)}
-                    disabled={busy}
-                  >
+                  <Button variant="ghost" onClick={() => setConfirming(entry)} disabled={busy}>
                     {t('settings.workspaces.remove')}
                   </Button>
                 </div>

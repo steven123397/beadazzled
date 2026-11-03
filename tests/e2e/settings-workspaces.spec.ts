@@ -4,7 +4,7 @@ import { clearInvokeLog, installFakeBridge, invokeLog } from './fakeBridge';
 
 test('adding, opening and removing workspaces keeps the registry in sync', async ({ page }) => {
   await installFakeBridge(page, { dialogPath: '/repo/beta' });
-  await page.goto('/#/settings');
+  await page.goto('/#/settings/workspaces');
   await expect(page.getByRole('heading', { name: 'Settings' })).toBeVisible();
   const alphaRow = page.getByRole('listitem').filter({ hasText: '/repo/p1' });
   await expect(alphaRow).toBeVisible();
@@ -19,7 +19,7 @@ test('adding, opening and removing workspaces keeps the registry in sync', async
   await expect(page).toHaveURL(/#\/w\/project-2\/list$/);
   await expect(page.getByRole('heading', { name: 'List' })).toBeVisible();
 
-  await page.goto('/#/settings');
+  await page.goto('/#/settings/workspaces');
   await expect(page.getByRole('heading', { name: 'Settings' })).toBeVisible();
   await page
     .getByRole('listitem')
@@ -44,7 +44,7 @@ test('adding, opening and removing workspaces keeps the registry in sync', async
 
 test('relocating a workspace moves its path and keeps its name', async ({ page }) => {
   await installFakeBridge(page, { dialogPath: '/repo/moved' });
-  await page.goto('/#/settings');
+  await page.goto('/#/settings/workspaces');
   const alphaRow = page.getByRole('listitem').filter({ hasText: '/repo/p1' });
   await expect(alphaRow).toBeVisible();
 
@@ -58,7 +58,7 @@ test('relocating a workspace moves its path and keeps its name', async ({ page }
 
 test('the remove confirmation keeps focus inside and cancels with Escape', async ({ page }) => {
   await installFakeBridge(page);
-  await page.goto('/#/settings');
+  await page.goto('/#/settings/workspaces');
   const row = page.getByRole('listitem').filter({ hasText: '/repo/p1' });
   await row.getByRole('button', { name: 'Remove' }).click();
 

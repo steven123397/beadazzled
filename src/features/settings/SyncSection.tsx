@@ -36,7 +36,7 @@ export function SyncSection({ copy = copyText }: { copy?: (text: string) => Prom
 
   return (
     <section aria-labelledby="settings-sync" className="space-y-3">
-      <h2 id="settings-sync" className="text-sm font-semibold">
+      <h2 id="settings-sync" className="text-lg font-semibold">
         {t('settings.sync')}
       </h2>
       <dl className="space-y-1 rounded-md border border-border bg-raised p-3 text-xs">
@@ -97,7 +97,7 @@ export function SyncSection({ copy = copyText }: { copy?: (text: string) => Prom
             {JOURNAL_COMMAND}
           </code>
           <Button
-            size="xs"
+            size="md"
             variant="ghost"
             onClick={() => void copy(JOURNAL_COMMAND).then(setCopyResult)}
           >
@@ -110,7 +110,9 @@ export function SyncSection({ copy = copyText }: { copy?: (text: string) => Prom
           )}
         </div>
       ) : null}
-      <Button onClick={refresh}>{t('settings.sync.refresh')}</Button>
+      <Button size="md" onClick={refresh}>
+        {t('settings.sync.refresh')}
+      </Button>
     </section>
   );
 }

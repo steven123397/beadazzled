@@ -5,6 +5,8 @@ body {
   font-size: var(--ui-font);
   background: var(--background);
   color: var(--foreground);
+  /* Native radios and checkboxes follow the theme instead of the OS blue. */
+  accent-color: var(--primary);
 }
 
 :focus-visible {

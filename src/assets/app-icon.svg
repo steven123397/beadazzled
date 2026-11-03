@@ -1,0 +1,120 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024" fill="none">
+  <defs>
+    <!-- 背景深邃石板暗色渐变 (契合 Linear 暗黑美学) -->
+    <linearGradient id="bg-grad" x1="0" y1="0" x2="1024" y2="1024" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#14161F" />
+      <stop offset="100%" stop-color="#0B0C11" />
+    </linearGradient>
+
+    <!-- 边框微光 -->
+    <linearGradient id="border-grad" x1="0" y1="0" x2="1024" y2="1024" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#38BDF8" stop-opacity="0.35" />
+      <stop offset="50%" stop-color="#818CF8" stop-opacity="0.12" />
+      <stop offset="100%" stop-color="#F472B6" stop-opacity="0.35" />
+    </linearGradient>
+
+    <!-- 棱镜切面渐变 -->
+    <linearGradient id="prism-left" x1="260" y1="220" x2="500" y2="760" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#38BDF8" stop-opacity="0.75" />
+      <stop offset="100%" stop-color="#4F46E5" stop-opacity="0.35" />
+    </linearGradient>
+
+    <linearGradient id="prism-right" x1="500" y1="220" x2="740" y2="760" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#818CF8" stop-opacity="0.6" />
+      <stop offset="100%" stop-color="#EC4899" stop-opacity="0.45" />
+    </linearGradient>
+
+    <linearGradient id="prism-bottom" x1="260" y1="620" x2="740" y2="760" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#0284C7" stop-opacity="0.55" />
+      <stop offset="100%" stop-color="#C026D3" stop-opacity="0.65" />
+    </linearGradient>
+
+    <linearGradient id="prism-edge" x1="260" y1="220" x2="740" y2="760" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#7DD3FC" />
+      <stop offset="50%" stop-color="#C084FC" />
+      <stop offset="100%" stop-color="#F472B6" />
+    </linearGradient>
+
+    <!-- 霓虹发光滤镜 -->
+    <filter id="glow-strong" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="16" result="blur" />
+      <feComposite in="SourceGraphic" in2="blur" operator="over" />
+    </filter>
+    <filter id="glow-soft" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="8" result="blur" />
+      <feComposite in="SourceGraphic" in2="blur" operator="over" />
+    </filter>
+  </defs>
+
+  <!-- 1. macOS / 现代桌面圆角矩形底座 -->
+  <rect x="32" y="32" width="960" height="960" rx="216" fill="url(#bg-grad)" stroke="url(#border-grad)" stroke-width="6" />
+
+  <!-- 背景中心氛围辉光 -->
+  <circle cx="490" cy="520" r="280" fill="#6366F1" opacity="0.12" filter="url(#glow-strong)" />
+
+  <!-- 2. 左侧输入光束 (代表单一的 bd CLI 数据流) -->
+  <g filter="url(#glow-soft)">
+    <path d="M 32 540 L 295 540 L 385 492" stroke="#38BDF8" stroke-width="18" stroke-linecap="round" stroke-linejoin="round" />
+    <path d="M 32 540 L 295 540 L 385 492" stroke="#E0F2FE" stroke-width="6" stroke-linecap="round" stroke-linejoin="round" />
+  </g>
+
+  <!-- 3. 右侧折射出的三条轨道与串珠 (代表 Board / List / Detail 视图与 Beads 节点) -->
+  <!-- 轨道 1: 品红 (Top Track) -->
+  <g filter="url(#glow-soft)">
+    <path d="M 592 435 L 992 435" stroke="#EC4899" stroke-width="14" stroke-linecap="round" />
+    <circle cx="710" cy="435" r="24" fill="#F472B6" stroke="#FCE7F3" stroke-width="5" />
+    <circle cx="845" cy="435" r="24" fill="#F472B6" stroke="#FCE7F3" stroke-width="5" />
+  </g>
+
+  <!-- 轨道 2: 电光紫 (Middle Track) -->
+  <g filter="url(#glow-soft)">
+    <path d="M 626 515 L 992 515" stroke="#A855F7" stroke-width="14" stroke-linecap="round" />
+    <circle cx="760" cy="515" r="24" fill="#C084FC" stroke="#F3E8FF" stroke-width="5" />
+    <circle cx="905" cy="515" r="24" fill="#C084FC" stroke="#F3E8FF" stroke-width="5" />
+  </g>
+
+  <!-- 轨道 3: 青蓝 (Bottom Track) -->
+  <g filter="url(#glow-soft)">
+    <path d="M 660 595 L 992 595" stroke="#38BDF8" stroke-width="14" stroke-linecap="round" />
+    <circle cx="725" cy="595" r="24" fill="#38BDF8" stroke="#E0F2FE" stroke-width="5" />
+    <circle cx="865" cy="595" r="24" fill="#38BDF8" stroke="#E0F2FE" stroke-width="5" />
+  </g>
+
+  <!-- 4. 中央切面棱镜主体 (The Beadazzled Gem) -->
+  <!-- 左上主切面 -->
+  <polygon points="490,220 260,640 490,640" fill="url(#prism-left)" />
+  <!-- 右上主切面 -->
+  <polygon points="490,220 490,640 720,640" fill="url(#prism-right)" />
+  <!-- 左下底座切面 -->
+  <polygon points="260,640 490,770 490,640" fill="url(#prism-bottom)" />
+  <!-- 右下底座切面 -->
+  <polygon points="490,640 490,770 720,640" fill="url(#prism-right)" opacity="0.85" />
+
+  <!-- 棱镜内部折射光路 -->
+  <g opacity="0.9" filter="url(#glow-soft)">
+    <line x1="385" y1="492" x2="592" y2="435" stroke="#F472B6" stroke-width="10" stroke-linecap="round" />
+    <line x1="385" y1="492" x2="626" y2="515" stroke="#C084FC" stroke-width="10" stroke-linecap="round" />
+    <line x1="385" y1="492" x2="660" y2="595" stroke="#38BDF8" stroke-width="10" stroke-linecap="round" />
+  </g>
+
+  <!-- 棱镜几何骨架高光线 -->
+  <g stroke="url(#prism-edge)" stroke-width="10" stroke-linejoin="round" stroke-linecap="round">
+    <!-- 外轮廓 -->
+    <polygon points="490,220 260,640 490,770 720,640" fill="none" />
+    <!-- 中心垂直脊线 -->
+    <line x1="490" y1="220" x2="490" y2="770" />
+    <!-- 腰部水平切面线 -->
+    <line x1="260" y1="640" x2="720" y2="640" />
+    <!-- 内部宝石内切线 -->
+    <line x1="365" y1="640" x2="490" y2="220" stroke-width="5" opacity="0.55" />
+    <line x1="615" y1="640" x2="490" y2="220" stroke-width="5" opacity="0.55" />
+    <line x1="365" y1="640" x2="490" y2="770" stroke-width="5" opacity="0.55" />
+    <line x1="615" y1="640" x2="490" y2="770" stroke-width="5" opacity="0.55" />
+  </g>
+
+  <!-- 5. 入射点星芒高光 (呼应 Dazzled 寓意) -->
+  <g filter="url(#glow-strong)">
+    <circle cx="385" cy="492" r="16" fill="#FFFFFF" />
+    <path d="M 385 432 L 393 484 L 445 492 L 393 500 L 385 552 L 377 500 L 325 492 L 377 484 Z" fill="#FFFFFF" />
+  </g>
+</svg>
