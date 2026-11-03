@@ -3,7 +3,6 @@ import { HashRouter, Navigate, Outlet, Route, Routes, useParams } from 'react-ro
 
 import type { BdStatus, Issue, SyncState } from '@/bindings/bd';
 import { ListRoute } from '@/features/list/ListView';
-import { SettingsView } from '@/features/settings/SettingsView';
 import { workspaceApi as defaultWorkspaceApi, type WorkspaceApi } from '@/lib/workspace/api';
 import { useWorkspace } from '@/lib/workspace/useWorkspace';
 import { I18nProvider, useI18n } from '@/lib/i18n/I18nProvider';
@@ -65,6 +64,16 @@ const DetailRoute = lazy(() =>
  */
 const BoardRoute = lazy(() =>
   import('@/features/board/BoardView').then((module) => ({ default: module.BoardRoute }))
+);
+
+/**
+ * Settings is a second-screen surface; keeping it in its own chunk leaves the
+ * first-screen budget for the list, which is what actually loads at startup.
+ */
+const SettingsRoute = lazy(() =>
+  import('@/features/settings/SettingsView').then((module) => ({
+    default: module.SettingsView,
+  }))
 );
 
 /**
@@ -268,7 +277,20 @@ function AppFrame({
                       }
                     />
                   </Route>
-                  <Route path="settings" element={<SettingsView />} />
+                  <Route
+                    path="settings"
+                    element={
+                      <Suspense
+                        fallback={
+                          <p role="status" className="px-6 py-10 text-sm text-muted-foreground">
+                            {t('settings.loading')}
+                          </p>
+                        }
+                      >
+                        <SettingsRoute />
+                      </Suspense>
+                    }
+                  />
                   <Route path="*" element={<Navigate to="/welcome" replace />} />
                 </Route>
               </Routes>

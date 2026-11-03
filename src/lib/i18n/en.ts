@@ -237,6 +237,7 @@ export const en = {
   'diagnostics.corruptBackup': 'Config backup: {path}',
   'diagnostics.copy': 'Copy diagnostics',
   'diagnostics.close': 'Close',
+  'settings.loading': 'Loading settings…',
   'settings.general': 'General',
   'settings.language': 'Language',
   'settings.theme': 'Theme',

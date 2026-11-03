@@ -237,6 +237,7 @@ export const zhCN: Record<keyof typeof en, string> = {
   'diagnostics.corruptBackup': '配置备份：{path}',
   'diagnostics.copy': '复制诊断信息',
   'diagnostics.close': '关闭',
+  'settings.loading': '正在加载设置…',
   'settings.general': '通用',
   'settings.language': '语言',
   'settings.theme': '主题',
