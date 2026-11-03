@@ -337,11 +337,11 @@ function MultiSelect({
 
   return (
     <details aria-label={label} data-filter-menu className="relative">
-      <summary className="flex h-8 cursor-pointer list-none items-center rounded-md border border-border bg-card px-2.5 text-sm text-muted-foreground shadow-xs hover:bg-hover">
+      <summary className="flex h-8 cursor-pointer list-none items-center rounded-md border border-border bg-raised px-2.5 text-sm text-muted-foreground shadow-xs hover:bg-hover">
         {label}
         {selected.length > 0 ? ` (${selected.length})` : ''}
       </summary>
-      <div className="thin-scrollbar absolute left-0 z-30 mt-1 max-h-64 w-48 overflow-auto rounded-md border border-border bg-card p-1 shadow-popover">
+      <div className="thin-scrollbar absolute left-0 top-full z-30 mt-1 max-h-64 w-48 overflow-auto rounded-md border border-border bg-raised p-1 shadow-popover">
         {options.length === 0 ? (
           <p className="px-2 py-1 text-sm text-muted-foreground">{t('list.filter.noOptions')}</p>
         ) : null}

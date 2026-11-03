@@ -25,6 +25,16 @@ function issue(id: string, title: string): Issue {
   };
 }
 
+/** Pick a status from the detail rail's popover. */
+function chooseStatus(option: RegExp) {
+  const details = document.querySelector<HTMLDetailsElement>('details[aria-label="Status"]');
+  if (details === null) {
+    throw new Error('no Status menu');
+  }
+  details.open = true;
+  fireEvent.click(within(details).getByRole('radio', { name: option }));
+}
+
 function entry(projectId: string, name = projectId): WorkspaceEntry {
   return {
     path: `/repo/${projectId}`,
@@ -950,9 +960,7 @@ test('a status conflict is visible and triggers a baseline refresh', async () =>
 
   await screen.findByRole('heading', { level: 1, name: 'Conflict target' }, { timeout: 3000 });
 
-  fireEvent.change(screen.getByRole('combobox', { name: 'Status' }), {
-    target: { value: 'in_progress' },
-  });
+  chooseStatus(/In progress/);
 
   await waitFor(() => expect(execute).toHaveBeenCalledTimes(1));
   expect(await screen.findByRole('alert')).toHaveTextContent(

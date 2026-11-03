@@ -334,7 +334,7 @@ export function Shell({
         <p
           role="status"
           aria-live="polite"
-          className="pointer-events-none fixed bottom-8 left-1/2 z-40 -translate-x-1/2 rounded border border-border bg-card px-3 py-1 text-xs text-foreground shadow"
+          className="pointer-events-none fixed bottom-8 left-1/2 z-40 -translate-x-1/2 rounded border border-border bg-raised px-3 py-1 text-xs text-foreground shadow"
         >
           {t(copyNotice === 'copied' ? 'clipboard.copied' : 'clipboard.failed')}
         </p>

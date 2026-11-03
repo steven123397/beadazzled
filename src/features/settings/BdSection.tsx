@@ -101,7 +101,7 @@ export function BdSection({ pickFile = defaultPicker, copy = copyText }: BdSecti
       <h2 id="settings-bd" className="text-sm font-semibold">
         {t('settings.bd')}
       </h2>
-      <div className="space-y-2 rounded-md border border-border bg-card p-3 text-xs">
+      <div className="space-y-2 rounded-md border border-border bg-raised p-3 text-xs">
         {shown === null ? (
           <p className="text-muted-foreground">{t('settings.bd.loading')}</p>
         ) : shown.kind === 'ready' ? (

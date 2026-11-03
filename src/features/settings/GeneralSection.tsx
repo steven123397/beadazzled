@@ -37,7 +37,7 @@ export function GeneralSection() {
           <Select
             value={language}
             onChange={(event) => setLanguage(event.target.value as Language)}
-            className="border border-border bg-card"
+            className="border border-border bg-raised"
           >
             {LANGUAGES.map((value) => (
               <option key={value} value={value}>
@@ -51,7 +51,7 @@ export function GeneralSection() {
           <Select
             value={preference}
             onChange={(event) => setPreference(event.target.value as Theme)}
-            className="border border-border bg-card"
+            className="border border-border bg-raised"
           >
             {THEMES.map((value) => (
               <option key={value} value={value}>

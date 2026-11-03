@@ -119,7 +119,7 @@ export function WorkspaceSection({ pickDirectory = defaultPicker }: WorkspaceSec
       {workspaces.length === 0 ? (
         <p className="text-xs text-muted-foreground">{t('settings.workspaces.empty')}</p>
       ) : (
-        <ul className="divide-y divide-border rounded-md border border-border bg-card">
+        <ul className="divide-y divide-border rounded-md border border-border bg-raised">
           {workspaces.map((entry) => {
             const isActive = entry.path === active;
             const isMissing = missing.has(entry.path);

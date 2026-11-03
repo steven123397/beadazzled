@@ -4,6 +4,9 @@
   --background: #f1f0f2;
   --foreground: #282a30;
   --card: #fbfbfc;
+  /* Raised surfaces: buttons, board cards, popovers. Same as the card in
+     light mode; a separate step in dark mode. */
+  --raised: #fbfbfc;
   --muted: #e9e7eb;
   --muted-foreground: #67666e;
   --border: #e2e0e4;
@@ -32,8 +35,7 @@
   /* Type scale. `--ui-font` and `--doc-font` stay the anchors. */
   --ui-font: 13px;
   --doc-font: 15px;
-  --doc-leading: 1.65;
-  --doc-measure: 72ch;
+  --doc-leading: 1.8;
 
   --radius-sm: 6px;
   --radius: 8px;
@@ -50,13 +52,16 @@
 
   --background: #08090a;
   --foreground: #f7f8f8;
-  --card: #0f1011;
-  --muted: #1c1c1f;
+  /* One step lighter than the shell background: the content panel and every
+     raised control need to read as separate layers in dark mode. */
+  --card: #1c1d21;
+  --raised: #26272c;
+  --muted: #2c2d33;
   --muted-foreground: #8a8f98;
-  --border: #23252a;
-  --border-subtle: #191a1c;
-  --border-strong: #3a3b40;
-  --input: #34343a;
+  --border: #33343a;
+  --border-subtle: #222327;
+  --border-strong: #4a4b52;
+  --input: #3d3e45;
   --primary: #5e6ad2;
   --ring: #7170ff;
   /* #c4362f only reaches 3.7:1 on the dark background; error text is 12px. */
@@ -64,8 +69,8 @@
   /* The light warning/success tones are ~4.0/3.7:1 on #08090a. */
   --warning: #e5b567;
   --success: #56d364;
-  --hover: #1c1c1f;
-  --selected: #232428;
+  --hover: #303138;
+  --selected: #383941;
   --selected-foreground: #f7f8f8;
 
   --shadow-xs: 0 1px 2px rgb(0 0 0 / 0.4);
@@ -79,6 +84,7 @@
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
+  --color-raised: var(--raised);
   --color-muted: var(--muted);
   --color-muted-foreground: var(--muted-foreground);
   --color-border: var(--border);

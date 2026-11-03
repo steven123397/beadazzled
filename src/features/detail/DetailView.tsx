@@ -15,7 +15,7 @@ import type { UseWrite } from '@/lib/writes/useWrite';
 import { Comments } from './Comments';
 import { changedFields, type DraftField } from './changes';
 import { Editor } from './Editor';
-import { Header } from './Header';
+import { DetailToolbar, Header } from './Header';
 import { Markdown } from './Markdown';
 import { MetadataRail } from './MetadataRail';
 
@@ -347,150 +347,154 @@ export function DetailView({
   };
 
   return (
-    <article className="mx-auto w-full max-w-[1100px] px-6 py-6">
-      <Header
-        issue={issue}
-        onBack={requestBack}
-        hideTitle={editing === 'title'}
-        onEditTitle={canEdit ? () => beginEdit('title') : undefined}
-      />
-
-      {editing === 'title' ? (
-        <div className="mt-3">
-          <Editor
-            label={t('detail.edit.title')}
-            value={issue.title}
-            pending={pending}
-            disabled={!canEdit}
-            error={validationError}
-            onDirtyChange={setFieldDirty}
-            onSave={(next) => saveField('title', next)}
-            onCancel={cancelEdit}
-          />
-        </div>
-      ) : null}
-
-      {writes !== undefined && !writes.canWrite ? (
-        <p role="status" className="mt-3 text-xs text-muted-foreground">
-          {writes.disabledReason ?? t('detail.write.unavailable')}
-        </p>
-      ) : null}
-
-      {updatedElsewhere ? (
-        <p role="status" className="mt-3 text-xs text-warning">
-          {t('detail.edit.updatedElsewhere')}
-        </p>
-      ) : null}
-
-      {notice === null ? null : (
-        <p role="status" className="mt-3 text-xs text-muted-foreground">
-          {notice}
-        </p>
-      )}
-
-      <div className="mt-6 grid gap-8 min-[1000px]:grid-cols-[minmax(0,1fr)_280px]">
-        <div className="min-w-0">
-          <section aria-labelledby="detail-description">
-            <div className="flex items-center justify-between gap-2">
-              <h2 id="detail-description" className="text-sm font-semibold">
-                {t('detail.description')}
-              </h2>
-              {editButton('description')}
-            </div>
-            <div className="mt-2 max-w-[72ch]">
-              {editing === 'description' ? (
-                <Editor
-                  label={t('detail.description')}
-                  value={issue.description}
-                  multiline
-                  previewable
-                  pending={pending}
-                  disabled={!canEdit}
-                  error={validationError}
-                  onDirtyChange={setFieldDirty}
-                  onOpenLink={openLink}
-                  onSave={(next) => saveField('description', next)}
-                  onCancel={cancelEdit}
-                />
-              ) : description === '' ? (
-                <p className="text-sm text-muted-foreground">{t('detail.description.empty')}</p>
-              ) : (
-                <Markdown onOpenLink={openLink}>{description}</Markdown>
-              )}
-            </div>
-          </section>
-
-          <section aria-labelledby="detail-acceptance" className="mt-6">
-            <div className="flex items-center justify-between gap-2">
-              <h2 id="detail-acceptance" className="text-sm font-semibold">
-                {t('detail.acceptance')}
-              </h2>
-              {editButton('acceptance')}
-            </div>
-            <div className="mt-2 max-w-[72ch]">
-              {editing === 'acceptance' ? (
-                <Editor
-                  label={t('detail.acceptance')}
-                  value={issue.acceptance_criteria ?? ''}
-                  multiline
-                  pending={pending}
-                  disabled={!canEdit}
-                  error={validationError}
-                  onDirtyChange={setFieldDirty}
-                  onOpenLink={openLink}
-                  onSave={(next) => saveField('acceptance', next)}
-                  onCancel={cancelEdit}
-                />
-              ) : acceptance === '' ? (
-                <p className="text-sm text-muted-foreground">{t('detail.acceptance.empty')}</p>
-              ) : (
-                <Markdown onOpenLink={openLink}>{acceptance}</Markdown>
-              )}
-            </div>
-          </section>
-
-          {design === null ? null : (
-            <details className="mt-6">
-              <summary className="cursor-pointer text-sm font-semibold">
-                {t('detail.design')}
-              </summary>
-              <div className="mt-2 max-w-[72ch]">
-                <Markdown onOpenLink={openLink}>{design}</Markdown>
-              </div>
-            </details>
-          )}
-
-          {notes === null ? null : (
-            <details className="mt-4">
-              <summary className="cursor-pointer text-sm font-semibold">
-                {t('detail.notes')}
-              </summary>
-              <div className="mt-2 max-w-[72ch]">
-                <Markdown onOpenLink={openLink}>{notes}</Markdown>
-              </div>
-            </details>
-          )}
-
-          <Comments
-            comments={issue.comments}
-            onSubmit={canEdit ? submitComment : undefined}
-            pending={pending}
-            disabled={!canEdit}
-            error={commentError}
-            onDirtyChange={setCommentDirty}
-          />
-        </div>
-
-        <MetadataRail
-          issue={issue}
-          index={index}
-          onOpenIssue={onOpenIssue}
-          writes={writes}
-          onDirtyChange={setRailDirty}
-          onSelfWrite={noteSelfWrite}
-        />
+    <div className="w-full pb-8">
+      <div className="px-4 pt-3">
+        <DetailToolbar issue={issue} onBack={requestBack} />
       </div>
-    </article>
+      <article className="mx-auto w-full max-w-[1100px] px-4 pt-3">
+        <Header
+          issue={issue}
+          hideTitle={editing === 'title'}
+          onEditTitle={canEdit ? () => beginEdit('title') : undefined}
+        />
+
+        {editing === 'title' ? (
+          <div className="mt-3">
+            <Editor
+              label={t('detail.edit.title')}
+              value={issue.title}
+              pending={pending}
+              disabled={!canEdit}
+              error={validationError}
+              onDirtyChange={setFieldDirty}
+              onSave={(next) => saveField('title', next)}
+              onCancel={cancelEdit}
+            />
+          </div>
+        ) : null}
+
+        {writes !== undefined && !writes.canWrite ? (
+          <p role="status" className="mt-3 text-xs text-muted-foreground">
+            {writes.disabledReason ?? t('detail.write.unavailable')}
+          </p>
+        ) : null}
+
+        {updatedElsewhere ? (
+          <p role="status" className="mt-3 text-xs text-warning">
+            {t('detail.edit.updatedElsewhere')}
+          </p>
+        ) : null}
+
+        {notice === null ? null : (
+          <p role="status" className="mt-3 text-xs text-muted-foreground">
+            {notice}
+          </p>
+        )}
+
+        <div className="mt-6 grid gap-8 min-[1000px]:grid-cols-[minmax(0,1fr)_280px]">
+          <div className="min-w-0">
+            <section aria-labelledby="detail-description">
+              <div className="flex items-center justify-between gap-2">
+                <h2 id="detail-description" className="text-sm font-semibold">
+                  {t('detail.description')}
+                </h2>
+                {editButton('description')}
+              </div>
+              <div className="mt-2">
+                {editing === 'description' ? (
+                  <Editor
+                    label={t('detail.description')}
+                    value={issue.description}
+                    multiline
+                    previewable
+                    pending={pending}
+                    disabled={!canEdit}
+                    error={validationError}
+                    onDirtyChange={setFieldDirty}
+                    onOpenLink={openLink}
+                    onSave={(next) => saveField('description', next)}
+                    onCancel={cancelEdit}
+                  />
+                ) : description === '' ? (
+                  <p className="text-sm text-muted-foreground">{t('detail.description.empty')}</p>
+                ) : (
+                  <Markdown onOpenLink={openLink}>{description}</Markdown>
+                )}
+              </div>
+            </section>
+
+            <section aria-labelledby="detail-acceptance" className="mt-6">
+              <div className="flex items-center justify-between gap-2">
+                <h2 id="detail-acceptance" className="text-sm font-semibold">
+                  {t('detail.acceptance')}
+                </h2>
+                {editButton('acceptance')}
+              </div>
+              <div className="mt-2">
+                {editing === 'acceptance' ? (
+                  <Editor
+                    label={t('detail.acceptance')}
+                    value={issue.acceptance_criteria ?? ''}
+                    multiline
+                    pending={pending}
+                    disabled={!canEdit}
+                    error={validationError}
+                    onDirtyChange={setFieldDirty}
+                    onOpenLink={openLink}
+                    onSave={(next) => saveField('acceptance', next)}
+                    onCancel={cancelEdit}
+                  />
+                ) : acceptance === '' ? (
+                  <p className="text-sm text-muted-foreground">{t('detail.acceptance.empty')}</p>
+                ) : (
+                  <Markdown onOpenLink={openLink}>{acceptance}</Markdown>
+                )}
+              </div>
+            </section>
+
+            {design === null ? null : (
+              <details className="mt-6">
+                <summary className="cursor-pointer text-sm font-semibold">
+                  {t('detail.design')}
+                </summary>
+                <div className="mt-2">
+                  <Markdown onOpenLink={openLink}>{design}</Markdown>
+                </div>
+              </details>
+            )}
+
+            {notes === null ? null : (
+              <details className="mt-4">
+                <summary className="cursor-pointer text-sm font-semibold">
+                  {t('detail.notes')}
+                </summary>
+                <div className="mt-2">
+                  <Markdown onOpenLink={openLink}>{notes}</Markdown>
+                </div>
+              </details>
+            )}
+
+            <Comments
+              comments={issue.comments}
+              onSubmit={canEdit ? submitComment : undefined}
+              pending={pending}
+              disabled={!canEdit}
+              error={commentError}
+              onDirtyChange={setCommentDirty}
+            />
+          </div>
+
+          <MetadataRail
+            issue={issue}
+            index={index}
+            onOpenIssue={onOpenIssue}
+            writes={writes}
+            onDirtyChange={setRailDirty}
+            onSelfWrite={noteSelfWrite}
+          />
+        </div>
+      </article>
+    </div>
   );
 }
 

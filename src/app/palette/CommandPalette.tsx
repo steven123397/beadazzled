@@ -46,7 +46,7 @@ export function CommandPalette({
         shouldFilter={false}
         loop
         label={t('palette.placeholder')}
-        className="w-full max-w-md overflow-hidden rounded-lg border border-border bg-card text-foreground"
+        className="w-full max-w-md overflow-hidden rounded-lg border border-border bg-raised text-foreground"
       >
         <Command.Input
           autoFocus

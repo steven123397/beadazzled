@@ -591,8 +591,8 @@ function LoadingBoard() {
           className="flex h-full w-72 shrink-0 flex-col gap-2 rounded-md border border-border bg-muted/30 p-2"
         >
           <span className="h-3 w-20 rounded bg-muted" />
-          <span className="h-24 rounded-md bg-card" />
-          <span className="h-24 rounded-md bg-card" />
+          <span className="h-24 rounded-md bg-raised" />
+          <span className="h-24 rounded-md bg-raised" />
         </div>
       ))}
     </div>

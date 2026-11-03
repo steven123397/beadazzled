@@ -140,7 +140,7 @@ export function Menu({ label, trigger, items, align = 'start', className }: Menu
           aria-label={label}
           onKeyDown={onMenuKeyDown}
           className={cn(
-            'absolute top-full z-40 mt-1 min-w-40 rounded-md border border-border bg-card p-1 shadow-popover',
+            'absolute top-full z-40 mt-1 min-w-40 rounded-md border border-border bg-raised p-1 shadow-popover',
             align === 'end' ? 'right-0' : 'left-0'
           )}
         >

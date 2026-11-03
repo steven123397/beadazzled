@@ -46,7 +46,7 @@ export function ConfirmDialog({
             onCancel();
           }
         }}
-        className="w-full max-w-sm space-y-3 rounded-lg border border-border bg-card p-4 text-foreground shadow-lg"
+        className="w-full max-w-sm space-y-3 rounded-lg border border-border bg-raised p-4 text-foreground shadow-lg"
       >
         <h2 id="confirm-title" className="text-sm font-semibold">
           {title}

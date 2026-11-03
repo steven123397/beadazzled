@@ -72,6 +72,16 @@ function fakeWrites(overrides: Partial<UseWrite> = {}): UseWrite {
   };
 }
 
+/** Pick a status from the rail's popover (its radios live inside `<details>`). */
+function chooseStatus(option: RegExp) {
+  const details = document.querySelector<HTMLDetailsElement>('details[aria-label="Status"]');
+  if (details === null) {
+    throw new Error('no Status menu');
+  }
+  details.open = true;
+  fireEvent.click(within(details).getByRole('radio', { name: option }));
+}
+
 test('the page shows title, markdown body, acceptance, metadata and comments', () => {
   const target = issue('bza-b', {
     title: 'Document reading',
@@ -408,10 +418,10 @@ test('detail single-key shortcuts open editors and focus controls', () => {
   expect(screen.getByRole('textbox', { name: 'Write a comment…' })).toHaveFocus();
 
   fireEvent.keyDown(window, { key: 's' });
-  expect(screen.getByRole('combobox', { name: 'Status' })).toHaveFocus();
+  expect(document.getElementById('detail-status')).toHaveFocus();
 
   fireEvent.keyDown(window, { key: 'p' });
-  expect(screen.getByRole('combobox', { name: 'Priority' })).toHaveFocus();
+  expect(document.getElementById('detail-priority')).toHaveFocus();
 });
 test('a saved title stays old until the journal echo updates the store', async () => {
   const writes = fakeWrites();
@@ -574,6 +584,7 @@ test('a half-typed label asks before the page is left', () => {
   const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
   const { onBack } = renderDetail(issue('bza-b'), undefined, fakeWrites());
 
+  fireEvent.click(screen.getByRole('button', { name: 'Edit labels' }));
   fireEvent.change(screen.getByRole('textbox', { name: 'New label' }), {
     target: { value: 'ui' },
   });
@@ -645,9 +656,7 @@ test('a write from this page does not claim the ticket changed elsewhere', () =>
   );
 
   fireEvent.click(screen.getByRole('button', { name: 'Old title' }));
-  fireEvent.change(screen.getByRole('combobox', { name: 'Status' }), {
-    target: { value: 'in_progress' },
-  });
+  chooseStatus(/In progress/);
 
   // The journal echo of that status write reaches the store.
   rerender(
@@ -681,9 +690,7 @@ test('an outside edit is still announced after a write from this page', () => {
   );
 
   fireEvent.click(screen.getByRole('button', { name: 'Old title' }));
-  fireEvent.change(screen.getByRole('combobox', { name: 'Status' }), {
-    target: { value: 'in_progress' },
-  });
+  chooseStatus(/In progress/);
   rerender(
     <I18nProvider initialLanguage="en">
       <DetailView

@@ -39,7 +39,7 @@ export function SyncSection({ copy = copyText }: { copy?: (text: string) => Prom
       <h2 id="settings-sync" className="text-sm font-semibold">
         {t('settings.sync')}
       </h2>
-      <dl className="space-y-1 rounded-md border border-border bg-card p-3 text-xs">
+      <dl className="space-y-1 rounded-md border border-border bg-raised p-3 text-xs">
         <Row label={t('settings.sync.state')} value={t(label.key, label.vars)} />
         <Row label={t('settings.sync.lastSeq')} value={lastSeq === null ? '-' : String(lastSeq)} />
         <Row

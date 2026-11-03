@@ -104,7 +104,7 @@ export function DiagnosticsSection({ api = defaultApi, copy = copyText }: Diagno
       )}
       {report === null ? null : (
         <div className="space-y-3">
-          <dl className="space-y-1 rounded-md border border-border bg-card p-3 text-xs">
+          <dl className="space-y-1 rounded-md border border-border bg-raised p-3 text-xs">
             <Row label={t('settings.diagnostics.bd')} value={describeBd(report.bd)} />
             <Row label={t('settings.diagnostics.workspace')} value={report.workspace ?? '-'} />
             {report.context === null ? (

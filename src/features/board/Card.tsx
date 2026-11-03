@@ -161,7 +161,7 @@ export const Card = memo(function Card({
       onClick={() => onOpen(issue)}
       onFocus={() => onFocus(issue.id)}
       onPointerDown={listeners?.onPointerDown as PointerEventHandler<HTMLDivElement> | undefined}
-      className={`absolute left-0 w-full cursor-grab overflow-hidden rounded-md border bg-card p-2 text-xs shadow-xs transition-colors ${
+      className={`absolute left-0 w-full cursor-grab overflow-hidden rounded-md border bg-raised p-2 text-xs shadow-xs transition-colors ${
         focused
           ? 'border-ring bg-selected text-selected-foreground'
           : 'border-border hover:bg-hover'
