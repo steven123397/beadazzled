@@ -9,6 +9,7 @@ import { I18nProvider } from '@/lib/i18n/I18nProvider';
 import type { UseWorkspace } from '@/lib/workspace/useWorkspace';
 
 import { SyncSection } from './SyncSection';
+import './messages';
 
 const NOW = Date.UTC(2026, 10, 2, 12, 0, 0);
 

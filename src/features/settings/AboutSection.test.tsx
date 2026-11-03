@@ -4,6 +4,7 @@ import { expect, test, vi } from 'vitest';
 import { I18nProvider } from '@/lib/i18n/I18nProvider';
 
 import { AboutSection } from './AboutSection';
+import './messages';
 
 const getVersion = vi.fn();
 

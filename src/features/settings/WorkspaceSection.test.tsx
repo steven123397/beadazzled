@@ -8,6 +8,7 @@ import { I18nProvider } from '@/lib/i18n/I18nProvider';
 import type { UseWorkspace } from '@/lib/workspace/useWorkspace';
 
 import { WorkspaceSection } from './WorkspaceSection';
+import './messages';
 
 const TS = '2026-11-01T00:00:00Z';
 

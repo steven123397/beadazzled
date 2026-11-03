@@ -18,6 +18,7 @@ vi.mock('@tauri-apps/api/app', () => ({
 getVersion.mockResolvedValue('0.1.0');
 
 import { DiagnosticsSection } from './DiagnosticsSection';
+import './messages';
 
 const NOW = Date.UTC(2026, 10, 2, 12, 0, 0);
 

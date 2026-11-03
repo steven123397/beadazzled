@@ -1,5 +1,6 @@
 import {
   createContext,
+  useCallback,
   useContext,
   useEffect,
   useMemo,
@@ -61,6 +62,34 @@ export function PreferencesBridge({
   // Writes can settle out of order: an older rejection must not overwrite the
   // message for a pair that has already been replaced.
   const writeGeneration = useRef(0);
+  // The pair this session started with (localStorage or the provider default).
+  // A change away from it before the registry answers is a user action; the
+  // mount values themselves must never overwrite the registry.
+  const initial = useRef<Pair | null>(null);
+  if (initial.current === null) {
+    initial.current = { language, theme: preference };
+  }
+
+  const persistPair = useCallback(
+    (next: Pair) => {
+      saved.current = next;
+      const generation = ++writeGeneration.current;
+      void api.setPreferences(next.language, next.theme).then(
+        () => {
+          if (generation === writeGeneration.current) {
+            setError(null);
+          }
+        },
+        (reason: unknown) => {
+          // Keep the newest failure visible until a newer write actually lands.
+          if (generation === writeGeneration.current) {
+            setError(messageOf(reason));
+          }
+        }
+      );
+    },
+    [api]
+  );
 
   useEffect(() => {
     if (saved.current !== null || snapshot === null) {
@@ -79,32 +108,29 @@ export function PreferencesBridge({
   }, [snapshot, language, preference, setLanguage, setPreference]);
 
   useEffect(() => {
+    const current = { language, theme: preference };
     if (saved.current === null) {
+      const started = initial.current;
+      if (
+        started === null ||
+        (started.language === current.language && started.theme === current.theme)
+      ) {
+        return;
+      }
+      // The user changed a preference before the registry answered. Persist it
+      // and treat the registry as resolved, so a stale snapshot cannot undo it.
+      persistPair(current);
       return;
     }
     if (skipHydrationPass.current) {
       skipHydrationPass.current = false;
       return;
     }
-    if (saved.current.language === language && saved.current.theme === preference) {
+    if (saved.current.language === current.language && saved.current.theme === current.theme) {
       return;
     }
-    saved.current = { language, theme: preference };
-    const generation = ++writeGeneration.current;
-    void api.setPreferences(language, preference).then(
-      () => {
-        if (generation === writeGeneration.current) {
-          setError(null);
-        }
-      },
-      (reason: unknown) => {
-        // Keep the newest failure visible until a newer write actually lands.
-        if (generation === writeGeneration.current) {
-          setError(messageOf(reason));
-        }
-      }
-    );
-  }, [api, language, preference]);
+    persistPair(current);
+  }, [persistPair, language, preference]);
 
   const value = useMemo(() => ({ error }), [error]);
   return <PreferencesContext.Provider value={value}>{children}</PreferencesContext.Provider>;

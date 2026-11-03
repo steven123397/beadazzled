@@ -5,6 +5,7 @@ import { I18nProvider } from '@/lib/i18n/I18nProvider';
 import { ThemeProvider } from '@/lib/theme/ThemeProvider';
 
 import { GeneralSection } from './GeneralSection';
+import './messages';
 
 function renderSection() {
   return render(

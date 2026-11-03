@@ -30,7 +30,7 @@ function snapshot(language: 'en' | 'zh-CN', theme: 'light' | 'dark' | 'system'):
 }
 
 /** Only `snapshot` is read by the bridge; the rest of the hook is inert here. */
-function workspaceWith(value: WorkspaceSnapshot): UseWorkspace {
+function workspaceWith(value: WorkspaceSnapshot | null): UseWorkspace {
   return {
     snapshot: value,
     bd: null,
@@ -65,15 +65,15 @@ function Controls() {
   );
 }
 
-function renderBridge(
-  value: WorkspaceSnapshot,
+type BridgeOptions = { language?: 'en' | 'zh-CN'; theme?: 'light' | 'dark' | 'system' };
+
+function bridgeTree(
+  value: WorkspaceSnapshot | null,
   api: PreferencesApi,
-  {
-    language = 'en',
-    theme = 'system',
-  }: { language?: 'en' | 'zh-CN'; theme?: 'light' | 'dark' | 'system' } = {}
+  options: BridgeOptions = {}
 ) {
-  return render(
+  const { language = 'en', theme = 'system' } = options;
+  return (
     <I18nProvider initialLanguage={language}>
       <ThemeProvider initialPreference={theme}>
         <WorkspaceProvider workspace={workspaceWith(value)}>
@@ -86,6 +86,14 @@ function renderBridge(
   );
 }
 
+function renderBridge(
+  value: WorkspaceSnapshot | null,
+  api: PreferencesApi,
+  options: BridgeOptions = {}
+) {
+  return render(bridgeTree(value, api, options));
+}
+
 test('the registry snapshot overrides the cached language and theme', async () => {
   const api = { setPreferences: vi.fn(async () => undefined) };
   renderBridge(snapshot('zh-CN', 'dark'), api);
@@ -93,6 +101,29 @@ test('the registry snapshot overrides the cached language and theme', async () =
   await waitFor(() => expect(screen.getByText('language:zh-CN')).toBeInTheDocument());
   expect(screen.getByText('theme:dark')).toBeInTheDocument();
   expect(api.setPreferences).not.toHaveBeenCalled();
+});
+
+test('a change made before the registry answers is still saved', async () => {
+  const api = { setPreferences: vi.fn(async () => undefined) };
+  renderBridge(null, api);
+  expect(screen.getByText('language:en')).toBeInTheDocument();
+
+  fireEvent.click(screen.getByRole('button', { name: 'zh' }));
+
+  await waitFor(() => expect(api.setPreferences).toHaveBeenCalledWith('zh-CN', 'system'));
+  expect(api.setPreferences).toHaveBeenCalledTimes(1);
+});
+
+test('a late snapshot does not undo a change made before it arrived', async () => {
+  const api = { setPreferences: vi.fn(async () => undefined) };
+  const { rerender } = renderBridge(null, api);
+  fireEvent.click(screen.getByRole('button', { name: 'zh' }));
+  await waitFor(() => expect(api.setPreferences).toHaveBeenCalledTimes(1));
+
+  rerender(bridgeTree(snapshot('en', 'system'), api));
+
+  expect(screen.getByText('language:zh-CN')).toBeInTheDocument();
+  expect(api.setPreferences).toHaveBeenCalledTimes(1);
 });
 
 test('a change after hydration is written once with the whole pair', async () => {
