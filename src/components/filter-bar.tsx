@@ -118,6 +118,39 @@ export const FilterBar = memo(function FilterBar({
     return () => window.removeEventListener('keydown', onKeyDown);
   }, []);
 
+  // Native `<details>` panels do not know about each other: opening the next
+  // one leaves the previous open, and pressing outside leaves it stranded.
+  // One document-level listener closes every panel that does not contain the
+  // press, and Escape closes the focused one. The elements stay native, so a
+  // summary press still toggles its own panel as usual.
+  useEffect(() => {
+    function closeMenus(event: Event): void {
+      const escape = event instanceof KeyboardEvent && event.key === 'Escape';
+      if (event instanceof KeyboardEvent && !escape) {
+        return;
+      }
+      const target = event.target instanceof Node ? event.target : null;
+      for (const menu of document.querySelectorAll<HTMLDetailsElement>(
+        'details[data-filter-menu][open]'
+      )) {
+        if (!escape && target !== null && menu.contains(target)) {
+          continue;
+        }
+        menu.open = false;
+        if (escape && target !== null && menu.contains(target)) {
+          menu.querySelector('summary')?.focus();
+        }
+      }
+    }
+
+    document.addEventListener('pointerdown', closeMenus);
+    document.addEventListener('keydown', closeMenus);
+    return () => {
+      document.removeEventListener('pointerdown', closeMenus);
+      document.removeEventListener('keydown', closeMenus);
+    };
+  }, []);
+
   const statusOptions = useMemo(() => {
     if (!listMode) {
       // The board hides the status control; do not build options it never shows.
@@ -296,7 +329,7 @@ function MultiSelect({
   const { t } = useI18n();
 
   return (
-    <details aria-label={label} className="relative">
+    <details aria-label={label} data-filter-menu className="relative">
       <summary className="flex h-control-sm cursor-pointer list-none items-center rounded-md border border-border bg-card px-2 text-xs text-muted-foreground shadow-xs hover:bg-hover">
         {label}
         {selected.length > 0 ? ` (${selected.length})` : ''}
