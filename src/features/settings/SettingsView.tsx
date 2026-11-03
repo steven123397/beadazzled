@@ -3,6 +3,7 @@ import { useI18n } from '@/lib/i18n/I18nProvider';
 import { AboutSection } from './AboutSection';
 import { BdSection } from './BdSection';
 import { GeneralSection } from './GeneralSection';
+import { WorkspaceSection } from './WorkspaceSection';
 
 /**
  * The settings surface for v0.1.0's general/bd/about blocks. Workspace,
@@ -21,6 +22,7 @@ export function SettingsView() {
       </h1>
       <GeneralSection />
       <BdSection />
+      <WorkspaceSection />
       <AboutSection />
     </section>
   );

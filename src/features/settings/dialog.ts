@@ -15,3 +15,15 @@ export async function pickBdExecutable(): Promise<string | null> {
   });
   return typeof selected === 'string' ? selected : null;
 }
+
+/**
+ * Opens the OS directory picker for "add workspace" and "relocate".
+ *
+ * Same contract as `pickBdExecutable`: null on cancel, rejection when the
+ * plugin is unavailable so the caller can show it.
+ */
+export async function pickDirectory(): Promise<string | null> {
+  const { open } = await import('@tauri-apps/plugin-dialog');
+  const selected = await open({ multiple: false, directory: true });
+  return typeof selected === 'string' ? selected : null;
+}

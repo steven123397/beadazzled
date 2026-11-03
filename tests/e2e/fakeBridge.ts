@@ -9,6 +9,15 @@ export type FakeBridgeOptions = {
   language?: 'en' | 'zh-CN';
   /** False renders the no-workspace welcome state. */
   active?: boolean;
+  /** Extra registered workspaces; the default one is still added first. */
+  workspaces?: readonly {
+    path: string;
+    name: string;
+    projectId: string;
+    isWorktree?: boolean;
+  }[];
+  /** What the native picker returns; null means the user cancelled. */
+  dialogPath?: string | null;
 };
 
 /**
@@ -44,6 +53,8 @@ export async function installFakeBridge(
     theme,
     language,
     active = true,
+    workspaces = [],
+    dialogPath = null,
   } = options;
 
   await page.addInitScript(
@@ -55,6 +66,8 @@ export async function installFakeBridge(
       theme: pref,
       language: lang,
       active,
+      extraWorkspaces,
+      picked,
     }) => {
       const path = `/repo/${id}`;
       const workspace = {
@@ -65,6 +78,24 @@ export async function installFakeBridge(
         lastOpenedAt: '2026-11-01T00:00:00Z',
         checkpoint: null,
       };
+      const entryFor = (candidate: {
+        path: string;
+        name: string;
+        projectId: string;
+        isWorktree?: boolean;
+      }) => ({
+        path: candidate.path,
+        name: candidate.name,
+        projectId: candidate.projectId,
+        isWorktree: candidate.isWorktree ?? false,
+        lastOpenedAt: '2026-11-01T00:00:00Z',
+        checkpoint: null,
+      });
+      const registered = active
+        ? [workspace, ...extraWorkspaces.map(entryFor)]
+        : extraWorkspaces.map(entryFor);
+      // Picking a directory that is already registered switches to it.
+      const entryAt = (value: string) => registered.find((item) => item.path === value);
       const snapshot = {
         config: {
           schemaVersion: 1,
@@ -74,7 +105,7 @@ export async function installFakeBridge(
           language: lang ?? 'en',
           theme: pref ?? 'system',
           lastWorkspacePath: null,
-          workspaces: active ? [workspace] : [],
+          workspaces: registered,
         },
         missing: [],
         active: active ? path : null,
@@ -84,8 +115,12 @@ export async function installFakeBridge(
       const log: string[] = [];
       (window as unknown as { __invokeLog: string[] }).__invokeLog = log;
       (window as unknown as { __TAURI_INTERNALS__: unknown }).__TAURI_INTERNALS__ = {
-        invoke: async (command: string) => {
-          log.push(command);
+        invoke: async (command: string, args?: Record<string, unknown>) => {
+          // Distinguish a cached read from an actual probe: only `refresh`
+          // spawns bd in the real backend.
+          log.push(
+            command === 'bd_status' && args?.refresh === true ? 'bd_status:refresh' : command
+          );
           if (command === 'workspace_snapshot') {
             return snapshot;
           }
@@ -98,6 +133,62 @@ export async function installFakeBridge(
           if (command === 'plugin:app|version') {
             return '0.1.0';
           }
+          if (command === 'plugin:dialog|open') {
+            return picked;
+          }
+          if (command === 'workspace_add') {
+            const requested = String(args?.path ?? '');
+            const existing = entryAt(requested);
+            if (existing !== undefined) {
+              snapshot.active = existing.path;
+              return existing;
+            }
+            // Both separators matter: the picker returns a Windows path.
+            const cut = Math.max(requested.lastIndexOf('/'), requested.lastIndexOf('\\'));
+            const added = {
+              path: requested,
+              name: cut >= 0 ? requested.slice(cut + 1) : requested,
+              projectId: `project-${registered.length + 1}`,
+              isWorktree: false,
+              lastOpenedAt: new Date().toISOString(),
+              checkpoint: null,
+            };
+            registered.push(added);
+            snapshot.active = added.path;
+            return added;
+          }
+          if (command === 'workspace_switch') {
+            const target = entryAt(String(args?.path ?? ''));
+            if (target === undefined) {
+              throw { code: 'WS_INACCESSIBLE', message: 'workspace is not registered' };
+            }
+            snapshot.active = target.path;
+            return target;
+          }
+          if (command === 'workspace_remove') {
+            const target = String(args?.path ?? '');
+            const index = registered.findIndex((item) => item.path === target);
+            if (index >= 0) {
+              registered.splice(index, 1);
+            }
+            if (snapshot.active === target) {
+              snapshot.active = null;
+            }
+            return true;
+          }
+          if (command === 'workspace_relocate') {
+            const from = String(args?.oldPath ?? '');
+            const to = String(args?.newPath ?? '');
+            const target = entryAt(from);
+            if (target === undefined) {
+              throw { code: 'WS_INACCESSIBLE', message: 'workspace is not registered' };
+            }
+            target.path = to;
+            if (snapshot.active === from) {
+              snapshot.active = to;
+            }
+            return target;
+          }
           throw new Error(`unexpected command: ${command}`);
         },
       };
@@ -108,7 +199,17 @@ export async function installFakeBridge(
         language: lang,
       };
     },
-    { projectId, name, issues, syncState, theme, language, active }
+    {
+      projectId,
+      name,
+      issues,
+      syncState,
+      theme,
+      language,
+      active,
+      extraWorkspaces: workspaces,
+      picked: dialogPath,
+    }
   );
 }
 

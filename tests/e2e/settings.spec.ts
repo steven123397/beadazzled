@@ -26,13 +26,17 @@ test('opening settings makes no bd call and preferences persist', async ({ page 
   expect(calls).toContain('app_set_preferences');
 });
 
-test('a picker failure is shown instead of silently doing nothing', async ({ page }) => {
-  await installFakeBridge(page);
+test('cancelling the bd picker leaves the configuration alone', async ({ page }) => {
+  await installFakeBridge(page, { dialogPath: null });
   await page.goto('/#/settings');
   await expect(page.getByRole('main').getByText('bd 1.3.2')).toBeVisible();
+  await clearInvokeLog(page);
 
-  // The browser page has no dialog plugin, so the picker reports why it could
-  // not open instead of pretending the user cancelled.
   await page.getByRole('button', { name: 'Choose bd…' }).click();
-  await expect(page.getByRole('alert')).toBeVisible();
+
+  // Cancelling is not a failure: no error, no write, no probe.
+  await expect(page.getByRole('main').getByText('bd 1.3.2')).toBeVisible();
+  await expect(page.getByRole('alert')).toHaveCount(0);
+  const calls = await invokeLog(page);
+  expect(calls.filter((command) => command.startsWith('bd_status'))).toEqual([]);
 });

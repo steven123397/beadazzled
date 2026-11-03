@@ -27,3 +27,11 @@ test('a missing plugin rejects so the caller can show the error', async () => {
 
   await expect(pickBdExecutable()).rejects.toThrow('dialog plugin is unavailable');
 });
+
+test('the directory picker asks for a directory and returns its path', async () => {
+  open.mockResolvedValueOnce('D:/repo');
+  const { pickDirectory } = await import('./dialog');
+
+  await expect(pickDirectory()).resolves.toBe('D:/repo');
+  expect(open).toHaveBeenLastCalledWith(expect.objectContaining({ directory: true }));
+});

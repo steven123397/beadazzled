@@ -257,6 +257,22 @@ export const en = {
   'settings.bd.usePath': 'Use the bd on PATH',
   'settings.bd.copy': 'Copy command',
 
+  'settings.workspaces': 'Workspaces',
+  'settings.workspaces.add': 'Add workspace…',
+  'settings.workspaces.empty': 'No workspaces yet. Add the repository that contains .beads.',
+  'settings.workspaces.current': 'Current',
+  'settings.workspaces.worktree': 'worktree',
+  'settings.workspaces.missing': 'missing',
+  'settings.workspaces.project': 'project {id}',
+  'settings.workspaces.lastOpened': 'last opened {time}',
+  'settings.workspaces.open': 'Open',
+  'settings.workspaces.relocate': 'Relocate…',
+  'settings.workspaces.remove': 'Remove',
+  'settings.workspaces.cancel': 'Cancel',
+  'settings.workspaces.confirmTitle': 'Remove workspace?',
+  'settings.workspaces.confirmBody':
+    '{name} will be removed from this app. Nothing on disk is deleted.',
+
   'settings.about': 'About',
   'settings.about.version': 'Version {version}',
   'settings.about.license': 'MIT license',
