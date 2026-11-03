@@ -118,6 +118,29 @@ test('two quick changes each write once and the last pair wins', async () => {
   expect(api.setPreferences).toHaveBeenCalledTimes(2);
 });
 
+test('an older failed save cannot overwrite a newer success', async () => {
+  let rejectFirst: (reason: unknown) => void = () => undefined;
+  const pending = new Promise<unknown>((_resolve, reject) => {
+    rejectFirst = reject;
+  });
+  const api = {
+    setPreferences: vi
+      .fn()
+      .mockImplementationOnce(() => pending)
+      .mockImplementationOnce(async () => undefined),
+  };
+  renderBridge(snapshot('en', 'system'), api);
+  await waitFor(() => expect(screen.getByText('language:en')).toBeInTheDocument());
+
+  fireEvent.click(screen.getByRole('button', { name: 'zh' }));
+  fireEvent.click(screen.getByRole('button', { name: 'dark' }));
+  await waitFor(() => expect(api.setPreferences).toHaveBeenCalledTimes(2));
+
+  // The first pair has already been replaced; its failure must stay hidden.
+  rejectFirst(new Error('old write failed'));
+  await waitFor(() => expect(screen.getByText('error:-')).toBeInTheDocument());
+});
+
 test('a failed write stays visible while the choice keeps working', async () => {
   const api = {
     setPreferences: vi.fn(async () => {

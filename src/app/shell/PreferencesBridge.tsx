@@ -58,6 +58,9 @@ export function PreferencesBridge({
   // still sees the pre-hydration values. This flag skips exactly that pass so
   // adopting the registry never writes back to it.
   const skipHydrationPass = useRef(false);
+  // Writes can settle out of order: an older rejection must not overwrite the
+  // message for a pair that has already been replaced.
+  const writeGeneration = useRef(0);
 
   useEffect(() => {
     if (saved.current !== null || snapshot === null) {
@@ -87,9 +90,19 @@ export function PreferencesBridge({
       return;
     }
     saved.current = { language, theme: preference };
+    const generation = ++writeGeneration.current;
     void api.setPreferences(language, preference).then(
-      () => setError(null),
-      (reason: unknown) => setError(messageOf(reason))
+      () => {
+        if (generation === writeGeneration.current) {
+          setError(null);
+        }
+      },
+      (reason: unknown) => {
+        // Keep the newest failure visible until a newer write actually lands.
+        if (generation === writeGeneration.current) {
+          setError(messageOf(reason));
+        }
+      }
     );
   }, [api, language, preference]);
 

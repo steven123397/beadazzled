@@ -552,7 +552,9 @@ fn preferences_are_written_without_touching_the_rest_of_the_config() {
         .expect("add workspace");
     let before = service.snapshot().config;
 
-    let written = service.set_preferences(Language::ZhCn, Theme::Dark);
+    let written = service
+        .set_preferences(Language::ZhCn, Theme::Dark)
+        .expect("save preferences");
 
     assert_eq!(written.language, Language::ZhCn);
     assert_eq!(written.theme, Theme::Dark);
@@ -565,6 +567,29 @@ fn preferences_are_written_without_touching_the_rest_of_the_config() {
     assert_eq!(reloaded.theme, Theme::Dark);
     assert_eq!(reloaded.bd_path, before.bd_path);
     assert_eq!(reloaded.workspaces, before.workspaces);
+}
+
+#[test]
+fn a_failed_preference_save_is_not_acknowledged() {
+    let dir = common::temp_dir("cmd-preferences-save-fails");
+    let config_path = dir.join("config.json");
+    let writer = ConfigWriter::with_saver(
+        config_path.clone(),
+        Duration::from_millis(60_000),
+        Arc::new(|_path, _config| Err(std::io::Error::other("disk is read-only"))),
+    );
+    let service =
+        WorkspaceService::open_with_writer(config_path, Arc::clone(&writer)).expect("open service");
+
+    let error = service
+        .set_preferences(Language::ZhCn, Theme::Dark)
+        .expect_err("a failed save must not resolve as success");
+
+    assert!(
+        error.message.contains("disk is read-only"),
+        "unexpected message: {}",
+        error.message
+    );
 }
 
 #[test]
