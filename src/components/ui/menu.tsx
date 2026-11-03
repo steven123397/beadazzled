@@ -155,7 +155,7 @@ export function Menu({ label, trigger, items, align = 'start', className }: Menu
                 close(true);
               }}
               className={cn(
-                'flex w-full items-center rounded-sm px-2 py-1 text-left text-xs hover:bg-hover focus-visible:bg-hover focus-visible:outline-none disabled:pointer-events-none disabled:opacity-50',
+                'flex w-full items-center rounded-sm px-2 py-1 text-left text-xs transition-colors hover:bg-hover focus-visible:bg-hover focus-visible:outline-none disabled:pointer-events-none disabled:opacity-50',
                 item.danger === true ? 'text-destructive' : 'text-foreground'
               )}
             >

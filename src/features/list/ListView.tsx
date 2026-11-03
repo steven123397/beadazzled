@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { Inbox, SearchX, TriangleAlert } from 'lucide-react';
 
@@ -10,15 +10,8 @@ import { StateBadge } from '@/components/ui/state-badge';
 import { FilterBar } from '@/components/filter-bar';
 import { useI18n } from '@/lib/i18n/I18nProvider';
 import { buildSearchIndex, hasActiveFilters } from '@/lib/view/filter';
-import {
-  createListViewState,
-  hasViewParams,
-  parseListViewState,
-  serializeListViewState,
-  type GroupBy,
-  type ListViewState,
-} from '@/lib/view/state';
-import { loadSavedView, saveSavedView } from '@/lib/view/storage';
+import { createListViewState, type GroupBy } from '@/lib/view/state';
+import { usePersistedView } from '@/lib/view/usePersistedView';
 
 import { selectVisibleIssues } from './filter';
 import { GROUP_HEIGHT, GroupHeader } from './GroupHeader';
@@ -67,51 +60,7 @@ export function ListRoute({ issues, syncState, onRefresh }: ListRouteProps) {
 export function ListView({ projectId, issues, syncState = HEALTHY, onRefresh }: ListViewProps) {
   const { t } = useI18n();
   const navigate = useNavigate();
-  const [searchParams, setSearchParams] = useSearchParams();
-  const search = searchParams.toString();
-  const hasParams = useMemo(() => hasViewParams(new URLSearchParams(search)), [search]);
-  const savedView = useMemo(() => loadSavedView(projectId), [projectId]);
-  const latestViewRef = useRef<ListViewState | null>(null);
-
-  // The URL wins; with no view parameters, keep the view the user was using.
-  // A sidebar "List" click or `g l` can strip the query string while this
-  // component stays mounted, and that must not clear the filters.
-  const view = useMemo(() => {
-    if (hasParams) {
-      return parseListViewState(new URLSearchParams(search));
-    }
-    return latestViewRef.current ?? savedView ?? createListViewState();
-  }, [hasParams, savedView, search]);
-
-  useEffect(() => {
-    latestViewRef.current = view;
-    saveSavedView(projectId, view);
-  }, [projectId, view]);
-
-  // Write a remembered view back to the URL, on mount with a saved view or
-  // after a navigation dropped the query string. Unknown-only URLs compare
-  // equal and are left alone.
-  useEffect(() => {
-    if (hasParams) {
-      return;
-    }
-    const next = serializeListViewState(view, new URLSearchParams(search));
-    if (next.toString() !== '' && next.toString() !== search) {
-      setSearchParams(next, { replace: true });
-    }
-  }, [hasParams, search, setSearchParams, view]);
-
-  const updateView = useCallback(
-    (next: ListViewState) => {
-      // Keep the fallback in sync so an explicit clear (which empties the URL)
-      // is not mistaken for a navigation that dropped the parameters.
-      latestViewRef.current = next;
-      setSearchParams((previous) => serializeListViewState(next, previous), {
-        replace: true,
-      });
-    },
-    [setSearchParams]
-  );
+  const { view, updateView } = usePersistedView(projectId);
 
   const initialPosition = useMemo(() => loadListPosition(projectId), [projectId]);
   const searchText = useMemo(() => buildSearchIndex(issues), [issues]);

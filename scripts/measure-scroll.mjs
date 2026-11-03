@@ -31,7 +31,9 @@ import { chromium } from '@playwright/test';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const outDir = path.join(root, 'dist-e2e');
 const viteBin = path.join(root, 'node_modules', 'vite', 'bin', 'vite.js');
-const budgets = { p50: 20, p95: 24, max: 50 };
+// 60Hz ticks at 16.7ms: a p50 near one frame keeps 60fps, p95 allows one
+// extra frame, and max absorbs a single GC/compile pause.
+const budgets = { p50: 18, p95: 22, max: 50 };
 // Steady reading speed, a fast wheel fling, and the same steady speed with
 // group headers in the window. 240px/frame mounts roughly 6.7 rows per frame,
 // close to the low end of a real fling; 48px/frame is a comfortable read.
@@ -62,6 +64,17 @@ const boardScenarios = [
     steps: 150,
     from: 0,
     minDistance: 25_000,
+  },
+  // Blocked cards carry the extra chip row, so the blocked column is the
+  // heaviest per-card case.
+  {
+    name: 'board-blocked',
+    view: 'board',
+    column: 'blocked',
+    delta: 48,
+    steps: 120,
+    from: 0,
+    minDistance: 3_000,
   },
 ];
 let port = 1431;
@@ -118,14 +131,34 @@ function issues() {
     id: `bza-${index}`,
     title: `Issue ${index}`,
     description: '',
-    status: index % 7 === 0 ? 'closed' : index % 5 === 0 ? 'in_progress' : 'open',
+    status:
+      index % 11 === 0
+        ? 'blocked'
+        : index % 7 === 0
+          ? 'closed'
+          : index % 5 === 0
+            ? 'in_progress'
+            : 'open',
     priority: index % 5,
     issue_type: index % 3 === 0 ? 'bug' : 'task',
     assignee: index % 4 === 0 ? 'ada' : index % 4 === 1 ? 'lin' : undefined,
     created_at: '2026-11-01T00:00:00Z',
     updated_at: '2026-11-01T00:00:00Z',
     labels: index % 2 === 0 ? ['ui'] : ['backend', 'perf', 'docs'],
-    dependency_count: 0,
+    // Half the blocked cards also name a real blocker, so the chip renders the
+    // dependency variant rather than only the manual one.
+    dependency_count: index % 11 === 0 && index % 22 === 0 ? 1 : 0,
+    dependencies:
+      index % 11 === 0 && index % 22 === 0
+        ? [
+            {
+              issue_id: `bza-${index}`,
+              depends_on_id: 'bza-1',
+              type: 'blocks',
+              created_at: '2026-11-01T00:00:00Z',
+            },
+          ]
+        : undefined,
     dependent_count: 0,
     comment_count: 0,
   }));

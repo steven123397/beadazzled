@@ -36,6 +36,10 @@
   /* Fixed so each board column can virtualize without measuring cards. */
   --card-height: 120px;
 
+  /* One motion language: every colour/opacity transition reads the same. */
+  --motion-duration: 120ms;
+  --motion-ease: cubic-bezier(0.2, 0, 0, 1);
+
   /* Type scale. `--ui-font` and `--doc-font` stay the anchors. */
   --ui-font: 13px;
   --doc-font: 15px;
@@ -128,4 +132,8 @@
   --shadow-sm: var(--shadow-sm);
   --shadow-md: var(--shadow-md);
   --shadow-popover: var(--shadow-popover);
+
+  /* Tailwind's `transition-*` utilities use these two by default. */
+  --default-transition-duration: var(--motion-duration);
+  --default-transition-timing-function: var(--motion-ease);
 }

@@ -294,8 +294,10 @@ test('Shift+Right produces the same command sequence as a drag', async () => {
   expect(command).toMatchObject({
     Update: { id: 'bza-1', status: 'in_progress', if_status: 'open' },
   });
-  const moved = await screen.findByText('Moved bza-1 to In Progress');
-  expect(moved.closest('[role="status"]')).toHaveAttribute('aria-live', 'polite');
+  const moved = await screen.findByText('Moved bza-1 to In Progress', {
+    selector: '[role="status"]',
+  });
+  expect(moved).toHaveAttribute('aria-live', 'polite');
 });
 
 test('a move is not optimistic: the card stays put with a pending marker', async () => {
@@ -498,7 +500,7 @@ test('Shift+Arrow on a filter control does not move a card', () => {
   fireEvent.keyDown(summary!, { key: 'ArrowRight', shiftKey: true });
 
   expect(writes.submit).not.toHaveBeenCalled();
-  expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  expect(screen.getByRole('alert')).toBeEmptyDOMElement();
 });
 
 test('a stale focused card is replaced so the board stays tabbable', async () => {

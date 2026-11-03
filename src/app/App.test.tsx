@@ -801,7 +801,9 @@ test('a failed copy tells the user instead of doing nothing', async () => {
   const dialog = await openDiagnostics();
   fireEvent.click(within(dialog).getByRole('button', { name: 'Copy diagnostics' }));
 
-  expect(await screen.findByText(/Copy failed/)).toBeInTheDocument();
+  expect(
+    await screen.findByText(/Copy failed/, { selector: '[role="status"]' })
+  ).toBeInTheDocument();
   Reflect.deleteProperty(document, 'execCommand');
 });
 

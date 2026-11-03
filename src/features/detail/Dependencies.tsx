@@ -74,7 +74,7 @@ function Group({
                 type="button"
                 onClick={() => onOpenIssue?.(ref.id)}
                 title={ref.issue.title}
-                className="flex w-full items-center gap-2 rounded-md px-1.5 py-1 text-left text-xs hover:bg-hover"
+                className="flex w-full items-center gap-2 rounded-md px-1.5 py-1 text-left text-xs transition-colors hover:bg-hover"
               >
                 <StatusIcon status={ref.issue.status} />
                 <span className="min-w-0 flex-1 truncate">{ref.issue.title}</span>

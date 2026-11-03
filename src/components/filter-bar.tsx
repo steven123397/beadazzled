@@ -337,7 +337,7 @@ function MultiSelect({
 
   return (
     <details aria-label={label} data-filter-menu className="relative">
-      <summary className="flex h-8 cursor-pointer list-none items-center rounded-md border border-border bg-raised px-2.5 text-sm text-muted-foreground shadow-xs hover:bg-hover">
+      <summary className="flex h-8 cursor-pointer list-none items-center rounded-md border border-border bg-raised px-2.5 text-sm text-muted-foreground shadow-xs transition-colors hover:bg-hover">
         {label}
         {selected.length > 0 ? ` (${selected.length})` : ''}
       </summary>
@@ -348,7 +348,7 @@ function MultiSelect({
         {options.map((option) => (
           <label
             key={option.value}
-            className="flex cursor-pointer items-center gap-2 rounded-sm px-2 py-1.5 text-sm hover:bg-hover"
+            className="flex cursor-pointer items-center gap-2 rounded-sm px-2 py-1.5 text-sm transition-colors hover:bg-hover"
           >
             <input
               type="checkbox"

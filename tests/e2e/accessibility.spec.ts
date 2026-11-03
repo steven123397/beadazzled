@@ -142,3 +142,14 @@ test('the detail reading page has no serious or critical violations', async ({ p
 
   expect(await seriousViolations(page)).toEqual([]);
 });
+
+test('reduced motion collapses transitions', async ({ page }) => {
+  await installFakeBridge(page);
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.goto('/#/settings/general');
+  const link = page.getByRole('link', { name: 'Workspaces' });
+  await expect(link).toBeVisible();
+
+  const duration = await link.evaluate((element) => getComputedStyle(element).transitionDuration);
+  expect(parseFloat(duration)).toBeLessThan(0.001);
+});

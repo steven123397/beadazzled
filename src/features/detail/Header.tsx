@@ -64,7 +64,7 @@ export function Header({
           <button
             type="button"
             onClick={onEditTitle}
-            className="-mx-1 rounded-sm px-1 text-left hover:bg-hover"
+            className="-mx-1 rounded-sm px-1 text-left transition-colors hover:bg-hover"
             title={t('detail.edit.edit')}
           >
             {issue.title}

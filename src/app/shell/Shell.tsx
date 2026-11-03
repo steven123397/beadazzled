@@ -330,15 +330,23 @@ export function Shell({
           onClose={closeOverlay}
         />
       ) : null}
-      {copyNotice !== null ? (
-        <p
-          role="status"
-          aria-live="polite"
-          className="pointer-events-none fixed bottom-8 left-1/2 z-40 -translate-x-1/2 rounded border border-border bg-raised px-3 py-1 text-xs text-foreground shadow"
-        >
-          {t(copyNotice === 'copied' ? 'clipboard.copied' : 'clipboard.failed')}
-        </p>
-      ) : null}
+      {/* Mounted for the lifetime of the shell: a region inserted together
+          with its text is not announced. It only becomes visible when there
+          is a result to show. */}
+      <p
+        role="status"
+        aria-live="polite"
+        aria-atomic="true"
+        className={
+          copyNotice === null
+            ? 'sr-only'
+            : 'pointer-events-none fixed bottom-8 left-1/2 z-40 -translate-x-1/2 rounded border border-border bg-raised px-3 py-1 text-xs text-foreground shadow'
+        }
+      >
+        {copyNotice === null
+          ? ''
+          : t(copyNotice === 'copied' ? 'clipboard.copied' : 'clipboard.failed')}
+      </p>
     </div>
   );
 }

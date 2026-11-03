@@ -11,7 +11,7 @@ import {
   type DragEndEvent,
   type DragStartEvent,
 } from '@dnd-kit/core';
-import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { Inbox, TriangleAlert } from 'lucide-react';
 
 import type { Issue, SyncState } from '@/bindings/bd';
@@ -24,14 +24,8 @@ import type { MessageKey } from '@/lib/i18n';
 import { useI18n } from '@/lib/i18n/I18nProvider';
 import { indexIssues } from '@/lib/store/selectors';
 import { buildSearchIndex } from '@/lib/view/filter';
-import {
-  createListViewState,
-  hasViewParams,
-  parseListViewState,
-  serializeListViewState,
-  type ListViewState,
-} from '@/lib/view/state';
-import { loadSavedView, saveSavedView } from '@/lib/view/storage';
+import { createListViewState } from '@/lib/view/state';
+import { usePersistedView } from '@/lib/view/usePersistedView';
 import type { UseWrite } from '@/lib/writes/useWrite';
 
 import { Column } from './Column';
@@ -96,50 +90,7 @@ export function BoardView({
 }: BoardViewProps) {
   const { t } = useI18n();
   const navigate = useNavigate();
-  const [searchParams, setSearchParams] = useSearchParams();
-  const search = searchParams.toString();
-  const hasParams = useMemo(() => hasViewParams(new URLSearchParams(search)), [search]);
-  const savedView = useMemo(() => loadSavedView(projectId), [projectId]);
-  // Grouping and sorting are list-only; read the stored view once per mount
-  // instead of on every filter keystroke.
-  const storedView = useMemo(() => savedView ?? createListViewState(), [savedView]);
-  const latestViewRef = useRef<ListViewState | null>(null);
-
-  // Board and list share one filter state. The URL wins; without view params
-  // the view the user last used is kept, exactly like the list.
-  const view = useMemo(() => {
-    if (hasParams) {
-      return parseListViewState(new URLSearchParams(search));
-    }
-    return latestViewRef.current ?? savedView ?? createListViewState();
-  }, [hasParams, savedView, search]);
-
-  useEffect(() => {
-    latestViewRef.current = view;
-    // Keep the list's grouping and sorting: the board never changes them, and
-    // switching back to the list must not reset the user's choice.
-    saveSavedView(projectId, { ...storedView, filter: view.filter });
-  }, [projectId, storedView, view]);
-
-  // Mirror a saved filter into the URL when the board is opened without
-  // parameters. Grouping and sorting are list-only and stay out of a board URL.
-  useEffect(() => {
-    if (hasParams) {
-      return;
-    }
-    const next = serializeBoardView(view, new URLSearchParams(search));
-    if (next.toString() !== '' && next.toString() !== search) {
-      setSearchParams(next, { replace: true });
-    }
-  }, [hasParams, search, setSearchParams, view]);
-
-  const updateView = useCallback(
-    (next: ListViewState) => {
-      latestViewRef.current = next;
-      setSearchParams((previous) => serializeBoardView(next, previous), { replace: true });
-    },
-    [setSearchParams]
-  );
+  const { view, updateView } = usePersistedView(projectId, 'board');
 
   const index = useMemo(() => indexIssues(issues), [issues]);
   const searchText = useMemo(() => buildSearchIndex(issues), [issues]);
@@ -261,6 +212,9 @@ export function BoardView({
 
       void (async () => {
         let failure: string | null = null;
+        // True once at least one command was accepted, even if its journal
+        // echo is missing: the card must keep keyboard focus in that case.
+        let submitted = false;
         try {
           for (const [position, command] of plan.commands.entries()) {
             const outcome = await writes.submit({
@@ -272,6 +226,7 @@ export function BoardView({
               failure = describeError(outcome.error).message;
               break;
             }
+            submitted = true;
             // A write can succeed and still miss its journal echo. Do not
             // announce the move or continue a two-command sequence as if the
             // store already reflected the first one.
@@ -299,7 +254,7 @@ export function BoardView({
               }
             : { tone: 'error', text: failure }
         );
-        if (failure === null && origin === 'keyboard') {
+        if (submitted && origin === 'keyboard') {
           requestFocus(issue.id);
         }
       })();
@@ -468,10 +423,18 @@ export function BoardView({
         </div>
       ) : null}
 
+      {/* Both live regions stay mounted: a region inserted together with its
+          text is not announced by most screen readers. The visible bar below
+          is decorative for the same reason. */}
+      <div role="status" aria-live="polite" aria-atomic="true" className="sr-only">
+        {notice !== null && notice.tone !== 'error' ? notice.text : ''}
+      </div>
+      <div role="alert" aria-live="assertive" aria-atomic="true" className="sr-only">
+        {notice !== null && notice.tone === 'error' ? notice.text : ''}
+      </div>
       {notice === null ? null : (
         <div
-          role={notice.tone === 'error' ? 'alert' : 'status'}
-          aria-live={notice.tone === 'error' ? 'assertive' : 'polite'}
+          aria-hidden="true"
           className={`shrink-0 border-b px-3 py-1.5 text-xs ${
             notice.tone === 'error'
               ? 'border-destructive/40 bg-destructive/10 text-destructive'
@@ -521,17 +484,6 @@ export function BoardView({
       )}
     </section>
   );
-}
-
-/** Writes the shared filter; list-only grouping and sorting are left out. */
-function serializeBoardView(
-  view: ListViewState,
-  params: URLSearchParams = new URLSearchParams()
-): URLSearchParams {
-  const next = serializeListViewState(view, params);
-  next.delete('group');
-  next.delete('sort');
-  return next;
 }
 
 function rejectionText(

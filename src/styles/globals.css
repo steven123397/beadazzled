@@ -14,6 +14,19 @@ body {
   outline-offset: 2px;
 }
 
+/* Motion is decoration: honour the OS setting by collapsing it everywhere,
+   including the width transition on the sidebar. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
 /* List rows paint their own selected surface plus a left accent bar, so the
    shared ring would double the focus treatment on the same card. */
 [data-issue-id]:focus-visible {

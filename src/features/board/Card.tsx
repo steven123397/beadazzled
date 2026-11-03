@@ -179,7 +179,7 @@ export const Card = memo(function Card({
             aria-label={t('board.card.drag', { id: issue.id })}
             onKeyDown={listeners?.onKeyDown as KeyboardEventHandler<HTMLButtonElement> | undefined}
             onClick={(event) => event.stopPropagation()}
-            className="ml-auto shrink-0 cursor-grab rounded-sm p-0.5 text-muted-foreground hover:bg-hover hover:text-foreground"
+            className="ml-auto shrink-0 cursor-grab rounded-sm p-0.5 text-muted-foreground transition-colors hover:bg-hover hover:text-foreground"
           >
             <GripVertical aria-hidden="true" className="size-3" />
           </button>

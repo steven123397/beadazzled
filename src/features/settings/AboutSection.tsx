@@ -110,7 +110,7 @@ export function AboutSection() {
       )}
 
       <details className="group rounded-md border border-border bg-raised">
-        <summary className="flex cursor-pointer list-none items-center gap-2 rounded-md px-3 py-2.5 text-sm hover:bg-hover">
+        <summary className="flex cursor-pointer list-none items-center gap-2 rounded-md px-3 py-2.5 text-sm transition-colors hover:bg-hover">
           <ChevronRight
             aria-hidden="true"
             className="size-3.5 shrink-0 text-muted-foreground transition-transform group-open:rotate-90"

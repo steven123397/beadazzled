@@ -57,3 +57,34 @@ test('palette input to rendered results stays under 50ms', async ({ page }) => {
   samples.sort((left, right) => left - right);
   expect(samples[2]).toBeLessThan(50);
 });
+
+test('typing in the list filter stays under 50ms with 1000 issues', async ({ page }) => {
+  test.setTimeout(60_000);
+  await installFakeBridge(page, {
+    issues: Array.from({ length: 1000 }, (_, index) => issue(index)),
+  });
+  await page.goto('/#/w/p1/list');
+  await expect(page.getByRole('heading', { name: 'List' })).toBeVisible({ timeout: 15_000 });
+
+  const samples = await page.evaluate(
+    async (queries) => {
+      const input = document.querySelector<HTMLInputElement>('input[type="search"]');
+      if (input === null) throw new Error('search input missing');
+      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
+      if (setter === undefined) throw new Error('value setter missing');
+      const timings: number[] = [];
+      for (const value of queries) {
+        const started = performance.now();
+        setter.call(input, value);
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+        timings.push(performance.now() - started);
+      }
+      return timings;
+    },
+    ['k', 'ke', 'key', 'keyb', 'keybo', 'keyboa', 'keyboar', 'keyboard']
+  );
+
+  samples.sort((left, right) => left - right);
+  expect(samples[Math.floor(samples.length / 2)]).toBeLessThan(50);
+});

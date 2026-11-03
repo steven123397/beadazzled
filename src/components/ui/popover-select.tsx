@@ -103,7 +103,7 @@ export function PopoverSelect({
         aria-disabled={disabled || undefined}
         tabIndex={disabled ? -1 : undefined}
         className={cn(
-          'flex cursor-pointer list-none items-center gap-1.5 rounded-md border border-border bg-raised text-foreground shadow-xs focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring',
+          'flex cursor-pointer list-none items-center gap-1.5 rounded-md border border-border bg-raised text-foreground shadow-xs transition-colors focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring',
           SIZE_CLASS[size],
           disabled ? 'pointer-events-none opacity-50' : 'hover:bg-hover',
           triggerClassName
@@ -125,7 +125,7 @@ export function PopoverSelect({
               'flex items-center gap-2 rounded-sm px-2 py-1.5 text-sm',
               option.disabled === true
                 ? 'cursor-not-allowed opacity-50'
-                : 'cursor-pointer hover:bg-hover'
+                : 'cursor-pointer transition-colors hover:bg-hover'
             )}
           >
             <input
