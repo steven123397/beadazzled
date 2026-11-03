@@ -130,6 +130,17 @@ pub struct CallRecord {
 
 type CallLog = Arc<Mutex<VecDeque<CallRecord>>>;
 
+/// The process-wide call buffer the diagnostics screen reads.
+///
+/// Every `BdBridge` records here so calls made by sync, writes and an explicit
+/// refresh are all visible in one history. `ProcessRunner::new` keeps a
+/// private buffer instead: unit tests build runners directly and must not see
+/// each other's traffic.
+pub fn shared_call_log() -> CallLog {
+    static SHARED: OnceLock<CallLog> = OnceLock::new();
+    Arc::clone(SHARED.get_or_init(|| Arc::new(Mutex::new(VecDeque::new()))))
+}
+
 /// Short calls on one workspace must not overlap. The lock belongs to the
 /// workspace (the external resource), not to a runner instance: every
 /// `BdBridge` created for the same path has to share it, otherwise a fresh
@@ -168,10 +179,21 @@ pub struct ProcessRunner {
 }
 
 impl ProcessRunner {
+    /// Test-only: production runners share one buffer via [`shared_call_log`].
+    #[cfg(test)]
     pub fn new(bd_path: impl Into<PathBuf>) -> Self {
         Self {
             bd_path: bd_path.into(),
             calls: Arc::new(Mutex::new(VecDeque::new())),
+        }
+    }
+
+    /// A runner that records into an existing buffer, so several bridges can
+    /// share one diagnostics history.
+    pub fn with_log(bd_path: impl Into<PathBuf>, calls: CallLog) -> Self {
+        Self {
+            bd_path: bd_path.into(),
+            calls,
         }
     }
 

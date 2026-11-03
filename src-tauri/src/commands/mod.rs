@@ -4,6 +4,7 @@
 //! without a running webview.
 
 pub mod config_writer;
+pub mod diagnostics;
 pub mod sync;
 pub mod workspace;
 

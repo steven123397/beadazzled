@@ -31,7 +31,7 @@ use self::process::{
 
 pub use argv::{argv_for, Argv, AssigneeChange, CreateSpec, UpdateSpec, WriteCommand};
 pub use error::{map_exit, BridgeError, BridgeErrorCode};
-pub use process::CallRecord;
+pub use process::{shared_call_log, CallRecord};
 pub use types::{
     Comment, Dependency, Issue, JournalComment, JournalDep, JournalOp, JournalRecord,
     WorkspaceContext,
@@ -52,7 +52,9 @@ pub struct BdBridge {
 impl BdBridge {
     pub fn new(bd_path: impl Into<PathBuf>, workspace: impl Into<PathBuf>) -> Self {
         Self {
-            runner: ProcessRunner::new(bd_path),
+            // Diagnostics reads one history for the whole process, so every
+            // bridge shares the buffer instead of keeping a private one.
+            runner: ProcessRunner::with_log(bd_path, process::shared_call_log()),
             workspace: workspace.into(),
             follow_stop: Mutex::new(None),
         }
@@ -519,6 +521,7 @@ fn remember_tail(tail: &mut Vec<u8>, chunk: &[u8]) {
 mod tests {
     use super::*;
     use crate::bridge::argv::{AssigneeChange, CreateSpec, UpdateSpec, WriteCommand};
+    use crate::commands::diagnostics::{DiagnosticsCall, DiagnosticsSnapshot};
     use crate::commands::workspace::WorkspaceSnapshot;
     use crate::sync::state::{LoadingStep, SyncState};
     use crate::workspace::discovery::BdStatus;
@@ -557,6 +560,8 @@ mod tests {
             AssigneeChange::decl(),
             WriteOutcome::decl(),
             WorkspaceSnapshot::decl(),
+            DiagnosticsCall::decl(),
+            DiagnosticsSnapshot::decl(),
         ];
 
         let mut output = String::from(
@@ -595,6 +600,8 @@ mod tests {
             "AssigneeChange",
             "WriteOutcome",
             "WorkspaceSnapshot",
+            "DiagnosticsCall",
+            "DiagnosticsSnapshot",
         ] {
             assert!(
                 written.contains(expected),

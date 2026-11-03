@@ -31,6 +31,11 @@ pub fn runner() -> ProcessRunner {
     ProcessRunner::new(fake_bd_path())
 }
 
+/// The fake bd executable, for tests that build their own runner.
+pub fn fake_bd() -> PathBuf {
+    fake_bd_path()
+}
+
 fn fake_bd_path() -> PathBuf {
     let path = std::env::var_os("FAKE_BD_PATH")
         .map(PathBuf::from)
