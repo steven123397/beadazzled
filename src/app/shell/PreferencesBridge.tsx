@@ -1,4 +1,12 @@
-import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react';
 
 import { useWorkspaceContext } from './WorkspaceProvider';
 
@@ -85,7 +93,8 @@ export function PreferencesBridge({
     );
   }, [api, language, preference]);
 
-  return <PreferencesContext.Provider value={{ error }}>{children}</PreferencesContext.Provider>;
+  const value = useMemo(() => ({ error }), [error]);
+  return <PreferencesContext.Provider value={value}>{children}</PreferencesContext.Provider>;
 }
 
 export function usePreferenceWriteError(): string | null {

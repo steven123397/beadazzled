@@ -285,7 +285,6 @@ export function Shell({
     [
       issues,
       navigate,
-      reload,
       refresh,
       copyDiagnostics,
       project,

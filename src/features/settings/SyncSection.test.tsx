@@ -3,7 +3,7 @@ import { expect, test, vi } from 'vitest';
 
 import type { SyncState, WorkspaceSnapshot } from '@/bindings/bd';
 import { AppRefreshProvider } from '@/app/shell/AppRefresh';
-import { SyncStatusProvider } from '@/app/shell/SyncStatus';
+import { SyncStatusProvider, type SyncErrorRecord } from '@/app/shell/SyncStatus';
 import { WorkspaceProvider } from '@/app/shell/WorkspaceProvider';
 import { I18nProvider } from '@/lib/i18n/I18nProvider';
 import type { UseWorkspace } from '@/lib/workspace/useWorkspace';
@@ -59,11 +59,12 @@ function renderSection(
     value = snapshot({ seq: 42, savedAt: '2026-11-02T11:00:00.000Z' }),
     copy = vi.fn(async () => 'copied' as const),
     refresh = vi.fn(),
+    lastError = null as SyncErrorRecord | null,
   } = {}
 ) {
   render(
     <I18nProvider initialLanguage="en">
-      <SyncStatusProvider state={state}>
+      <SyncStatusProvider state={state} lastError={lastError}>
         <WorkspaceProvider workspace={workspace(value)}>
           <AppRefreshProvider value={{ lastRefreshAt: NOW, refresh }}>
             <SyncSection copy={copy} />
@@ -110,15 +111,38 @@ test('refresh now runs the same action as Ctrl+R', () => {
 });
 
 test('a bd failure shows its code, message and detail', () => {
-  renderSection({
-    kind: 'bd-unavailable',
-    error: {
-      code: 'BD_TIMEOUT',
-      message: 'bd timed out after 20000ms',
-      detail: { command: 'export', timeout_ms: 20000 },
+  renderSection(
+    {
+      kind: 'bd-unavailable',
+      error: {
+        code: 'BD_TIMEOUT',
+        message: 'bd timed out after 20000ms',
+        detail: { command: 'export', timeout_ms: 20000 },
+      },
     },
-  });
+    { lastError: { code: 'BD_TIMEOUT', at: NOW, message: 'bd timed out after 20000ms' } }
+  );
 
   expect(screen.getByText('BD_TIMEOUT — bd timed out after 20000ms')).toBeInTheDocument();
+  expect(screen.getByText('Details')).toBeInTheDocument();
+  expect(screen.getByText(/^at /)).toBeInTheDocument();
+});
+
+test('an error that recovered stays visible with when it happened', () => {
+  renderSection(
+    { kind: 'healthy', lastSeq: 7, lastEventAt: null },
+    {
+      lastError: {
+        code: 'BD_TIMEOUT',
+        at: NOW,
+        message: 'bd timed out after 20000ms',
+        detail: { command: 'export' },
+      },
+    }
+  );
+
+  expect(screen.getByText('Last sync error')).toBeInTheDocument();
+  expect(screen.getByText('BD_TIMEOUT — bd timed out after 20000ms')).toBeInTheDocument();
+  expect(screen.getByText(/^at /)).toBeInTheDocument();
   expect(screen.getByText('Details')).toBeInTheDocument();
 });

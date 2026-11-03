@@ -1,7 +1,7 @@
 import { useState } from 'react';
 
 import { useAppRefresh } from '@/app/shell/AppRefresh';
-import { describeSyncState, useSyncState } from '@/app/shell/SyncStatus';
+import { describeSyncState, useSyncErrorHistory, useSyncState } from '@/app/shell/SyncStatus';
 import { useWorkspaceContext } from '@/app/shell/WorkspaceProvider';
 import { Button } from '@/components/ui/button';
 import { copyText, type CopyResult } from '@/lib/clipboard';
@@ -17,6 +17,7 @@ const JOURNAL_COMMAND = 'bd config set events-journal true';
 export function SyncSection({ copy = copyText }: { copy?: (text: string) => Promise<CopyResult> }) {
   const { t, language } = useI18n();
   const sync = useSyncState();
+  const lastError = useSyncErrorHistory();
   const { lastRefreshAt, refresh } = useAppRefresh();
   const { snapshot } = useWorkspaceContext();
   const [copyResult, setCopyResult] = useState<CopyResult | null>(null);
@@ -26,6 +27,11 @@ export function SyncSection({ copy = copyText }: { copy?: (text: string) => Prom
   const checkpoint = active?.checkpoint ?? null;
   const lastSeq = sync.kind === 'healthy' ? sync.lastSeq : null;
   const lastEventAt = sync.kind === 'healthy' ? sync.lastEventAt : null;
+  // A live failure wins; otherwise the remembered one keeps its timestamp.
+  const shownError =
+    sync.kind === 'bd-unavailable'
+      ? { ...sync.error, at: lastError?.at ?? null }
+      : (lastError ?? null);
 
   return (
     <section aria-labelledby="settings-sync" className="space-y-3">
@@ -34,10 +40,7 @@ export function SyncSection({ copy = copyText }: { copy?: (text: string) => Prom
       </h2>
       <dl className="space-y-1 rounded-md border border-border bg-card p-3 text-xs">
         <Row label={t('settings.sync.state')} value={t(label.key, label.vars)} />
-        <Row
-          label={t('settings.sync.lastSeq')}
-          value={lastSeq === null ? '-' : String(lastSeq)}
-        />
+        <Row label={t('settings.sync.lastSeq')} value={lastSeq === null ? '-' : String(lastSeq)} />
         <Row
           label={t('settings.sync.lastRefresh')}
           value={formatDateTime(new Date(lastRefreshAt).toISOString(), language)}
@@ -51,30 +54,40 @@ export function SyncSection({ copy = copyText }: { copy?: (text: string) => Prom
           }
         />
         {lastEventAt === null ? null : (
-          <Row
-            label={t('settings.sync.lastEvent')}
-            value={formatDateTime(lastEventAt, language)}
-          />
+          <Row label={t('settings.sync.lastEvent')} value={formatDateTime(lastEventAt, language)} />
         )}
       </dl>
-      {sync.kind === 'bd-unavailable' ? (
+      {shownError === null ? null : (
         <div className="space-y-1 text-xs">
-          <p className="text-destructive">{t('settings.sync.bdUnavailable')}</p>
-          <p className="font-mono text-destructive">
-            {sync.error.code} — {sync.error.message}
+          <p className="text-destructive">
+            {t(
+              sync.kind === 'bd-unavailable'
+                ? 'settings.sync.bdUnavailable'
+                : 'settings.sync.lastError'
+            )}
           </p>
-          {sync.error.detail === undefined ? null : (
+          {shownError.at === null ? null : (
+            <p className="text-muted-foreground">
+              {t('settings.sync.lastErrorAt', {
+                time: formatDateTime(new Date(shownError.at).toISOString(), language),
+              })}
+            </p>
+          )}
+          <p className="font-mono text-destructive">
+            {shownError.code} — {shownError.message}
+          </p>
+          {shownError.detail === undefined ? null : (
             <details>
               <summary className="cursor-pointer text-muted-foreground">
                 {t('settings.sync.details')}
               </summary>
               <pre className="mt-1 overflow-auto rounded border border-border bg-muted p-2 text-2xs text-foreground">
-                {JSON.stringify(sync.error.detail, null, 2)}
+                {JSON.stringify(shownError.detail, null, 2)}
               </pre>
             </details>
           )}
         </div>
-      ) : null}
+      )}
       {sync.kind === 'journal-disabled' ? (
         <div className="space-y-2 rounded-md border border-warning/40 bg-warning/10 p-3 text-xs">
           <p className="text-warning">{t('settings.sync.journalOff')}</p>

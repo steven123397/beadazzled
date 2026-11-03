@@ -6,7 +6,11 @@ import { I18nProvider, useI18n } from '@/lib/i18n/I18nProvider';
 import { ThemeProvider, useTheme } from '@/lib/theme/ThemeProvider';
 import type { UseWorkspace } from '@/lib/workspace/useWorkspace';
 
-import { PreferencesBridge, usePreferenceWriteError, type PreferencesApi } from './PreferencesBridge';
+import {
+  PreferencesBridge,
+  usePreferenceWriteError,
+  type PreferencesApi,
+} from './PreferencesBridge';
 import { WorkspaceProvider } from './WorkspaceProvider';
 
 function snapshot(language: 'en' | 'zh-CN', theme: 'light' | 'dark' | 'system'): WorkspaceSnapshot {
@@ -64,7 +68,10 @@ function Controls() {
 function renderBridge(
   value: WorkspaceSnapshot,
   api: PreferencesApi,
-  { language = 'en', theme = 'system' }: { language?: 'en' | 'zh-CN'; theme?: 'light' | 'dark' | 'system' } = {}
+  {
+    language = 'en',
+    theme = 'system',
+  }: { language?: 'en' | 'zh-CN'; theme?: 'light' | 'dark' | 'system' } = {}
 ) {
   return render(
     <I18nProvider initialLanguage={language}>
@@ -97,6 +104,18 @@ test('a change after hydration is written once with the whole pair', async () =>
 
   await waitFor(() => expect(api.setPreferences).toHaveBeenCalledWith('en', 'dark'));
   expect(api.setPreferences).toHaveBeenCalledTimes(1);
+});
+
+test('two quick changes each write once and the last pair wins', async () => {
+  const api = { setPreferences: vi.fn(async () => undefined) };
+  renderBridge(snapshot('en', 'system'), api);
+  await waitFor(() => expect(screen.getByText('language:en')).toBeInTheDocument());
+
+  fireEvent.click(screen.getByRole('button', { name: 'zh' }));
+  fireEvent.click(screen.getByRole('button', { name: 'dark' }));
+
+  await waitFor(() => expect(api.setPreferences).toHaveBeenCalledWith('zh-CN', 'dark'));
+  expect(api.setPreferences).toHaveBeenCalledTimes(2);
 });
 
 test('a failed write stays visible while the choice keeps working', async () => {

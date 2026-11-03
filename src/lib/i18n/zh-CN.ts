@@ -281,6 +281,8 @@ export const zhCN: Record<keyof typeof en, string> = {
   'settings.sync.checkpoint': '检查点',
   'settings.sync.checkpointNone': '尚无',
   'settings.sync.bdUnavailable': 'bd 不可用，实时同步已暂停。',
+  'settings.sync.lastError': '最近一次同步错误',
+  'settings.sync.lastErrorAt': '时间：{time}',
   'settings.sync.journalOff': '该工作区的实时更新已关闭。',
   'settings.sync.journalHint': '开启 journal 后刷新一次：',
   'settings.sync.copyCommand': '复制命令',

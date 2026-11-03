@@ -282,6 +282,8 @@ export const en = {
   'settings.sync.checkpoint': 'Checkpoint',
   'settings.sync.checkpointNone': 'none yet',
   'settings.sync.bdUnavailable': 'bd is unavailable, so real-time sync is paused.',
+  'settings.sync.lastError': 'Last sync error',
+  'settings.sync.lastErrorAt': 'at {time}',
   'settings.sync.journalOff': 'Real-time updates are off for this workspace.',
   'settings.sync.journalHint': 'Enable the journal, then refresh once:',
   'settings.sync.copyCommand': 'Copy command',

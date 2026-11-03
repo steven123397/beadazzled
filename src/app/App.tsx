@@ -19,7 +19,7 @@ import { ErrorBoundary } from './shell/ErrorBoundary';
 import { PreferencesBridge, type PreferencesApi } from './shell/PreferencesBridge';
 import { Shell } from './shell/Shell';
 import { SkeletonScreen } from './shell/SkeletonScreen';
-import { SyncStatusProvider } from './shell/SyncStatus';
+import { SyncStatusProvider, type SyncErrorRecord } from './shell/SyncStatus';
 import { Welcome } from './shell/Welcome';
 import {
   activeWorkspace,
@@ -169,6 +169,20 @@ function AppFrame({
     : syncState.kind === 'healthy'
       ? syncState.lastSeq
       : 0;
+  // A bd failure disappears from SyncState the moment it recovers, but
+  // Settings still owes the user the last error, its time and its summary.
+  const [lastSyncError, setLastSyncError] = useState<SyncErrorRecord | null>(null);
+  useEffect(() => {
+    if (shellSyncState.kind !== 'bd-unavailable') {
+      return;
+    }
+    const error = shellSyncState.error;
+    setLastSyncError((previous) =>
+      previous !== null && previous.code === error.code && previous.message === error.message
+        ? previous
+        : { code: error.code, at: Date.now(), message: error.message, detail: error.detail }
+    );
+  }, [shellSyncState]);
   const refresh = useCallback(() => {
     void reload();
     sync.refresh();
@@ -215,7 +229,7 @@ function AppFrame({
       copiedLabel={t('clipboard.copied')}
       failedLabel={t('clipboard.failed')}
     >
-      <SyncStatusProvider state={shellSyncState}>
+      <SyncStatusProvider state={shellSyncState} lastError={lastSyncError}>
         <WorkspaceProvider workspace={workspace}>
           <PreferencesBridge api={preferencesApi}>
             <HashRouter>

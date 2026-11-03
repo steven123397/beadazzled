@@ -746,7 +746,9 @@ test('the copied diagnostics text has a fixed shape and carries no secrets', asy
   expect(lines[3]).toContain('dolt_mode=-');
   expect(lines[4]).toMatch(/^sync: healthy · lastSeq=42 · lastRefresh=.+$/);
   expect(lines[5]).toBe('error: -');
-  expect(text).not.toMatch(/token|secret|password/i);
+  // The real guarantee is structural — formatDiagnostics emits six fixed
+  // fields — so this stays a tripwire against a future field that leaks one.
+  expect(text).not.toMatch(/token|secret|password|key/i);
 });
 
 test('sync state changes are announced politely', async () => {
