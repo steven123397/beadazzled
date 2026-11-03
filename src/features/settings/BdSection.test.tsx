@@ -130,9 +130,17 @@ test('a rejected path is explained while the effective bd stays ready', async ()
 
   fireEvent.click(screen.getByRole('button', { name: 'Choose bd…' }));
 
-  expect(await screen.findByText('bd was not found. Install it, then detect again:')).toBeVisible();
-  // The previous entry is still what the app runs on.
-  expect(screen.queryByText('Configured path')).not.toBeInTheDocument();
+  expect(await screen.findByText('The chosen bd was rejected.')).toBeVisible();
+  expect(screen.getByText('No bd was found at D:/nope/bd.exe.')).toBeVisible();
+  // The previous entry is still what the app runs on, so it keeps its panel.
+  expect(screen.getByText('bd 1.3.2')).toBeInTheDocument();
+  expect(screen.getByText('Configured path')).toBeInTheDocument();
+});
+
+test('a failure stored by the workspace hook is shown', () => {
+  renderSection(workspace({ error: 'bd probe crashed' }));
+
+  expect(screen.getByRole('alert')).toHaveTextContent('bd probe crashed');
 });
 
 test('a picker failure is shown instead of silently doing nothing', async () => {

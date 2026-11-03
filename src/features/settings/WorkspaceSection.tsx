@@ -62,7 +62,10 @@ export function WorkspaceSection({ pickDirectory = defaultPicker }: WorkspaceSec
       if (entry.path !== active && !(await switchTo(entry.path))) {
         return;
       }
-      navigate(`/w/${entry.projectId}/list`);
+      // Switch may revalidate the project identity (the directory can now hold
+      // a different beads project), so the route is resolved from the refreshed
+      // registry instead of the entry captured before the switch.
+      navigate('/');
     } finally {
       setBusy(false);
     }

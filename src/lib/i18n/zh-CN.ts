@@ -252,6 +252,8 @@ export const zhCN: Record<keyof typeof en, string> = {
   'settings.bd.notFound': '没有找到 bd。安装后重新检测：',
   'settings.bd.unsupported': 'bd {found} 低于要求的 {min}。',
   'settings.bd.broken': '{path} 上的 bd 无法响应：{error}',
+  'settings.bd.rejected': '所选 bd 未通过检测。',
+  'settings.bd.rejectedNotFound': '{path} 处没有找到 bd。',
   'settings.bd.lookedIn': '已查找：{paths}',
   'settings.bd.redetect': '重新检测',
   'settings.bd.choose': '指定路径…',

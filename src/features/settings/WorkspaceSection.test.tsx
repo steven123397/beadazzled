@@ -111,7 +111,7 @@ test('adding a workspace hands the picked directory to the registry', async () =
   await waitFor(() => expect(add).toHaveBeenCalledWith('/repo/new'));
 });
 
-test('opening another workspace switches, then lands on its list', async () => {
+test('opening another workspace switches, then resolves the route from the registry', async () => {
   const active = entry('/repo/alpha');
   const other = entry('/repo/beta', { projectId: 'project-2-abcdef' });
   const switchTo = vi.fn(async () => true);
@@ -120,9 +120,9 @@ test('opening another workspace switches, then lands on its list', async () => {
   fireEvent.click(screen.getAllByRole('button', { name: 'Open' })[1]);
 
   await waitFor(() => expect(switchTo).toHaveBeenCalledWith('/repo/beta'));
-  await waitFor(() =>
-    expect(screen.getByTestId('location')).toHaveTextContent('/w/project-2-abcdef/list')
-  );
+  // The switch may have revalidated the project id, so the shell resolves the
+  // active workspace's route rather than the id captured before the switch.
+  await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent(/^\/$/));
 });
 
 test('removing asks first and only drops the entry', async () => {

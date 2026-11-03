@@ -22,16 +22,19 @@ export type BdSectionProps = {
  */
 export function BdSection({ pickFile = defaultPicker, copy = copyText }: BdSectionProps) {
   const { t } = useI18n();
-  const { snapshot, bd, refreshBd, setBdPath } = useWorkspaceContext();
+  const { snapshot, bd, error, refreshBd, setBdPath } = useWorkspaceContext();
   const [attempt, setAttempt] = useState<BdStatus | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [copyResult, setCopyResult] = useState<CopyResult | null>(null);
 
   const configured = snapshot?.config.bdPath ?? null;
-  // A rejected pick is reported here; the registry keeps the previous entry,
-  // which is what `bd` still shows as effective.
-  const shown = attempt ?? bd;
+  // The panel always describes what the app is actually running on. A rejected
+  // pick is reported beside it: replacing the effective status would hide a
+  // working bd behind install instructions.
+  const shown = bd;
+  const rejected = attempt === null || attempt.kind === 'ready' ? null : attempt;
+  const shownError = actionError ?? error;
   const installCommand = t('welcome.installCommand');
 
   async function detect(): Promise<void> {
@@ -80,6 +83,19 @@ export function BdSection({ pickFile = defaultPicker, copy = copyText }: BdSecti
     setCopyResult(await copy(installCommand));
   }
 
+  function describeRejection(status: BdStatus): string {
+    switch (status.kind) {
+      case 'not-found':
+        return t('settings.bd.rejectedNotFound', { path: status.searched[0] ?? '-' });
+      case 'unsupported':
+        return t('settings.bd.unsupported', { found: status.found, min: status.min });
+      case 'broken':
+        return t('settings.bd.broken', { path: status.path, error: status.error.message });
+      case 'ready':
+        return '';
+    }
+  }
+
   return (
     <section aria-labelledby="settings-bd" className="space-y-3">
       <h2 id="settings-bd" className="text-sm font-semibold">
@@ -122,9 +138,15 @@ export function BdSection({ pickFile = defaultPicker, copy = copyText }: BdSecti
           </>
         )}
       </div>
-      {actionError === null ? null : (
+      {rejected === null ? null : (
+        <div role="alert" className="space-y-1 text-xs text-destructive">
+          <p>{t('settings.bd.rejected')}</p>
+          <p>{describeRejection(rejected)}</p>
+        </div>
+      )}
+      {shownError === null ? null : (
         <p role="alert" className="text-xs text-destructive">
-          {actionError}
+          {shownError}
         </p>
       )}
       {copyResult === null ? null : (

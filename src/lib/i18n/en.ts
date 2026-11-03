@@ -252,6 +252,8 @@ export const en = {
   'settings.bd.notFound': 'bd was not found. Install it, then detect again:',
   'settings.bd.unsupported': 'bd {found} is older than the required {min}.',
   'settings.bd.broken': 'bd at {path} did not answer: {error}',
+  'settings.bd.rejected': 'The chosen bd was rejected.',
+  'settings.bd.rejectedNotFound': 'No bd was found at {path}.',
   'settings.bd.lookedIn': 'Looked in: {paths}',
   'settings.bd.redetect': 'Detect again',
   'settings.bd.choose': 'Choose bd…',
