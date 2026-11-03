@@ -47,8 +47,15 @@ export function formatAbsoluteTime(value: string, language: Language): string {
   return Number.isNaN(timestamp) ? value : absoluteFormatter(language).format(timestamp);
 }
 
+/** Date and time: used where "when" matters to the minute, not just the day. */
+export function formatDateTime(value: string, language: Language): string {
+  const timestamp = Date.parse(value);
+  return Number.isNaN(timestamp) ? value : dateTimeFormatter(language).format(timestamp);
+}
+
 const relativeFormatters = new Map<string, Intl.RelativeTimeFormat>();
 const absoluteFormatters = new Map<string, Intl.DateTimeFormat>();
+const dateTimeFormatters = new Map<string, Intl.DateTimeFormat>();
 
 function relativeFormatter(language: Language): Intl.RelativeTimeFormat {
   let formatter = relativeFormatters.get(language);
@@ -64,6 +71,15 @@ function absoluteFormatter(language: Language): Intl.DateTimeFormat {
   if (formatter === undefined) {
     formatter = new Intl.DateTimeFormat(language);
     absoluteFormatters.set(language, formatter);
+  }
+  return formatter;
+}
+
+function dateTimeFormatter(language: Language): Intl.DateTimeFormat {
+  let formatter = dateTimeFormatters.get(language);
+  if (formatter === undefined) {
+    formatter = new Intl.DateTimeFormat(language, { dateStyle: 'short', timeStyle: 'short' });
+    dateTimeFormatters.set(language, formatter);
   }
   return formatter;
 }

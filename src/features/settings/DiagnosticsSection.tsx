@@ -1,0 +1,210 @@
+import { useState } from 'react';
+
+import type { BdStatus, DiagnosticsSnapshot } from '@/bindings/bd';
+import { useAppRefresh } from '@/app/shell/AppRefresh';
+import { useSyncState } from '@/app/shell/SyncStatus';
+import { useWorkspaceContext } from '@/app/shell/WorkspaceProvider';
+import { Button } from '@/components/ui/button';
+import { useAppVersion } from '@/lib/app-version';
+import { copyText, type CopyResult } from '@/lib/clipboard';
+import { diagnosticsApi as defaultApi, type DiagnosticsApi } from '@/lib/diagnostics/api';
+import { formatDiagnostics } from '@/lib/diagnostics';
+import { messageOf } from '@/lib/errors';
+import { useI18n } from '@/lib/i18n/I18nProvider';
+
+/** The report shows the newest calls only; the buffer keeps 200. */
+const SHOWN_CALLS = 20;
+
+export type DiagnosticsSectionProps = {
+  api?: DiagnosticsApi;
+  copy?: (text: string) => Promise<CopyResult>;
+};
+
+/**
+ * A copyable report built on demand. Loading it spawns `bd context` once, so
+ * the section says so and never runs anything while merely being opened.
+ */
+export function DiagnosticsSection({
+  api = defaultApi,
+  copy = copyText,
+}: DiagnosticsSectionProps) {
+  const { t } = useI18n();
+  const appVersion = useAppVersion();
+  const sync = useSyncState();
+  const { lastRefreshAt } = useAppRefresh();
+  const { error: workspaceError } = useWorkspaceContext();
+  const [report, setReport] = useState<DiagnosticsSnapshot | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [copyResult, setCopyResult] = useState<CopyResult | null>(null);
+
+  async function load(): Promise<DiagnosticsSnapshot | null> {
+    setLoading(true);
+    setLoadError(null);
+    try {
+      const next = await api.load();
+      setReport(next);
+      return next;
+    } catch (reason) {
+      setLoadError(messageOf(reason));
+      return null;
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function copyReport(): Promise<void> {
+    const current = report ?? (await load());
+    if (current === null) {
+      return;
+    }
+    setCopyResult(await copy(buildText(current)));
+  }
+
+  function buildText(snapshot: DiagnosticsSnapshot): string {
+    const bd = snapshot.bd;
+    const context = snapshot.context;
+    return formatDiagnostics({
+      appVersion,
+      bdVersion: bd.kind === 'ready' ? bd.version : bd.kind,
+      bdPath: 'path' in bd ? bd.path : null,
+      workspace: snapshot.workspace,
+      project: context?.project_id ?? null,
+      doltMode: context?.dolt_mode ?? null,
+      schema: context?.schema_version ?? null,
+      sync: sync.kind,
+      lastSeq: sync.kind === 'healthy' ? sync.lastSeq : null,
+      lastRefreshAt: new Date(lastRefreshAt).toISOString(),
+      error: errorText(snapshot, loadError ?? workspaceError),
+    });
+  }
+
+  return (
+    <section aria-labelledby="settings-diagnostics" className="space-y-3">
+      <h2 id="settings-diagnostics" className="text-sm font-semibold">
+        {t('settings.diagnostics')}
+      </h2>
+      <p className="text-xs text-muted-foreground">{t('settings.diagnostics.hint')}</p>
+      <div className="flex flex-wrap gap-2">
+        <Button onClick={() => void load()} disabled={loading}>
+          {loading ? t('settings.diagnostics.loading') : t('settings.diagnostics.load')}
+        </Button>
+        <Button variant="ghost" onClick={() => void copyReport()} disabled={loading}>
+          {t('settings.diagnostics.copy')}
+        </Button>
+      </div>
+      {loadError === null ? null : (
+        <p role="alert" className="text-xs text-destructive">
+          {loadError}
+        </p>
+      )}
+      {copyResult === null ? null : (
+        <p role="status" aria-live="polite" className="text-xs text-muted-foreground">
+          {t(copyResult === 'copied' ? 'clipboard.copied' : 'clipboard.failed')}
+        </p>
+      )}
+      {report === null ? null : (
+        <div className="space-y-3">
+          <dl className="space-y-1 rounded-md border border-border bg-card p-3 text-xs">
+            <Row label={t('settings.diagnostics.bd')} value={describeBd(report.bd)} />
+            <Row label={t('settings.diagnostics.workspace')} value={report.workspace ?? '-'} />
+            {report.context === null ? (
+              <p className="text-muted-foreground">
+                {report.contextError === null
+                  ? t('settings.diagnostics.noContext')
+                  : t('settings.diagnostics.contextError', {
+                      error: `${report.contextError.code} — ${report.contextError.message}`,
+                    })}
+              </p>
+            ) : (
+              <>
+                <Row
+                  label={t('settings.diagnostics.project')}
+                  value={report.context.project_id}
+                />
+                <Row
+                  label={t('settings.diagnostics.doltMode')}
+                  value={report.context.dolt_mode}
+                />
+                <Row
+                  label={t('settings.diagnostics.schema')}
+                  value={String(report.context.schema_version)}
+                />
+              </>
+            )}
+          </dl>
+          <div className="space-y-1">
+            <h3 className="text-xs font-medium">{t('settings.diagnostics.calls')}</h3>
+            {report.calls.length === 0 ? (
+              <p className="text-xs text-muted-foreground">
+                {t('settings.diagnostics.noCalls')}
+              </p>
+            ) : (
+              <table className="w-full text-left text-xs" aria-label={t('settings.diagnostics.calls')}>
+                <thead className="text-muted-foreground">
+                  <tr>
+                    <th scope="col" className="py-1 pr-2 font-medium">
+                      {t('settings.diagnostics.command')}
+                    </th>
+                    <th scope="col" className="py-1 pr-2 font-medium">
+                      {t('settings.diagnostics.argv')}
+                    </th>
+                    <th scope="col" className="py-1 pr-2 text-right font-medium">
+                      {t('settings.diagnostics.duration')}
+                    </th>
+                    <th scope="col" className="py-1 text-right font-medium">
+                      {t('settings.diagnostics.result')}
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="font-mono">
+                  {report.calls.slice(0, SHOWN_CALLS).map((call, index) => (
+                    <tr key={`${call.command}-${index}`} className="border-t border-border">
+                      <td className="py-1 pr-2">{call.command}</td>
+                      <td className="max-w-40 truncate py-1 pr-2 text-muted-foreground">
+                        {call.argv}
+                      </td>
+                      <td className="py-1 pr-2 text-right tabular-nums">{call.durationMs}</td>
+                      <td className="py-1 text-right">
+                        {call.errorCode ?? (call.exitCode === 0 ? 'ok' : String(call.exitCode))}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function describeBd(bd: BdStatus): string {
+  switch (bd.kind) {
+    case 'ready':
+      return `${bd.version} · ${bd.path}`;
+    case 'unsupported':
+      return `${bd.found} (needs ${bd.min}) · ${bd.path}`;
+    case 'broken':
+      return `${bd.error.code} · ${bd.path}`;
+    case 'not-found':
+      return 'not found';
+  }
+}
+
+function errorText(snapshot: DiagnosticsSnapshot, fallback: string | null): string | null {
+  if (snapshot.contextError !== null) {
+    return `${snapshot.contextError.code} — ${snapshot.contextError.message}`;
+  }
+  return fallback;
+}
+
+function Row({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex justify-between gap-3">
+      <dt className="text-muted-foreground">{label}</dt>
+      <dd className="min-w-0 break-all text-right text-foreground">{value}</dd>
+    </div>
+  );
+}

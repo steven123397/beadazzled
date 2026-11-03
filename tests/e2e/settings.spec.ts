@@ -40,3 +40,30 @@ test('cancelling the bd picker leaves the configuration alone', async ({ page })
   const calls = await invokeLog(page);
   expect(calls.filter((command) => command.startsWith('bd_status'))).toEqual([]);
 });
+
+test('diagnostics load on demand and copy the fixed report', async ({ page }) => {
+  await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
+  await installFakeBridge(page);
+  await page.goto('/#/settings');
+  await expect(page.getByRole('heading', { name: 'Settings' })).toBeVisible();
+  await clearInvokeLog(page);
+
+  await page.getByRole('button', { name: 'Load diagnostics' }).click();
+
+  await expect(page.getByRole('table', { name: 'Recent bd calls' })).toBeVisible();
+  await expect(page.getByText('embedded')).toBeVisible();
+  const calls = await invokeLog(page);
+  expect(calls).toContain('settings_diagnostics');
+  expect(calls.filter((command) => command.startsWith('bd_status'))).toEqual([]);
+
+  await page.getByRole('button', { name: 'Copy diagnostics' }).click();
+  await expect(page.getByText('Copied')).toBeVisible();
+
+  const report = await page.evaluate(() => navigator.clipboard.readText());
+  // Windows normalises clipboard text to CRLF.
+  const lines = report.split(/\r?\n/);
+  expect(lines).toHaveLength(6);
+  expect(lines[0]).toBe('beadazzled 0.1.0');
+  expect(lines[1]).toBe('bd 1.3.2 at bd');
+  expect(lines[3]).toContain('dolt_mode=embedded');
+});

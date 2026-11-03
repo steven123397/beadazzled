@@ -133,6 +133,31 @@ export async function installFakeBridge(
           if (command === 'plugin:app|version') {
             return '0.1.0';
           }
+          if (command === 'settings_diagnostics') {
+            return {
+              bd: { kind: 'ready', path: 'bd', version: '1.3.2' },
+              workspace: snapshot.active,
+              context:
+                snapshot.active === null
+                  ? null
+                  : {
+                      project_id: id,
+                      bd_version: '1.3.2',
+                      dolt_mode: 'embedded',
+                      schema_version: 1,
+                    },
+              contextError: null,
+              calls: [
+                {
+                  command: 'context',
+                  argv: 'context --json',
+                  durationMs: 12,
+                  exitCode: 0,
+                  errorCode: null,
+                },
+              ],
+            };
+          }
           if (command === 'plugin:dialog|open') {
             return picked;
           }

@@ -737,21 +737,16 @@ test('the copied diagnostics text has a fixed shape and carries no secrets', asy
 
   await waitFor(() => expect(writeText).toHaveBeenCalledTimes(1));
   const text = writeText.mock.calls[0]?.[0] ?? '';
-  const keys = text.split('\n').map((line) => line.slice(0, line.indexOf(':')));
-  expect(keys).toEqual([
-    'bd',
-    'workspace',
-    'projectId',
-    'lastSeq',
-    'sync',
-    'lastRefresh',
-    'pendingWrites',
-    'lastError',
-    'view',
-  ]);
-  expect(text).toContain('workspace: /repo/p1');
-  expect(text).toMatch(/lastSeq: 42/);
-  expect(text).not.toMatch(/token|secret|password|key/i);
+  const lines = text.split('\n');
+  expect(lines).toHaveLength(6);
+  // jsdom has no Tauri app plugin, so the version line says unknown.
+  expect(lines[0]).toBe('beadazzled unknown');
+  expect(lines[1]).toBe('bd 1.3.2 at bd');
+  expect(lines[2]).toBe('workspace: /repo/p1');
+  expect(lines[3]).toContain('dolt_mode=-');
+  expect(lines[4]).toMatch(/^sync: healthy · lastSeq=42 · lastRefresh=.+$/);
+  expect(lines[5]).toBe('error: -');
+  expect(text).not.toMatch(/token|secret|password/i);
 });
 
 test('sync state changes are announced politely', async () => {

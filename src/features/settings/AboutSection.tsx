@@ -1,8 +1,7 @@
-import { useEffect, useState } from 'react';
-
-import { getVersion } from '@tauri-apps/api/app';
+import { useState } from 'react';
 
 import { Button } from '@/components/ui/button';
+import { useAppVersion } from '@/lib/app-version';
 import { messageOf } from '@/lib/errors';
 import { useI18n } from '@/lib/i18n/I18nProvider';
 import { openExternal } from '@/lib/links';
@@ -16,25 +15,8 @@ const REPOSITORY_URL = 'https://github.com/steven123397/beadazzled';
  */
 export function AboutSection() {
   const { t } = useI18n();
-  const [version, setVersion] = useState<string | null>(null);
+  const version = useAppVersion();
   const [linkError, setLinkError] = useState<string | null>(null);
-
-  useEffect(() => {
-    let alive = true;
-    void getVersion().then(
-      (value) => {
-        if (alive) {
-          setVersion(value);
-        }
-      },
-      // A webview without the Tauri app plugin (browser e2e) has no version;
-      // the row is simply omitted rather than showing a fake one.
-      () => undefined
-    );
-    return () => {
-      alive = false;
-    };
-  }, []);
 
   async function openRepository(): Promise<void> {
     setLinkError(null);

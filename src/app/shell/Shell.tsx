@@ -9,11 +9,13 @@ import { CommandPalette } from '@/app/palette/CommandPalette';
 import { buildCommands } from '@/app/palette/commands';
 import { useI18n } from '@/lib/i18n/I18nProvider';
 import { copyText, type CopyResult } from '@/lib/clipboard';
+import { useAppVersion } from '@/lib/app-version';
 import { formatDiagnostics } from '@/lib/diagnostics';
 import { confirmLeaveDraft } from '@/lib/draft-guard';
 import { loadSidebarCollapsed, saveSidebarCollapsed } from '@/lib/shell/layout';
 import { useTheme } from '@/lib/theme/ThemeProvider';
 
+import { AppRefreshProvider } from './AppRefresh';
 import { Diagnostics } from './Diagnostics';
 import { Sidebar } from './Sidebar';
 import { StatusBar } from './StatusBar';
@@ -61,6 +63,7 @@ export function Shell({
   const [diagnosticsOpen, setDiagnosticsOpen] = useState(false);
   // Read once at mount so a restored collapse never renders expanded first.
   const [sidebarCollapsed, setSidebarCollapsed] = useState(loadSidebarCollapsed);
+  const appVersion = useAppVersion();
   const [lastRefreshAt, setLastRefreshAt] = useState(() => Date.now());
   const [copyNotice, setCopyNotice] = useState<CopyResult | null>(null);
 
@@ -69,6 +72,7 @@ export function Shell({
     refreshData();
     setLastRefreshAt(Date.now());
   }, [refreshData]);
+  const appRefresh = useMemo(() => ({ lastRefreshAt, refresh }), [lastRefreshAt, refresh]);
 
   useEffect(() => {
     saveSidebarCollapsed(sidebarCollapsed);
@@ -115,17 +119,20 @@ export function Shell({
   const diagnosticsText = useCallback(
     () =>
       formatDiagnostics({
-        bd: bd?.kind === 'ready' ? bd.version : (bd?.kind ?? 'unknown'),
-        workspace: project?.path ?? '-',
-        project: project?.projectId ?? '-',
-        lastSeq,
+        appVersion,
+        bdVersion: bd === null ? null : bd.kind === 'ready' ? bd.version : bd.kind,
+        bdPath: bd !== null && 'path' in bd ? bd.path : null,
+        workspace: project?.path ?? null,
+        project: project?.projectId ?? null,
+        // The shell does not ask bd for a context; Settings fills these in.
+        doltMode: null,
+        schema: null,
         sync: syncState.kind,
+        lastSeq,
         lastRefreshAt: new Date(lastRefreshAt).toISOString(),
-        pendingWrites,
         error,
-        view: window.location.hash || '#/',
       }),
-    [bd, project, lastSeq, syncState, lastRefreshAt, pendingWrites, error]
+    [appVersion, bd, project, lastSeq, syncState, lastRefreshAt, error]
   );
 
   const copyDiagnostics = useCallback(() => {
@@ -303,7 +310,9 @@ export function Shell({
       <div className="flex min-h-0 flex-1">
         <Sidebar project={project} collapsed={sidebarCollapsed} onToggle={toggleSidebar} />
         <main className="min-w-0 flex-1 overflow-auto">
-          <Outlet />
+          <AppRefreshProvider value={appRefresh}>
+            <Outlet />
+          </AppRefreshProvider>
         </main>
       </div>
       <StatusBar lastRefreshAt={lastRefreshAt} open={diagnosticsOpen} onOpen={openDiagnostics} />

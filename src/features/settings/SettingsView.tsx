@@ -2,7 +2,9 @@ import { useI18n } from '@/lib/i18n/I18nProvider';
 
 import { AboutSection } from './AboutSection';
 import { BdSection } from './BdSection';
+import { DiagnosticsSection } from './DiagnosticsSection';
 import { GeneralSection } from './GeneralSection';
+import { SyncSection } from './SyncSection';
 import { WorkspaceSection } from './WorkspaceSection';
 
 /**
@@ -23,6 +25,8 @@ export function SettingsView() {
       <GeneralSection />
       <BdSection />
       <WorkspaceSection />
+      <SyncSection />
+      <DiagnosticsSection />
       <AboutSection />
     </section>
   );
