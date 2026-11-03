@@ -204,6 +204,8 @@ fn switching_and_removing_update_the_active_workspace() {
     assert!(service.snapshot().active.is_none());
     assert_eq!(service.snapshot().config.workspaces.len(), 1);
     assert!(!service.remove_workspace(&path_string(&first)));
+    // Removing is a registry operation only; the repository is untouched.
+    assert!(first.is_dir());
 }
 
 #[test]
