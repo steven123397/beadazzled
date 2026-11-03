@@ -90,6 +90,15 @@ impl BdDiscovery {
         status
     }
 
+    /// Seeds the cache with a status computed elsewhere.
+    ///
+    /// Settings probes a candidate path before storing it; priming the new
+    /// discovery with that result keeps the follow-up cached read from
+    /// spawning `bd --version` a second time for the same answer.
+    pub fn prime(&self, status: BdStatus) {
+        *lock(&self.cached) = Some(status);
+    }
+
     /// Human-readable notes about fallbacks taken during discovery.
     pub fn diagnostics(&self) -> Vec<String> {
         lock(&self.diagnostics).clone()

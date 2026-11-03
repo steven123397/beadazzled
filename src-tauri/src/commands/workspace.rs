@@ -130,6 +130,9 @@ impl WorkspaceService {
         let mut state = lock(&self.state);
         state.config.bd_path = Some(path);
         let discovery = std::sync::Arc::new(BdDiscovery::from_env(state.config.bd_path.as_deref()));
+        // The candidate was just probed; reuse that answer instead of spawning
+        // bd again for the cached read that follows this command.
+        discovery.prime(status.clone());
         state.discovery = std::sync::Arc::clone(&discovery);
         self.writer.queue(state.config.clone());
         status
@@ -426,7 +429,7 @@ pub fn workspace_add(
     service.add_workspace(&path)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn workspace_switch(
     service: tauri::State<'_, WorkspaceService>,
     path: String,
