@@ -11,13 +11,18 @@ mod common;
 use std::fs;
 use std::io::Write as _;
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex as StdMutex};
 
 use beadazzled_lib::bridge::{BdBridge, Issue, JournalRecord, UpdateSpec, WriteCommand};
 use beadazzled_lib::commands::WorkspaceService;
 use beadazzled_lib::sync::{BaselineOutcome, SyncConfig, SyncEngine, SyncSink, SyncState};
 
 const PROJECT_ID: &str = "00000000-0000-4000-8000-000000000000";
+
+/// The call log is process-wide (`shared_call_log`), so one test asserting
+/// that a read path makes no bd call must not overlap the other test in this
+/// binary, whose baseline spawns bd.
+static INTERACTION_GUARD: StdMutex<()> = StdMutex::new(());
 
 #[derive(Default)]
 struct CollectingSink {
@@ -101,6 +106,9 @@ fn workspace_named(dir: &Path, name: &str) -> PathBuf {
 
 #[test]
 fn add_baseline_write_echo_and_restart() {
+    let _guard = INTERACTION_GUARD
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
     let dir = common::temp_dir("checkpoint-data-plane");
     let workspace = common::workspace(&dir);
     write_journal(
@@ -211,6 +219,9 @@ fn add_baseline_write_echo_and_restart() {
 
 #[test]
 fn degraded_states_are_visible_without_a_ui() {
+    let _guard = INTERACTION_GUARD
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
     let dir = common::temp_dir("checkpoint-degraded");
     let service = service_at(&dir.join("config.json"));
 
