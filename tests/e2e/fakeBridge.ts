@@ -18,6 +18,8 @@ export type FakeBridgeOptions = {
   }[];
   /** What the native picker returns; null means the user cancelled. */
   dialogPath?: string | null;
+  /** Overrides the bd resolution result, e.g. `{ kind: 'not-found' }`. */
+  bdStatus?: Record<string, unknown>;
 };
 
 /**
@@ -55,6 +57,7 @@ export async function installFakeBridge(
     active = true,
     workspaces = [],
     dialogPath = null,
+    bdStatus,
   } = options;
 
   await page.addInitScript(
@@ -68,6 +71,7 @@ export async function installFakeBridge(
       active,
       extraWorkspaces,
       picked,
+      bd,
     }) => {
       const path = `/repo/${id}`;
       const workspace = {
@@ -125,7 +129,7 @@ export async function installFakeBridge(
             return snapshot;
           }
           if (command === 'bd_status') {
-            return { kind: 'ready', path: 'bd', version: '1.3.2' };
+            return bd;
           }
           if (command === 'app_set_preferences') {
             return snapshot.config;
@@ -234,6 +238,7 @@ export async function installFakeBridge(
       active,
       extraWorkspaces: workspaces,
       picked: dialogPath,
+      bd: bdStatus ?? { kind: 'ready', path: 'bd', version: '1.3.2' },
     }
   );
 }

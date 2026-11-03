@@ -55,3 +55,24 @@ test('relocating a workspace moves its path and keeps its name', async ({ page }
   await expect(moved).toContainText('alpha');
   await expect(page.getByRole('listitem').filter({ hasText: '/repo/p1' })).toHaveCount(0);
 });
+
+test('the remove confirmation keeps focus inside and cancels with Escape', async ({ page }) => {
+  await installFakeBridge(page);
+  await page.goto('/#/settings');
+  const row = page.getByRole('listitem').filter({ hasText: '/repo/p1' });
+  await row.getByRole('button', { name: 'Remove' }).click();
+
+  const dialog = page.getByRole('dialog', { name: 'Remove workspace?' });
+  await expect(dialog).toBeVisible();
+  const focusInside = () =>
+    page.evaluate(() => Boolean(document.activeElement?.closest('[role="dialog"]')));
+  expect(await focusInside()).toBe(true);
+
+  await page.keyboard.press('Tab');
+  expect(await focusInside()).toBe(true);
+
+  await page.keyboard.press('Escape');
+  await expect(dialog).toBeHidden();
+  const calls = await invokeLog(page);
+  expect(calls.filter((command) => command === 'workspace_remove')).toEqual([]);
+});
