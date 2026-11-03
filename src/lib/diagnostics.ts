@@ -1,34 +1,36 @@
 export type DiagnosticsInput = {
-  bd: string;
-  workspace: string;
-  project: string;
-  lastSeq: number;
+  /** `null` when the app plugin is unavailable (browser e2e). */
+  appVersion: string | null;
+  bdVersion: string | null;
+  bdPath: string | null;
+  workspace: string | null;
+  project: string | null;
+  doltMode: string | null;
+  schema: number | null;
   /** The `SyncState` kind, kept machine-readable for support pastes. */
   sync: string;
+  lastSeq: number | null;
   /** ISO timestamp of the last refresh, or null when there has been none. */
   lastRefreshAt: string | null;
-  pendingWrites: number;
+  /** `<code> — <message>`, or null. */
   error: string | null;
-  view: string;
 };
 
 /**
  * The clipboard payload behind both "Copy diagnostics" entry points.
  *
- * The shape is fixed on purpose: one `key: value` per line, always the same
- * order, so a pasted report can be diffed. Callers only pass state the shell
+ * The shape is fixed by SPEC-settings: one line per fact, always the same
+ * order, so a pasted report can be diffed. Callers only pass state the screen
  * already holds — nothing here reads the environment, the config file or bd.
+ * Paths and ticket ids are allowed; tokens and issue bodies never are.
  */
 export function formatDiagnostics(input: DiagnosticsInput): string {
   return [
-    `bd: ${input.bd}`,
-    `workspace: ${input.workspace}`,
-    `projectId: ${input.project}`,
-    `lastSeq: ${input.lastSeq}`,
-    `sync: ${input.sync}`,
-    `lastRefresh: ${input.lastRefreshAt ?? '-'}`,
-    `pendingWrites: ${input.pendingWrites}`,
-    `lastError: ${input.error ?? '-'}`,
-    `view: ${input.view}`,
+    `beadazzled ${input.appVersion ?? 'unknown'}`,
+    `bd ${input.bdVersion ?? 'unknown'} at ${input.bdPath ?? '-'}`,
+    `workspace: ${input.workspace ?? '-'}`,
+    `project: ${input.project ?? '-'} · dolt_mode=${input.doltMode ?? '-'} · schema=${input.schema ?? '-'}`,
+    `sync: ${input.sync} · lastSeq=${input.lastSeq ?? '-'} · lastRefresh=${input.lastRefreshAt ?? '-'}`,
+    `error: ${input.error ?? '-'}`,
   ].join('\n');
 }

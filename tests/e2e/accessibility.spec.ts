@@ -60,6 +60,10 @@ test('the dark theme has no serious or critical violations', async ({ page }) =>
 
   expect(await seriousViolations(page)).toEqual([]);
 
+  await page.goto('/#/settings');
+  await expect(page.getByRole('heading', { name: 'Settings' })).toBeVisible();
+  expect(await seriousViolations(page)).toEqual([]);
+
   await page.keyboard.press('?');
   await expect(page.getByRole('dialog', { name: 'Keyboard shortcuts' })).toBeVisible();
   expect(await seriousViolations(page)).toEqual([]);

@@ -84,6 +84,83 @@ test('/ focuses the search box', () => {
   expect(screen.getByRole('searchbox', { name: 'Search tickets' })).toHaveFocus();
 });
 
+test('a filter menu closes when another opens, on an outside press, or on Escape', () => {
+  renderBar();
+  const detailsFor = (label: string): HTMLDetailsElement => {
+    const menus = Array.from(
+      document.querySelectorAll<HTMLDetailsElement>('details[data-filter-menu]')
+    );
+    const menu = menus.find(
+      (candidate) => candidate.querySelector('summary')?.textContent === label
+    );
+    if (menu === undefined) {
+      throw new Error(`no <details> for ${label}`);
+    }
+    return menu;
+  };
+  const status = detailsFor('Status');
+  const priority = detailsFor('Priority');
+  const openMenu = (details: HTMLDetailsElement): HTMLElement => {
+    details.open = true;
+    return details.querySelector('summary') as HTMLElement;
+  };
+
+  // Pressing the next summary closes the one already open before it toggles.
+  openMenu(status);
+  fireEvent.pointerDown(priority.querySelector('summary') as HTMLElement);
+  expect(status.open).toBe(false);
+
+  // A press inside the panel keeps it open (checking an option is not a dismiss).
+  openMenu(priority);
+  const checkbox = within(priority).getAllByRole('checkbox')[0];
+  fireEvent.pointerDown(checkbox);
+  expect(priority.open).toBe(true);
+
+  // A press anywhere else dismisses the open panel.
+  fireEvent.pointerDown(document.body);
+  expect(priority.open).toBe(false);
+
+  // Escape dismisses and returns focus to the trigger.
+  const summary = openMenu(priority);
+  checkbox.focus();
+  fireEvent.keyDown(checkbox, { key: 'Escape' });
+  expect(priority.open).toBe(false);
+  expect(summary).toHaveFocus();
+});
+
+test('a lagging URL update does not overwrite what the user has typed', () => {
+  const bar = (view: ListViewState) => (
+    <I18nProvider initialLanguage="en">
+      <FilterBar
+        view={view}
+        issues={[]}
+        visibleCount={0}
+        totalCount={0}
+        onChange={vi.fn()}
+        onClear={vi.fn()}
+      />
+    </I18nProvider>
+  );
+  const { rerender } = render(bar(createListViewState()));
+  const search = screen.getByRole('searchbox', { name: 'Search tickets' });
+  search.focus();
+
+  fireEvent.change(search, { target: { value: 'fix scroll' } });
+  expect(search).toHaveValue('fix scroll');
+
+  // Every keystroke goes through the URL, so a commit can land with the query
+  // of the previous keystroke while the next one is already in the field.
+  const lagging = createListViewState();
+  lagging.filter.query = 'fix scrol';
+  rerender(bar(lagging));
+  expect(search).toHaveValue('fix scroll');
+
+  // Once the field is not being typed into, external changes win again.
+  search.blur();
+  rerender(bar(createListViewState()));
+  expect(search).toHaveValue('');
+});
+
 test('status, priority, type, assignee and label checkboxes update their dimensions', () => {
   const { onChange } = renderBar();
 

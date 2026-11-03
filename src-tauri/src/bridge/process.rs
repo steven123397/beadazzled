@@ -130,6 +130,17 @@ pub struct CallRecord {
 
 type CallLog = Arc<Mutex<VecDeque<CallRecord>>>;
 
+/// The process-wide call buffer the diagnostics screen reads.
+///
+/// Every `BdBridge` records here so calls made by sync, writes and an explicit
+/// refresh are all visible in one history. `ProcessRunner::new` keeps a
+/// private buffer instead: unit tests build runners directly and must not see
+/// each other's traffic.
+pub fn shared_call_log() -> CallLog {
+    static SHARED: OnceLock<CallLog> = OnceLock::new();
+    Arc::clone(SHARED.get_or_init(|| Arc::new(Mutex::new(VecDeque::new()))))
+}
+
 /// Short calls on one workspace must not overlap. The lock belongs to the
 /// workspace (the external resource), not to a runner instance: every
 /// `BdBridge` created for the same path has to share it, otherwise a fresh
@@ -168,10 +179,21 @@ pub struct ProcessRunner {
 }
 
 impl ProcessRunner {
+    /// Test-only: production runners share one buffer via [`shared_call_log`].
+    #[cfg(test)]
     pub fn new(bd_path: impl Into<PathBuf>) -> Self {
         Self {
             bd_path: bd_path.into(),
             calls: Arc::new(Mutex::new(VecDeque::new())),
+        }
+    }
+
+    /// A runner that records into an existing buffer, so several bridges can
+    /// share one diagnostics history.
+    pub fn with_log(bd_path: impl Into<PathBuf>, calls: CallLog) -> Self {
+        Self {
+            bd_path: bd_path.into(),
+            calls,
         }
     }
 
@@ -943,12 +965,37 @@ fn internal_error(message: impl Into<String>) -> BridgeError {
 }
 
 fn argv_summary(args: &[OsString]) -> String {
-    let joined = args
-        .iter()
-        .map(|arg| arg.to_string_lossy())
-        .collect::<Vec<_>>()
-        .join(" ");
-    truncate_chars(&joined, ARGV_SUMMARY_LIMIT)
+    // Titles, acceptance text, close reasons and assignees are user-written.
+    // The diagnostics screen keeps a 200-entry history of every call, so the
+    // value after these flags is replaced instead of logged verbatim.
+    const REDACTED_FLAGS: &[&str] = &[
+        "--title",
+        "--acceptance",
+        "--assignee",
+        "-a",
+        "--labels",
+        "--add-label",
+        "--remove-label",
+        "--if-assignee",
+        "-r",
+        "--reason",
+    ];
+    const REDACTED: &str = "<redacted>";
+
+    let mut parts: Vec<String> = Vec::with_capacity(args.len());
+    let mut redact_next = false;
+    for arg in args {
+        let text = arg.to_string_lossy().into_owned();
+        if redact_next {
+            parts.push(REDACTED.to_owned());
+            redact_next = false;
+            continue;
+        }
+        redact_next = REDACTED_FLAGS.contains(&text.as_str());
+        parts.push(text);
+    }
+
+    truncate_chars(&parts.join(" "), ARGV_SUMMARY_LIMIT)
 }
 
 fn truncate_chars(text: &str, limit: usize) -> String {
@@ -1070,5 +1117,33 @@ mod tests {
 
         assert_eq!(summary.chars().count(), ARGV_SUMMARY_LIMIT + 1);
         assert!(summary.ends_with('…'));
+    }
+
+    #[test]
+    fn argv_summary_redacts_user_written_values() {
+        let args = vec![
+            OsString::from("update"),
+            OsString::from("--title"),
+            OsString::from("rotate the AKIA token"),
+            OsString::from("--acceptance"),
+            OsString::from("never log the internal host"),
+            OsString::from("-a"),
+            OsString::from("ada@example.test"),
+            OsString::from("--if-status"),
+            OsString::from("open"),
+            OsString::from("--"),
+            OsString::from("bza-123"),
+        ];
+        let summary = argv_summary(&args);
+
+        assert!(!summary.contains("AKIA"), "{summary}");
+        assert!(!summary.contains("internal host"), "{summary}");
+        assert!(!summary.contains("ada@example.test"), "{summary}");
+        // Flags, non-text values and the ticket id stay readable.
+        assert!(summary.contains("--title <redacted>"), "{summary}");
+        assert!(summary.contains("--acceptance <redacted>"), "{summary}");
+        assert!(summary.contains("-a <redacted>"), "{summary}");
+        assert!(summary.contains("--if-status open"), "{summary}");
+        assert!(summary.contains("bza-123"), "{summary}");
     }
 }

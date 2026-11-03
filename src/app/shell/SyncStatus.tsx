@@ -1,6 +1,6 @@
 import { createContext, useContext, type ReactNode } from 'react';
 
-import type { SyncState } from '@/bindings/bd';
+import type { BridgeError, SyncState } from '@/bindings/bd';
 import type { MessageKey } from '@/lib/i18n';
 
 export type SyncTone = 'neutral' | 'positive' | 'warning' | 'danger';
@@ -48,10 +48,75 @@ export function describeSyncState(state: SyncState): SyncLabel {
 
 const SyncStatusContext = createContext<SyncState>({ kind: 'loading', step: 'export' });
 
-export function SyncStatusProvider({ state, children }: { state: SyncState; children: ReactNode }) {
-  return <SyncStatusContext.Provider value={state}>{children}</SyncStatusContext.Provider>;
+/**
+ * The most recent sync error, kept after the state recovers.
+ *
+ * `SyncState` only describes what is true now, so a bd hiccup that healed
+ * leaves no trace in it. Settings still has to show the code, the time and the
+ * summary of what went wrong (SPEC-settings §同步), so the shell remembers the
+ * latest one for the life of the session.
+ */
+export type SyncErrorRecord = {
+  code: BridgeError['code'];
+  /** Epoch milliseconds when this error was first observed. */
+  at: number;
+  message: string;
+  detail?: BridgeError['detail'];
+  /** The workspace the failure belongs to; another workspace never shows it. */
+  workspace: string | null;
+};
+
+const SyncErrorContext = createContext<SyncErrorRecord | null>(null);
+
+export function SyncStatusProvider({
+  state,
+  lastError = null,
+  children,
+}: {
+  state: SyncState;
+  lastError?: SyncErrorRecord | null;
+  children: ReactNode;
+}) {
+  return (
+    <SyncStatusContext.Provider value={state}>
+      <SyncErrorContext.Provider value={lastError}>{children}</SyncErrorContext.Provider>
+    </SyncStatusContext.Provider>
+  );
 }
 
 export function useSyncState(): SyncState {
   return useContext(SyncStatusContext);
+}
+
+export function useSyncErrorHistory(): SyncErrorRecord | null {
+  return useContext(SyncErrorContext);
+}
+
+/**
+ * The record after `state` arrives in `workspace`.
+ *
+ * A record describes one failure episode of one workspace: a new episode
+ * (entering `bd-unavailable` from another state, or a different workspace)
+ * gets a fresh timestamp, while a continuing failure keeps the first one.
+ */
+export function recordSyncError(
+  previous: SyncErrorRecord | null,
+  state: SyncState,
+  workspace: string | null,
+  previousState: { kind: string | null; workspace: string | null },
+  now: number
+): SyncErrorRecord | null {
+  if (state.kind !== 'bd-unavailable') {
+    return previous;
+  }
+  if (previousState.kind === 'bd-unavailable' && previousState.workspace === workspace) {
+    return previous;
+  }
+  return {
+    code: state.error.code,
+    at: now,
+    message: state.error.message,
+    detail: state.error.detail,
+    workspace,
+  };
 }

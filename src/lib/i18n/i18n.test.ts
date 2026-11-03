@@ -40,6 +40,7 @@ test('placeholders are declared and always substituted', () => {
     '{ids}',
     '{label}',
     '{alt}',
+    '{name}',
   ]);
 
   for (const [language, catalog] of Object.entries(catalogs)) {

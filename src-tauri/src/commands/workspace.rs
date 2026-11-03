@@ -7,6 +7,7 @@
 //! on exit.
 
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Mutex, MutexGuard};
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -17,7 +18,9 @@ use ts_rs::TS;
 use super::config_writer::ConfigWriter;
 use crate::bridge::{BdBridge, BridgeError, BridgeErrorCode, WriteCommand, WriteOutcome};
 use crate::workspace::discovery::{BdDiscovery, BdStatus, MIN_BD_VERSION};
-use crate::workspace::registry::{load, AddOutcome, AppConfig, Checkpoint, WorkspaceEntry};
+use crate::workspace::registry::{
+    load, AddOutcome, AppConfig, Checkpoint, Language, Theme, WorkspaceEntry,
+};
 use crate::workspace::validate::validate_workspace;
 
 /// What the workspace UI needs in one call.
@@ -40,6 +43,9 @@ pub struct WorkspaceSnapshot {
 pub struct WorkspaceService {
     writer: std::sync::Arc<ConfigWriter>,
     state: Mutex<State>,
+    /// Orders concurrent bd-path changes: a probe that started before another
+    /// request must not commit after the newer one.
+    bd_path_generation: AtomicU64,
 }
 
 struct State {
@@ -72,6 +78,7 @@ impl WorkspaceService {
                 discovery,
                 corrupt_backup: loaded.corrupt_backup.map(|path| path.display().to_string()),
             }),
+            bd_path_generation: AtomicU64::new(0),
         })
     }
 
@@ -101,18 +108,74 @@ impl WorkspaceService {
     }
 
     /// Stores the explicit bd path (or clears it) and probes immediately.
+    ///
+    /// A path that does not answer `bd --version` as a supported bd is
+    /// rejected: the previous entry stays configured and the returned status
+    /// describes the attempt so Settings can show why. Probing the candidate
+    /// on its own matters — discovery would fall back to PATH and report
+    /// `ready` for a path the user just picked that does not work.
     pub fn set_bd_path(&self, path: Option<String>) -> BdStatus {
-        let discovery = {
+        // Probes run before the state lock, so concurrent picks can finish out
+        // of order. The generation makes the newest request's outcome win.
+        let generation = self.bd_path_generation.fetch_add(1, Ordering::SeqCst) + 1;
+        let probe = |path: &Path| BdBridge::new(path, PathBuf::from(".")).version();
+        let Some(path) = path.filter(|value| !value.trim().is_empty()) else {
             let mut state = lock(&self.state);
-            state.config.bd_path = path.filter(|value| !value.trim().is_empty());
-            let discovery =
-                std::sync::Arc::new(BdDiscovery::from_env(state.config.bd_path.as_deref()));
+            state.config.bd_path = None;
+            let discovery = std::sync::Arc::new(BdDiscovery::from_env(None));
             state.discovery = std::sync::Arc::clone(&discovery);
             self.writer.queue(state.config.clone());
-            discovery
+            drop(state);
+            return discovery.refresh(probe);
         };
-        let probe = |path: &Path| BdBridge::new(path, PathBuf::from(".")).version();
-        discovery.refresh(probe)
+
+        let candidate = BdDiscovery::new(Some(&path), None);
+        let status = candidate.refresh(probe);
+        if !matches!(status, BdStatus::Ready { .. }) {
+            return status;
+        }
+
+        let mut state = lock(&self.state);
+        if self.bd_path_generation.load(Ordering::SeqCst) != generation {
+            // A newer path change started while this probe ran. Report this
+            // attempt's result but leave the registry to the newer request.
+            return status;
+        }
+        state.config.bd_path = Some(path);
+        let discovery = std::sync::Arc::new(BdDiscovery::from_env(state.config.bd_path.as_deref()));
+        // The candidate was just probed; reuse that answer instead of spawning
+        // bd again for the cached read that follows this command.
+        discovery.prime(status.clone());
+        state.discovery = std::sync::Arc::clone(&discovery);
+        self.writer.queue(state.config.clone());
+        status
+    }
+
+    /// Applies the language/theme pair and waits for it to reach disk.
+    ///
+    /// Settings owns only these two fields; the rest of the config (bd path,
+    /// workspaces, checkpoints) stays exactly as loaded. Unlike checkpoint
+    /// traffic this is one explicit user action, so the command reports the
+    /// save itself instead of acknowledging a debounced write that may fail.
+    pub fn set_preferences(
+        &self,
+        language: Language,
+        theme: Theme,
+    ) -> Result<AppConfig, BridgeError> {
+        let config = {
+            let mut state = lock(&self.state);
+            state.config.language = language;
+            state.config.theme = theme;
+            self.writer.queue(state.config.clone());
+            state.config.clone()
+        };
+        self.writer.flush().map_err(|error| {
+            BridgeError::new(
+                BridgeErrorCode::Internal,
+                format!("could not save preferences: {error}"),
+            )
+        })?;
+        Ok(config)
     }
 
     pub fn add_workspace(&self, directory: &str) -> Result<WorkspaceEntry, BridgeError> {
@@ -362,6 +425,15 @@ mod tests {
 // freeze the window for its whole timeout. Every command that can spawn bd
 // (or block on a debounced flush) is marked async and runs on the thread pool.
 
+#[tauri::command(async)]
+pub fn app_set_preferences(
+    service: tauri::State<'_, WorkspaceService>,
+    language: Language,
+    theme: Theme,
+) -> Result<AppConfig, BridgeError> {
+    service.set_preferences(language, theme)
+}
+
 #[tauri::command]
 pub fn workspace_snapshot(service: tauri::State<'_, WorkspaceService>) -> WorkspaceSnapshot {
     service.snapshot()
@@ -385,7 +457,7 @@ pub fn workspace_add(
     service.add_workspace(&path)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn workspace_switch(
     service: tauri::State<'_, WorkspaceService>,
     path: String,

@@ -14,7 +14,7 @@ use beadazzled_lib::bridge::{BridgeErrorCode, UpdateSpec, WriteCommand};
 use beadazzled_lib::commands::config_writer::ConfigWriter;
 use beadazzled_lib::commands::WorkspaceService;
 use beadazzled_lib::workspace::discovery::BdStatus;
-use beadazzled_lib::workspace::registry::{self, AppConfig};
+use beadazzled_lib::workspace::registry::{self, AppConfig, Language, Theme};
 
 const PROJECT_ID: &str = "00000000-0000-4000-8000-000000000000";
 
@@ -168,15 +168,32 @@ fn a_plain_directory_is_rejected_and_not_registered() {
 fn adding_the_same_workspace_twice_does_not_duplicate_it() {
     let dir = common::temp_dir("cmd-dedupe");
     let workspace = common::workspace(&dir);
+    let other = workspace_named(&dir, "other");
     let service = service(&dir.join("config.json"));
     let with_separator = format!("{}\\", path_string(&workspace));
 
     service
         .add_workspace(&path_string(&workspace))
         .expect("first add");
+    service
+        .add_workspace(&path_string(&other))
+        .expect("add another");
+    service
+        .switch_workspace(&path_string(&other))
+        .expect("switch away");
+    assert_eq!(
+        service.snapshot().active.as_deref(),
+        Some(path_string(&other).as_str())
+    );
+
+    // Adding a path that is already registered only switches to it.
     service.add_workspace(&with_separator).expect("second add");
 
-    assert_eq!(service.snapshot().config.workspaces.len(), 1);
+    assert_eq!(service.snapshot().config.workspaces.len(), 2);
+    assert_eq!(
+        service.snapshot().active.as_deref(),
+        Some(path_string(&workspace).as_str())
+    );
 }
 
 #[test]
@@ -204,6 +221,8 @@ fn switching_and_removing_update_the_active_workspace() {
     assert!(service.snapshot().active.is_none());
     assert_eq!(service.snapshot().config.workspaces.len(), 1);
     assert!(!service.remove_workspace(&path_string(&first)));
+    // Removing is a registry operation only; the repository is untouched.
+    assert!(first.is_dir());
 }
 
 #[test]
@@ -520,4 +539,165 @@ fn writing_to_a_vanished_workspace_is_refused() {
         .expect_err("a missing workspace is refused");
 
     assert_eq!(error.code, BridgeErrorCode::WsInaccessible);
+}
+
+#[test]
+fn preferences_are_written_without_touching_the_rest_of_the_config() {
+    let dir = common::temp_dir("cmd-preferences");
+    let workspace = common::workspace(&dir);
+    let config_path = dir.join("config.json");
+    let service = service(&config_path);
+    service
+        .add_workspace(&path_string(&workspace))
+        .expect("add workspace");
+    let before = service.snapshot().config;
+
+    let written = service
+        .set_preferences(Language::ZhCn, Theme::Dark)
+        .expect("save preferences");
+
+    assert_eq!(written.language, Language::ZhCn);
+    assert_eq!(written.theme, Theme::Dark);
+    assert_eq!(written.bd_path, before.bd_path);
+    assert_eq!(written.workspaces, before.workspaces);
+
+    service.flush().expect("flush config");
+    let reloaded = registry::load(&config_path).expect("load config").config;
+    assert_eq!(reloaded.language, Language::ZhCn);
+    assert_eq!(reloaded.theme, Theme::Dark);
+    assert_eq!(reloaded.bd_path, before.bd_path);
+    assert_eq!(reloaded.workspaces, before.workspaces);
+}
+
+#[test]
+fn a_failed_preference_save_is_not_acknowledged() {
+    let dir = common::temp_dir("cmd-preferences-save-fails");
+    let config_path = dir.join("config.json");
+    let writer = ConfigWriter::with_saver(
+        config_path.clone(),
+        Duration::from_millis(60_000),
+        Arc::new(|_path, _config| Err(std::io::Error::other("disk is read-only"))),
+    );
+    let service =
+        WorkspaceService::open_with_writer(config_path, Arc::clone(&writer)).expect("open service");
+
+    let error = service
+        .set_preferences(Language::ZhCn, Theme::Dark)
+        .expect_err("a failed save must not resolve as success");
+
+    assert!(
+        error.message.contains("disk is read-only"),
+        "unexpected message: {}",
+        error.message
+    );
+}
+
+#[test]
+fn an_unusable_bd_path_is_rejected_and_the_previous_one_stays() {
+    let dir = common::temp_dir("cmd-bd-path-reject");
+    let config_path = dir.join("config.json");
+    let service = service(&config_path);
+    let before = service.snapshot().config.bd_path;
+    assert!(before.is_some());
+
+    let missing = dir.join("missing-bd.exe").display().to_string();
+    let status = service.set_bd_path(Some(missing));
+
+    assert!(
+        !matches!(status, BdStatus::Ready { .. }),
+        "an unusable path must not be reported ready: {status:?}"
+    );
+    assert_eq!(service.snapshot().config.bd_path, before);
+
+    service.flush().expect("flush config");
+    let reloaded = registry::load(&config_path).expect("load config").config;
+    assert_eq!(reloaded.bd_path, before);
+}
+
+#[test]
+fn a_whitespace_bd_path_is_treated_as_a_clear() {
+    let dir = common::temp_dir("cmd-bd-path-blank");
+    let config_path = dir.join("config.json");
+    let service = service(&config_path);
+    assert!(service.snapshot().config.bd_path.is_some());
+
+    service.set_bd_path(Some("   ".to_owned()));
+
+    assert_eq!(service.snapshot().config.bd_path, None);
+}
+
+#[test]
+fn a_new_valid_bd_path_is_persisted() {
+    let dir = common::temp_dir("cmd-bd-path-accept");
+    let config_path = dir.join("config.json");
+    let service = WorkspaceService::open(&config_path).expect("open service");
+    assert_eq!(service.snapshot().config.bd_path, None);
+
+    let bd = common::fake_bd_path().display().to_string();
+    let status = service.set_bd_path(Some(bd.clone()));
+
+    assert!(matches!(status, BdStatus::Ready { .. }));
+    assert_eq!(service.snapshot().config.bd_path, Some(bd.clone()));
+
+    service.flush().expect("flush config");
+    let reloaded = registry::load(&config_path).expect("load config").config;
+    assert_eq!(reloaded.bd_path, Some(bd));
+}
+
+#[test]
+fn clearing_the_bd_path_falls_back_to_path_lookup() {
+    let dir = common::temp_dir("cmd-bd-path-clear");
+    let config_path = dir.join("config.json");
+    let service = service(&config_path);
+    assert!(service.snapshot().config.bd_path.is_some());
+
+    service.set_bd_path(None);
+
+    assert_eq!(service.snapshot().config.bd_path, None);
+    service.flush().expect("flush config");
+    let reloaded = registry::load(&config_path).expect("load config").config;
+    assert_eq!(reloaded.bd_path, None);
+}
+
+/// PATH is process-global, so the test that swaps it serialises with itself.
+static PATH_GUARD: StdMutex<()> = StdMutex::new(());
+
+#[test]
+fn clearing_the_bd_path_resolves_bd_from_path() {
+    let _guard = PATH_GUARD
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+
+    let dir = common::temp_dir("cmd-bd-path-clear-resolves");
+    let config_path = dir.join("config.json");
+    let service = service(&config_path);
+    assert!(service.snapshot().config.bd_path.is_some());
+
+    let bin_dir = dir.join("path-bin");
+    fs::create_dir_all(&bin_dir).expect("create path dir");
+    let on_path = bin_dir.join(if cfg!(windows) { "bd.exe" } else { "bd" });
+    fs::copy(common::fake_bd_path(), &on_path).expect("copy the fake bd onto PATH");
+
+    let previous = std::env::var_os("PATH");
+    std::env::set_var("PATH", std::env::join_paths([&bin_dir]).expect("join PATH"));
+    let status = service.set_bd_path(None);
+    match &previous {
+        Some(value) => std::env::set_var("PATH", value),
+        None => std::env::remove_var("PATH"),
+    }
+
+    match status {
+        BdStatus::Ready { path, .. } => {
+            assert!(
+                Path::new(&path).starts_with(&bin_dir),
+                "the PATH copy is what must resolve, got {path}"
+            );
+        }
+        other => panic!("expected a ready status from PATH, got {other:?}"),
+    }
+    assert_eq!(service.snapshot().config.bd_path, None);
+    assert!(
+        matches!(service.bd_status(false), BdStatus::Ready { .. }),
+        "the stored discovery must agree with the status just returned"
+    );
 }

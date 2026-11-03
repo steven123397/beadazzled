@@ -25,7 +25,7 @@ use super::{
 use crate::bridge::argv::{argv_for, CreateSpec, WriteCommand};
 use crate::bridge::error::{map_exit, BridgeError, BridgeErrorCode};
 use crate::bridge::parse::{parse_export, JournalStream};
-use crate::bridge::test_support::{env, runner, temp_dir, workspace};
+use crate::bridge::test_support::{env, fake_bd, runner, temp_dir, workspace};
 
 fn request(workspace: &Path, mode: &str) -> ProcessRequest {
     let mut request = ProcessRequest::new("test", workspace, Vec::new());
@@ -848,4 +848,26 @@ fn journal_reader_returns_follow_records_before_the_child_exits() {
     );
 
     drop(reader);
+}
+
+#[test]
+fn runners_with_one_log_share_their_history() {
+    // The diagnostics screen relies on this: sync, writes and an explicit
+    // refresh each build their own bridge, and the report must see them all.
+    let log = shared_log();
+    let bd = fake_bd();
+    let first = ProcessRunner::with_log(&bd, Arc::clone(&log));
+    let second = ProcessRunner::with_log(&bd, Arc::clone(&log));
+    let request = ProcessRequest::global("version", vec![std::ffi::OsString::from("--version")]);
+
+    first.run(&request).expect("first version call");
+    second.run(&request).expect("second version call");
+
+    let calls = log.lock().expect("call log");
+    assert_eq!(calls.len(), 2);
+    assert!(calls.iter().all(|call| call.command == "version"));
+}
+
+fn shared_log() -> super::CallLog {
+    Arc::new(std::sync::Mutex::new(std::collections::VecDeque::new()))
 }

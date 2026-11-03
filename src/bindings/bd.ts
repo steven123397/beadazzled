@@ -118,3 +118,29 @@ active: string | null,
  * Where a corrupt `config.json` was moved, if that happened on startup.
  */
 corruptBackup: string | null, };
+
+export type DiagnosticsCall = { command: string, 
+/**
+ * Arguments with user-written values redacted; never a full issue body.
+ */
+argv: string, durationMs: number, exitCode: number | null, errorCode: BridgeErrorCode | null, };
+
+export type DiagnosticsContext = { projectId: string, doltMode: string, schemaVersion: number, };
+
+export type DiagnosticsSnapshot = { bd: BdStatus, 
+/**
+ * The active workspace path, when one is registered.
+ */
+workspace: string | null, 
+/**
+ * `bd context --json` for the active workspace, when it answered.
+ */
+context: DiagnosticsContext | null, 
+/**
+ * Why the context call failed, when it did.
+ */
+contextError: BridgeError | null, 
+/**
+ * Newest first.
+ */
+calls: Array<DiagnosticsCall>, };

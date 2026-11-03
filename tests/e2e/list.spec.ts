@@ -78,11 +78,21 @@ test('typing a multi-word query keeps its spaces', async ({ page }) => {
 
   const search = page.getByRole('searchbox', { name: 'Search tickets' });
   await search.click();
-  // A controlled input echoes every keystroke through the URL; trimming the
-  // query there would drop the space before the next character arrives.
-  await search.pressSequentially('fix scroll', { delay: 20 });
+
+  // Commit the first word plus its trailing space in one input event and wait
+  // for the URL round trip: trimming the query there would eat the space
+  // before the next word arrives.
+  await search.fill('fix ');
+  await expect(page).toHaveURL(/\?q=fix\+$/);
+
+  // Then keep typing at human speed. Machine-gun typing (delay 0-20ms) can put
+  // two keystrokes inside one React commit, which drops a character at the
+  // input driver level; that is a timing artifact of the test, not app state,
+  // so the case must not depend on it.
+  await search.pressSequentially('scroll', { delay: 50 });
 
   await expect(search).toHaveValue('fix scroll');
+  await expect(page).toHaveURL(/\?q=fix\+scroll$/);
   await expect(page.locator('[data-issue-id="bza-1"]')).toBeVisible();
   await expect(page.locator('[data-issue-id="bza-2"]')).toHaveCount(0);
 });

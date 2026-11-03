@@ -64,6 +64,11 @@ function fakeApi(overrides: Partial<WorkspaceApi> = {}): WorkspaceApi {
     snapshot: async () => snapshot([], null),
     bdStatus: async () => bdReady,
     setBdPath: async () => bdReady,
+    setPreferences: async (language, theme) => ({
+      ...snapshot([], null).config,
+      language,
+      theme,
+    }),
     add: async () => entry('p1'),
     switchTo: async () => entry('p1'),
     remove: async () => true,
@@ -372,11 +377,16 @@ test('switching language from the palette updates the shell instantly', async ()
 test('the theme action applies the new theme immediately', async () => {
   window.location.hash = '#/settings';
 
-  render(<App workspaceApi={fakeApi()} initialTheme="light" />);
+  // The registry is the source of truth, so the light preference has to come
+  // from the snapshot rather than from the prop.
+  const light = snapshot([], null);
+  light.config.theme = 'light';
+  render(<App workspaceApi={fakeApi({ snapshot: async () => light })} />);
   await screen.findByRole('heading', { name: 'Settings' });
   expect(document.documentElement.classList.contains('dark')).toBe(false);
 
   fireEvent.keyDown(window, { key: 'k', ctrlKey: true });
+  await waitFor(() => expect(screen.getByText('Theme: Light')).toBeInTheDocument());
   fireEvent.click(screen.getByText('Theme: Light'));
 
   expect(document.documentElement.classList.contains('dark')).toBe(true);
@@ -727,20 +737,17 @@ test('the copied diagnostics text has a fixed shape and carries no secrets', asy
 
   await waitFor(() => expect(writeText).toHaveBeenCalledTimes(1));
   const text = writeText.mock.calls[0]?.[0] ?? '';
-  const keys = text.split('\n').map((line) => line.slice(0, line.indexOf(':')));
-  expect(keys).toEqual([
-    'bd',
-    'workspace',
-    'projectId',
-    'lastSeq',
-    'sync',
-    'lastRefresh',
-    'pendingWrites',
-    'lastError',
-    'view',
-  ]);
-  expect(text).toContain('workspace: /repo/p1');
-  expect(text).toMatch(/lastSeq: 42/);
+  const lines = text.split('\n');
+  expect(lines).toHaveLength(6);
+  // jsdom has no Tauri app plugin, so the version line says unknown.
+  expect(lines[0]).toBe('beadazzled unknown');
+  expect(lines[1]).toBe('bd 1.3.2 at bd');
+  expect(lines[2]).toBe('workspace: /repo/p1');
+  expect(lines[3]).toContain('dolt_mode=-');
+  expect(lines[4]).toMatch(/^sync: healthy · lastSeq=42 · lastRefresh=.+$/);
+  expect(lines[5]).toBe('error: -');
+  // The real guarantee is structural — formatDiagnostics emits six fixed
+  // fields — so this stays a tripwire against a future field that leaks one.
   expect(text).not.toMatch(/token|secret|password|key/i);
 });
 

@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 
-import { formatAbsoluteTime, formatRelativeTime, timeOrder } from './time';
+import { formatAbsoluteTime, formatDateTime, formatRelativeTime, timeOrder } from './time';
 
 beforeEach(() => {
   vi.useFakeTimers();
@@ -27,6 +27,17 @@ test('a future timestamp reads as a future event', () => {
 test('an unparseable timestamp is shown verbatim', () => {
   expect(formatRelativeTime('not-a-date', 'en')).toBe('not-a-date');
   expect(formatAbsoluteTime('not-a-date', 'en')).toBe('not-a-date');
+});
+
+test('date and time include both the day and the clock', () => {
+  const value = '2026-11-01T12:00:00Z';
+
+  expect(formatDateTime(value, 'en')).toBe(
+    new Intl.DateTimeFormat('en', { dateStyle: 'short', timeStyle: 'short' }).format(
+      Date.parse(value)
+    )
+  );
+  expect(formatDateTime('not-a-date', 'en')).toBe('not-a-date');
 });
 
 test('absolute time delegates to the locale formatter', () => {
