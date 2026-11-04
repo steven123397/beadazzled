@@ -28,14 +28,15 @@
 | 类型 | 0 error | `npm run typecheck` | 编辑循环 | block | 无噪声、秒级 | 可运行 |
 | lint | 0 error | `npm run lint` | 编辑循环 | block | 同上 | 可运行 |
 | 架构边界 | 0 违规 | `npm run check:boundaries` | 交还前 | block | 防止绕开 bd 桥直读 Dolt | 可运行 |
+| 版本一致 | 3 处一致 | `npm run check:versions` | 编辑循环 | block | 安装包、Cargo 包与更新器必须看到同一个版本 | 可运行 |
 | bridge 行覆盖 | ≥ 80% | `npm run test:rust:coverage` | 交还前 | block | 只有会真坏的那层值得设门槛 | 可运行（bridge 落地后生效） |
-| 关键 E2E | 3 条全绿 | `npm run e2e` | CI | block | 装→列表→详情→改状态 | 待接线 |
+| 关键 E2E | 3 条全绿 | `npm run e2e:real`（本机）；`npm run e2e`（CI，浏览器套件） | CI + 发布 | block | 装→列表→详情→改状态 | 可运行（浏览器套件已接 CI；真实三条为本机发布证据） |
 | 依赖高危漏洞 | 0；unknown 未豁免即为失败 | `npm run check:deps` | CI | block | 会随安装包分发出去；无 severity 的记录无法自动判级 | 可运行 |
 | 安装包体积 | ≤ 15 MB | `npm run build:app && npm run check:size` | CI | block | Tauri 空壳 5–10MB；超过即说明选型错了 | 可运行（需先 `build:app`） |
 | 首屏 JS（index.html 及其 preload） | ≤ 150 KB gzip | `npm run check:bundle`（`check:size` 会先跑它） | CI | block | 启动时间随首屏解析量线性增长；当前 143.2 KB，余量约 4.5% | 可运行（需先 `build`） |
 | 冷启动→可交互 | ≤ 2.0s（P95） | `npm run measure:startup` | CI | warn | WebView2 冷启动实测量级 | 可运行（未接 CI） |
 | 热启动→可交互 | ≤ 800ms | 同上 | CI | warn | 双击即开是核心卖点 | 可运行（未接 CI） |
-| 常驻内存（1000 条票） | ≤ 150 MB | `npm run measure:memory` | CI | warn | WebView2 常见占用 | 待接线 |
+| 常驻内存（1000 条票） | ≤ 600 MB，且 ≤ 1 条票基线 + 50 MB | `npm run measure:memory` | CI | warn | WebView2 多进程固定开销约 445 MB；增量门槛捕获应用回归（ADR-0011） | 可运行 |
 | 详情页切换 | ≤ 50ms | `npm run measure:navigation` | CI | warn | 纯内存读取，只受渲染限制 | 脚本就绪（`docs/measurements/2026-11-02-navigation.md`）；CI 接线随 bza-bee |
 | 列表滚动（1000 条） | 60fps 目标：p50 < 18ms、p95 < 22ms、max < 50ms（60Hz 为 16.7ms） | `npm run measure:scroll`（看板加 `--view=board`） | CI | warn | 虚拟滚动的基本盘 | 脚本就绪（`docs/measurements/2026-11-02-list-scroll.md`、`2026-11-02-board-scroll.md`）；CI 接线随 bza-bee |
 | 正文对比度 | ≥ 4.5:1；大字号 ≥ 3:1 | axe（待有可运行 UI） | 交还前 | block | WCAG AA | 待接线 |
@@ -47,7 +48,7 @@
 
 | 层 | 预算 | 内容 |
 |---|---|---|
-| 编辑循环 | ≤ 5s | typecheck、lint、secrets；只查改动文件 |
+| 编辑循环 | ≤ 5s | typecheck、lint、版本一致、secrets；只查改动文件 |
 | 交还给人之前 | ≤ 90s | bridge 单测 + 改动行覆盖率 + 架构边界 |
 | CI / review | 不限 | 全量测试、Rust 风格、依赖扫描、构建、体积与性能测量 |
 
@@ -65,10 +66,12 @@ bridge 测试**禁止真的 spawn `bd`**：单次调用 1.0–1.4s，几十个�
 | 指标 | 今日值 | 备注 |
 |---|---|---|
 | secrets | 0 | 2026-10-31 实测，gitleaks 8.30.1，2 commits / 29.34 KB / 395ms |
-| 安装包体积 | 未测量 | 无构建产物 |
-| 冷启动 | P95 819–1036ms（四轮 n=20，P50 615–713ms） | 2026-11-01 实测，release 9.3MB；新 WebView2 profile；页面加载完成标记。见 [记录](docs/measurements/2026-11-01-startup.md) |
-| 热启动 | P95 801–965ms（四轮 n=20，P50 651–661ms） | 2026-11-01 重测（sync 接线后）；四轮均超 800ms 预算，按 warn 记录，未改阈值 |
-| 内存、详情切换、滚动 | 未测量 | 后续模块落地后接线 |
+| 安装包体积 | NSIS x64 2.15 MB（2,254,990 B）；release exe 5.25 MB | 2026-11-04 `build:app`；strip/LTO/opt-s；`check:size` PASS；NOTICE/LICENSE 随包 |
+| 冷启动 | P95 908ms（n=20，P50 648ms） | 2026-11-04 实测，release 5.25MB；页面加载完成标记；预算 2000ms |
+| 热启动 | P95 725–807ms（三轮 n=20，P50 620–638ms） | 2026-11-04 修复测量节奏后；原 873–990ms 的尾部尖峰消失，见 [记录](docs/measurements/2026-11-01-startup.md) |
+| 内存 | 1000 条 467 MB；1 条基线 452 MB；增量 +15 MB | 2026-11-04，ADR-0011；预算 600 MB / 基线 +50 MB。见 [记录](docs/measurements/2026-11-04-memory.md) |
+| 详情切换 | 打开 P95 32.7ms；64 KiB 首渲染 P50 102.4ms | 2026-11-04，预算 50ms / 100ms；64 KiB 略超属已记录噪声 |
+| 滚动 | List 与 Board 全部场景 PASS | 2026-11-04，p50 <18 / p95 <22 / max <50；见 `2026-11-03-scroll-budget-alignment.md` |
 | bridge 行覆盖率 | 91.2%（1226/1345 行，6 个 bridge 文件） | 2026-11-01 实测；阈值 80% 由 `check:task` 执行 |
 | 依赖漏洞 | 0 高危（2 medium；2 unknown 已登记 allowlist） | 2026-11-01 实测，osv-scanner 2.7.0，npm 285 包 + crates 407 包 |
 | 对比度、键盘可达 | axe 0 serious/critical；键盘闭环 E2E 通过 | 2026-11-01 实测；见 `tests/e2e/accessibility.spec.ts`、`keyboard-loop.spec.ts`；axe 尚未接 CI |
@@ -77,10 +80,10 @@ bridge 测试**禁止真的 spawn `bd`**：单次调用 1.0–1.4s，几十个�
 
 | 项 | 原因 | owner | 到期 | 处置 |
 |---|---|---|---|---|
-| E2E / 体积 / 性能 / a11y 检查未接线 | 类型、lint、覆盖、边界、secrets、Rust 风格与依赖扫描已由 CI 的 quality job 执行；其余尚无可用产物 | steven123397 | 2026-12-31 | 随对应阶段接线；已接线的门禁不得回退 |
+| E2E / 体积 / 性能 / a11y 检查未接线 | 浏览器 E2E（含 axe）已于 2026-11-04 接入 CI；体积检查可运行但需先 `build:app`；性能为本机发布测量（GUI 计时噪声大）；真实安装 E2E 为本机证据 | steven123397 | 2026-12-31 | 已接线项不得回退；真实安装 E2E 保持本机发布证据 |
 | 前端（Vitest）覆盖率无门槛 | 尚无历史基线；bridge 已单独设 80% 门槛 | steven123397 | 2026-12-31 | 前端基线明确后 ratchet 转 block |
-| 性能预算暂为 warn | 无可测产物 | steven123397 | 2026-12-31 | 应用壳跑通后 ratchet：连续三次超标提 issue 或重设预算，不许默默调阈值 |
-| 热启动 P95 四轮超标（801–965ms，P50 651–661ms） | 已达「连续三次超标」决策点；2026-11-01 决定先记录不优化，见 bead `bza-btl.4` | steven123397 | 2026-12-31 | 二选一：优化（面板 lazy、sync 延后启动）后复测，或经 ADR 重设预算；到期前必须给出结论 |
+| 性能预算暂为 warn | 已有可测产物；GUI 性能在 CI 上噪声大，暂不阻断 | steven123397 | 2026-12-31 | 连续三次超标时提 issue 或重设预算，不许默默调阈值 |
+| ~~热启动 P95 四轮超标~~ | 2026-11-04 已解决：测量节奏修复后三轮 P95 725–807ms、P50 620–638ms，周期性尖峰消失 | steven123397 | 已关闭 2026-11-04 | 例外关闭；预算未改 |
 
 ## 更新规则
 

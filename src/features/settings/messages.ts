@@ -98,8 +98,14 @@ export const settingsEn = {
   'settings.about.runtime.unknown': 'unknown',
   'settings.about.openDiagnostics': 'Open full diagnostics',
   'settings.about.checkUpdates': 'Check for updates',
-  'settings.about.updatesLater':
-    'Automatic updates arrive with the release build; this button stays off until then.',
+  'settings.about.checking': 'Checking…',
+  'settings.about.current': 'You are on the latest version.',
+  'settings.about.updateAvailable': 'Version {version} is available.',
+  'settings.about.installUpdate': 'Install {version}',
+  'settings.about.installing': 'Installing {version}…',
+  'settings.about.installed': 'Installed. The app will restart to finish.',
+  'settings.about.updateFailed': 'Update check failed: {message}',
+  'settings.about.updatesHint': 'Updates are checked once after launch.',
 } as const;
 
 export type SettingsMessageKey = keyof typeof settingsEn;
@@ -196,7 +202,14 @@ export const settingsZhCN: Record<SettingsMessageKey, string> = {
   'settings.about.runtime.unknown': '未知',
   'settings.about.openDiagnostics': '打开完整诊断',
   'settings.about.checkUpdates': '检查更新',
-  'settings.about.updatesLater': '自动更新随发布版接入，在此之前该按钮不可用。',
+  'settings.about.checking': '检查中…',
+  'settings.about.current': '已是最新版本。',
+  'settings.about.updateAvailable': '发现新版本 {version}。',
+  'settings.about.installUpdate': '安装 {version}',
+  'settings.about.installing': '正在安装 {version}…',
+  'settings.about.installed': '已安装，应用将重启完成更新。',
+  'settings.about.updateFailed': '检查更新失败：{message}',
+  'settings.about.updatesHint': '启动后会自动检查一次更新。',
 };
 
 registerCatalog('en', settingsEn);

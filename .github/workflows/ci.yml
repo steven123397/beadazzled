@@ -112,5 +112,14 @@ jobs:
       - name: Task checks
         run: npm run check:task
 
+      # The browser suite runs the real bundle against a fake bridge. It is
+      # separate from e2e:real, which needs an interactive Windows session and
+      # a bd workspace and is recorded as release evidence instead.
+      - name: Install Playwright Chromium
+        run: npx playwright install chromium
+
+      - name: Browser end-to-end
+        run: npm run e2e
+
       - name: Dependency audit
         run: npm run check:deps

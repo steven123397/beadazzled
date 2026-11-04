@@ -37,10 +37,10 @@
 
 | 生态 | 包/ crate 数 | 结果 |
 |---|---|---|
-| npm | 369 | 全部声明许可证；AGPL/EPL/Elv2/CC-BY-NC 0 个 |
-| Cargo | 456 | 全部声明许可证；AGPL/EPL/Elv2/CC-BY-NC 0 个 |
+| npm | 370 | 全部声明许可证；AGPL/EPL/Elv2/CC-BY-NC 0 个 |
+| Cargo | 503 | 全部声明许可证；AGPL/EPL/Elv2/CC-BY-NC 0 个 |
 
-npm 分布：MIT 310、Apache-2.0 21、ISC 10、BSD-2-Clause 8、MPL-2.0 6、Apache-2.0 OR MIT 3、BSD-3-Clause 3、MIT-0 2、MIT OR Apache-2.0 2、BlueOak-1.0.0 2、CC0-1.0 1、0BSD 1。
+npm 分布：MIT 310、Apache-2.0 21、ISC 10、BSD-2-Clause 8、MPL-2.0 6、Apache-2.0 OR MIT 3、BSD-3-Clause 3、MIT-0 2、MIT OR Apache-2.0 3、BlueOak-1.0.0 2、CC0-1.0 1、0BSD 1。
 
 Cargo 中最常见的组合是 `MIT OR Apache-2.0` 一类双许可。`r-efi` 声明 `MIT OR Apache-2.0 OR LGPL-2.1-or-later`，本项目选择 MIT 分支；它不进入 Windows 产物。
 

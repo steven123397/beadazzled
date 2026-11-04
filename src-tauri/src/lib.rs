@@ -43,18 +43,34 @@ fn write_startup_trace(label: &str, url: &str) {
     let _ = std::fs::write(path, format!("{label} {stamp} {url}\n"));
 }
 
+/// Where `config.json` lives. The default is the per-user app config directory.
+///
+/// `BEADAZZLED_CONFIG_DIR` replaces it so a measurement script can point the
+/// release binary at an isolated registry (for example a 1000-issue fixture)
+/// without touching the user's own file. Only absolute paths are honoured.
+fn config_dir(app: &tauri::App) -> Result<PathBuf, Box<dyn std::error::Error>> {
+    if let Some(candidate) = std::env::var_os("BEADAZZLED_CONFIG_DIR") {
+        let path = PathBuf::from(candidate);
+        if path.is_absolute() {
+            return Ok(path);
+        }
+    }
+    Ok(app.path().app_config_dir()?)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let app = match tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .on_page_load(|_webview, payload| {
             if matches!(payload.event(), tauri::webview::PageLoadEvent::Finished) {
                 write_startup_trace("page-load-finished", payload.url().as_str());
             }
         })
         .setup(|app| {
-            let config_path = app.path().app_config_dir()?.join("config.json");
+            let config_path = config_dir(app)?.join("config.json");
             let service = commands::WorkspaceService::open(config_path)?;
             app.manage(service);
             let sync = commands::SyncController::new(app.handle().clone());

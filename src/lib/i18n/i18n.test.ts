@@ -51,6 +51,7 @@ test('placeholders are declared and always substituted', () => {
     '{state}',
     '{time}',
     '{error}',
+    '{message}',
     '{ids}',
     '{label}',
     '{alt}',

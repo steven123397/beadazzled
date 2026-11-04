@@ -359,7 +359,38 @@ async function cleanupWebView2(profile) {
     shell.once('exit', resolve);
     shell.once('error', () => resolve());
   });
-  await sleep(200);
+  await waitForWebView2Exit(profile);
+}
+
+/**
+ * A launch that starts while the previous profile's WebView2 processes are
+ * still shutting down pays for the overlap; back-to-back runs then show a slow
+ * sample every few launches. Wait until the process list is actually empty
+ * instead of assuming a fixed 200ms is enough (bza-bee.1).
+ */
+async function waitForWebView2Exit(profile, timeoutMs = 5000) {
+  const escaped = profile.replace(/'/g, "''");
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const query =
+      'Get-CimInstance Win32_Process -Filter "Name=\'msedgewebview2.exe\'" | ' +
+      `Where-Object { $_.CommandLine -and $_.CommandLine.Contains('${escaped}') } | ` +
+      'Measure-Object | Select-Object -ExpandProperty Count';
+    const result = spawnSync(
+      'powershell.exe',
+      ['-NoProfile', '-NonInteractive', '-Command', query],
+      {
+        encoding: 'utf8',
+        windowsHide: true,
+      }
+    );
+    const remaining = Number((result.stdout ?? '').trim());
+    if (Number.isFinite(remaining) && remaining === 0) {
+      return true;
+    }
+    await sleep(100);
+  }
+  return false;
 }
 
 async function freshProfile() {

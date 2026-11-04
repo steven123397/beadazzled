@@ -59,14 +59,36 @@
       }
     }
   },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEU5RkMyRTUzQkMwRTE3MDgKUldRSUZ3NjhVeTc4NlFUVW9wb2hndk9rajBtZzlXNFFHbVJ4MjVyS1liakRKb1hXT1liR3hHM0MK",
+      "endpoints": [
+        "https://github.com/steven123397/beadazzled/releases/latest/download/latest.json"
+      ],
+      "windows": {
+        "installMode": "passive"
+      }
+    }
+  },
   "bundle": {
     "active": true,
+    "targets": ["nsis"],
+    "createUpdaterArtifacts": true,
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
       "icons/128x128@2x.png",
       "icons/icon.icns",
       "icons/icon.ico"
-    ]
+    ],
+    "resources": {
+      "../NOTICE": "NOTICE",
+      "../LICENSE": "LICENSE"
+    },
+    "windows": {
+      "nsis": {
+        "installMode": "currentUser"
+      }
+    }
   }
 }

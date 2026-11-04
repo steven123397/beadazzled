@@ -64,6 +64,7 @@ Frontend:
 | @tauri-apps/api | Apache-2.0 OR MIT |
 | @tauri-apps/plugin-dialog | MIT OR Apache-2.0 |
 | @tauri-apps/plugin-opener | MIT OR Apache-2.0 |
+| @tauri-apps/plugin-updater | MIT OR Apache-2.0 |
 | class-variance-authority | Apache-2.0 |
 | clsx | MIT |
 | cmdk | MIT |
@@ -81,6 +82,7 @@ Backend:
 |---|---|
 | tauri, tauri-build | Apache-2.0 OR MIT |
 | tauri-plugin-dialog, tauri-plugin-opener | Apache-2.0 OR MIT |
+| tauri-plugin-updater | Apache-2.0 OR MIT |
 | serde, serde_json | MIT OR Apache-2.0 |
 | ts-rs | MIT |
 | windows-sys | MIT OR Apache-2.0 |
@@ -90,9 +92,9 @@ Backend:
 Audited 2026-11-04 (bza-d9q). No AGPL, EPL, Elastic License or CC BY-NC
 licensed code is present:
 
-- npm: 369 installed packages, all with a declared license, none on the
+- npm: 370 installed packages, all with a declared license, none on the
   banned list.
-- Cargo: 456 resolved crates, all with a declared license, none on the
+- Cargo: 503 resolved crates, all with a declared license, none on the
   banned list. `r-efi` is triple-licensed MIT OR Apache-2.0 OR
   LGPL-2.1-or-later; this project takes the MIT option.
 - Source scan: scripts/check-boundaries.mjs is clean over the repository.
