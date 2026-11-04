@@ -90,8 +90,9 @@ npm run e2e:real -- --installer src-tauri/target/release/bundle/nsis/beadazzled_
   SmartScreen 提示。
 ## v0.1.1（2026-11-04）
 
-修复两个问题：bd 子进程没有把 cwd 设为工作区（从安装目录启动时 `bd context` 因
-“not a git repository” 失败）；bd 写在 stdout 的 JSON 错误没有被识别。
+修复三个问题：bd 子进程没有把 cwd 设为工作区（从安装目录启动时 `bd context` 因
+“not a git repository” 失败）；bd 写在 stdout 的 JSON 错误没有被识别；journal 回放
+用不含 comments/dependencies 的负载整体替换 issue，导致启动重放后评论与依赖消失。
 
 | 检查 | 结果 |
 |---|---|
@@ -103,5 +104,6 @@ npm run e2e:real -- --installer src-tauri/target/release/bundle/nsis/beadazzled_
 | 签名 key id | `08170ebc532efce9` |
 | `e2e:real --exe`（cwd = 安装目录） | 启动 → 列表 → 详情 → 改状态持久化 PASS |
 | 添加工作区（cwd = 安装目录） | PASS |
+| 评论与依赖（`checkpoint: null`，全量回放） | PASS：bza-8lz 显示 2 条评论、3 条依赖 |
 
 `e2e:real` 现在也把工作目录设为 exe 所在目录，否则会再次漏掉这条启动路径。
