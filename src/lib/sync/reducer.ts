@@ -49,10 +49,7 @@ export function applySnapshot(issues: readonly Issue[], since = 0): TicketState 
  * The issue map and the per-issue cursor are copied once per batch, not once
  * per record: 1000 events over 1000 issues stays well inside the 100ms budget.
  */
-export function applyRecords(
-  state: TicketState,
-  records: readonly JournalRecord[]
-): ApplyReport {
+export function applyRecords(state: TicketState, records: readonly JournalRecord[]): ApplyReport {
   let issues: Record<string, Issue> | null = null;
   let issueSeq: Record<string, number> | null = null;
   let lastSeq = state.lastSeq;
@@ -94,18 +91,24 @@ function applyOne(
     case 'comment':
       if (record.issue) {
         upsert(issues, record.issue);
-      } else {
-        appendComment(issues, record);
       }
+      // Journal payloads carry no comments, so the record's own comment is the
+      // only way a live comment reaches the view.
+      appendComment(issues, record);
       return;
     case 'create':
     case 'update':
     case 'close':
+      if (record.issue) {
+        upsert(issues, record.issue);
+      }
+      return;
     case 'dep_add':
     case 'dep_remove':
       if (record.issue) {
         upsert(issues, record.issue);
       }
+      applyDependency(issues, record);
       return;
     default:
       // Unknown operation from a newer bd: advance the cursor, change nothing.
@@ -120,10 +123,28 @@ function applyOne(
  */
 function upsert(issues: Record<string, Issue>, incoming: Issue): void {
   const current = issues[incoming.id];
-  if (current && freshness(incoming) < freshness(current)) {
+  if (current === undefined) {
+    issues[incoming.id] = incoming;
     return;
   }
-  issues[incoming.id] = incoming;
+  if (freshness(incoming) < freshness(current)) {
+    return;
+  }
+  // Journal payloads never carry comments, dependencies or their counts. The
+  // export snapshot is the only source for them, so replacing the issue
+  // wholesale would erase them on the first replayed event. A payload that
+  // does carry the arrays is trusted to carry their counts as well.
+  const comments = incoming.comments ?? current.comments;
+  const dependencies = incoming.dependencies ?? current.dependencies;
+  issues[incoming.id] = {
+    ...incoming,
+    comments,
+    dependencies,
+    dependency_count:
+      incoming.dependencies === undefined ? current.dependency_count : incoming.dependency_count,
+    dependent_count: current.dependent_count,
+    comment_count: incoming.comments === undefined ? current.comment_count : incoming.comment_count,
+  };
 }
 
 function freshness(issue: Issue): number {
@@ -148,5 +169,40 @@ function appendComment(issues: Record<string, Issue>, record: JournalRecord): vo
     text: incoming.text,
     created_at: incoming.created_at,
   };
-  issues[current.id] = { ...current, comments: [...existing, comment] };
+  const comments = [...existing, comment];
+  issues[current.id] = {
+    ...current,
+    comments,
+    comment_count: Math.max(current.comment_count, comments.length),
+  };
+}
+
+/** Keeps the dependency list in step with `dep_add` / `dep_remove` records. */
+function applyDependency(issues: Record<string, Issue>, record: JournalRecord): void {
+  const change = record.dep;
+  const current = issues[record.issue_id];
+  if (change === undefined || current === undefined) {
+    return;
+  }
+  const others = (current.dependencies ?? []).filter(
+    (entry) => !(entry.depends_on_id === change.target && entry.type === change.kind)
+  );
+  const dependencies =
+    record.op === 'dep_add'
+      ? [
+          ...others,
+          {
+            issue_id: record.issue_id,
+            depends_on_id: change.target,
+            type: change.kind,
+            created_at: record.ts,
+            metadata: change.metadata,
+          },
+        ]
+      : others;
+  issues[current.id] = {
+    ...current,
+    dependencies,
+    dependency_count: dependencies.length,
+  };
 }

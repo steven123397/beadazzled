@@ -63,18 +63,20 @@ test('create, update and close replace the whole issue', () => {
 });
 
 test('delete removes the issue', () => {
-  const result = applyRecords(stateWith([issue('a'), issue('b')]), [
-    record(1, 'delete', 'a'),
-  ]);
+  const result = applyRecords(stateWith([issue('a'), issue('b')]), [record(1, 'delete', 'a')]);
 
   expect(result.state.issues).not.toHaveProperty('a');
   expect(result.state.issues.b).toBeDefined();
   expect(result.state.lastSeq).toBe(1);
 });
 
-test('dep records replace the issue when one is attached', () => {
+test('dep records adopt a payload that carries the dependency list', () => {
+  const dependencies = [{ issue_id: 'a', depends_on_id: 'b', type: 'blocks', created_at: TS }];
+
   const result = applyRecords(stateWith([issue('a')]), [
-    record(1, 'dep_add', 'a', { issue: issue('a', { dependency_count: 1 }) }),
+    record(1, 'dep_add', 'a', {
+      issue: issue('a', { dependencies, dependency_count: 1 }),
+    }),
   ]);
 
   expect(result.state.issues.a.dependency_count).toBe(1);
@@ -192,4 +194,60 @@ test('the reducer tracks the last seq per issue for echo waiting', () => {
   ]);
 
   expect(result.state.issueSeq).toEqual({ a: 5, b: 6 });
+});
+test('a journal update keeps comments and dependencies from the snapshot', () => {
+  const snapshot = issue('a', {
+    comments: [{ id: 'c1', issue_id: 'a', author: 'ada', text: 'kept', created_at: TS }],
+    comment_count: 1,
+    dependencies: [{ issue_id: 'a', depends_on_id: 'b', type: 'blocks', created_at: TS }],
+    dependency_count: 1,
+  });
+
+  const result = applyRecords(stateWith([snapshot]), [
+    record(1, 'update', 'a', { issue: issue('a', { title: 'Renamed' }) }),
+  ]);
+
+  const stored = result.state.issues.a;
+  expect(stored.title).toBe('Renamed');
+  expect(stored.comments).toHaveLength(1);
+  expect(stored.dependencies).toHaveLength(1);
+  expect(stored.comment_count).toBe(1);
+  expect(stored.dependency_count).toBe(1);
+});
+
+test('a comment record appends its comment even when the payload has an issue', () => {
+  const result = applyRecords(stateWith([issue('a')]), [
+    record(1, 'comment', 'a', {
+      issue: issue('a', { updated_at: '2026-11-01T00:00:01Z' }),
+      comment: { id: 'c9', author: 'ada', text: 'live', created_at: TS },
+    }),
+  ]);
+
+  expect(result.state.issues.a.comments).toHaveLength(1);
+  expect(result.state.issues.a.comment_count).toBe(1);
+});
+
+test('dependency records keep the dependency list in step', () => {
+  const snapshot = issue('a', {
+    dependencies: [{ issue_id: 'a', depends_on_id: 'b', type: 'blocks', created_at: TS }],
+    dependency_count: 1,
+  });
+
+  const added = applyRecords(stateWith([snapshot]), [
+    record(1, 'dep_add', 'a', {
+      issue: issue('a', { updated_at: '2026-11-01T00:00:01Z' }),
+      dep: { kind: 'blocks', target: 'c' },
+    }),
+  ]);
+  expect(added.state.issues.a.dependencies?.map((dep) => dep.depends_on_id)).toEqual(['b', 'c']);
+  expect(added.state.issues.a.dependency_count).toBe(2);
+
+  const removed = applyRecords(added.state, [
+    record(2, 'dep_remove', 'a', {
+      issue: issue('a', { updated_at: '2026-11-01T00:00:02Z' }),
+      dep: { kind: 'blocks', target: 'b' },
+    }),
+  ]);
+  expect(removed.state.issues.a.dependencies?.map((dep) => dep.depends_on_id)).toEqual(['c']);
+  expect(removed.state.issues.a.dependency_count).toBe(1);
 });

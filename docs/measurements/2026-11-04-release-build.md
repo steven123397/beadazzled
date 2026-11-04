@@ -99,7 +99,7 @@ npm run e2e:real -- --installer src-tauri/target/release/bundle/nsis/beadazzled_
 | `npm run build:app` | PASS（release） |
 | `npm run check:size` | PASS（2.15 MB / 15 MB） |
 | `npm run verify:release` | PASS（签名、版本、URL、SHA-256） |
-| 安装包 | 2,256,268 B，sha256 `0d74626b8fec9f0b9bc76509a70110f1fd5ef60a63f934210a353e2ca8b91b96` |
+| 安装包 | 2,257,663 B，sha256 `65963b345e49b4125a2455229156f6600fe4bd9955613d2a20d8e31b8d341559` |
 | 签名 key id | `08170ebc532efce9` |
 | `e2e:real --exe`（cwd = 安装目录） | 启动 → 列表 → 详情 → 改状态持久化 PASS |
 | 添加工作区（cwd = 安装目录） | PASS |
