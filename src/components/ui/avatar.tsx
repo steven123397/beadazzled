@@ -13,8 +13,8 @@ export function Avatar({ name, size = 'xs', className }: AvatarProps) {
     <span
       aria-hidden="true"
       className={cn(
-        'inline-flex shrink-0 items-center justify-center rounded-full border border-border bg-muted font-medium uppercase text-muted-foreground',
-        size === 'xs' ? 'size-4 text-[9px]' : 'size-5 text-[10px]',
+        'inline-flex shrink-0 items-center justify-center rounded-full border border-border bg-muted font-medium uppercase text-foreground/75',
+        size === 'xs' ? 'size-4 text-[10px]' : 'size-5 text-[11px]',
         className
       )}
     >

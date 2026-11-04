@@ -25,6 +25,16 @@ function issue(id: string, title: string): Issue {
   };
 }
 
+/** Pick a status from the detail rail's popover. */
+function chooseStatus(option: RegExp) {
+  const details = document.querySelector<HTMLDetailsElement>('details[aria-label="Status"]');
+  if (details === null) {
+    throw new Error('no Status menu');
+  }
+  details.open = true;
+  fireEvent.click(within(details).getByRole('radio', { name: option }));
+}
+
 function entry(projectId: string, name = projectId): WorkspaceEntry {
   return {
     path: `/repo/${projectId}`,
@@ -530,20 +540,14 @@ test('ctrl+b collapses the sidebar and the choice survives a restart', async () 
 
   fireEvent.keyDown(window, { key: 'b', ctrlKey: true });
 
-  expect(screen.getByRole('complementary', { name: 'Sidebar' })).toHaveAttribute(
-    'data-collapsed',
-    'true'
-  );
+  expect(document.querySelector('#app-sidebar')).toHaveAttribute('data-collapsed', 'true');
   expect(localStorage.getItem('beadazzled.sidebar.collapsed')).toBe('true');
 
   first.unmount();
   render(<App workspaceApi={api} />);
   await screen.findByRole('heading', { name: 'List' });
 
-  expect(screen.getByRole('complementary', { name: 'Sidebar' })).toHaveAttribute(
-    'data-collapsed',
-    'true'
-  );
+  expect(document.querySelector('#app-sidebar')).toHaveAttribute('data-collapsed', 'true');
 });
 
 test('an unrecognised stored sidebar value falls back to expanded', async () => {
@@ -565,7 +569,7 @@ test('an unrecognised stored sidebar value falls back to expanded', async () => 
   );
 });
 
-test('a collapsed sidebar keeps labelled targets, icons and a mouse toggle', async () => {
+test('a collapsed sidebar gets out of the way and the top bar toggle restores it', async () => {
   window.location.hash = '#/w/p1/list';
 
   render(
@@ -578,16 +582,16 @@ test('a collapsed sidebar keeps labelled targets, icons and a mouse toggle', asy
   await screen.findByRole('heading', { name: 'List' });
 
   const sidebar = screen.getByRole('complementary', { name: 'Sidebar' });
-  fireEvent.click(within(sidebar).getByRole('button', { name: 'Collapse sidebar' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Collapse sidebar' }));
 
   expect(sidebar).toHaveAttribute('data-collapsed', 'true');
-  expect(within(sidebar).getByRole('link', { name: 'List' })).toBeInTheDocument();
-  expect(within(sidebar).getByRole('link', { name: 'Board' })).toBeInTheDocument();
-  expect(within(sidebar).getByRole('link', { name: 'Settings' })).toBeInTheDocument();
-  expect(sidebar.querySelectorAll('svg').length).toBeGreaterThanOrEqual(4);
+  expect(sidebar).toHaveAttribute('aria-hidden', 'true');
+  expect(screen.getByRole('button', { name: 'Expand sidebar' })).toBeInTheDocument();
 
-  fireEvent.click(within(sidebar).getByRole('button', { name: 'Expand sidebar' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Expand sidebar' }));
+
   expect(sidebar).toHaveAttribute('data-collapsed', 'false');
+  expect(within(sidebar).getByRole('link', { name: 'List' })).toBeInTheDocument();
 });
 
 async function openDiagnostics() {
@@ -797,7 +801,9 @@ test('a failed copy tells the user instead of doing nothing', async () => {
   const dialog = await openDiagnostics();
   fireEvent.click(within(dialog).getByRole('button', { name: 'Copy diagnostics' }));
 
-  expect(await screen.findByText(/Copy failed/)).toBeInTheDocument();
+  expect(
+    await screen.findByText(/Copy failed/, { selector: '[role="status"]' })
+  ).toBeInTheDocument();
   Reflect.deleteProperty(document, 'execCommand');
 });
 
@@ -956,9 +962,7 @@ test('a status conflict is visible and triggers a baseline refresh', async () =>
 
   await screen.findByRole('heading', { level: 1, name: 'Conflict target' }, { timeout: 3000 });
 
-  fireEvent.change(screen.getByRole('combobox', { name: 'Status' }), {
-    target: { value: 'in_progress' },
-  });
+  chooseStatus(/In progress/);
 
   await waitFor(() => expect(execute).toHaveBeenCalledTimes(1));
   expect(await screen.findByRole('alert')).toHaveTextContent(

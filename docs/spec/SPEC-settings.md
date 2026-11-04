@@ -14,14 +14,18 @@
 
 ## 页面结构
 
+设置页使用左侧栏目导航，每个栏目一条路由；`#/settings` 重定向到 `#/settings/general`：
+
 ```
-通用       语言（en / zh-CN） · 主题（light / dark / system）
-bd         当前路径 · 版本 · [重新检测] · [指定路径] · 安装引导
-工作区     列表（名称、路径、project id、最近打开）· 添加 / 移除 / 重新定位
-同步       实时性状态 · lastSeq · 上次刷新 · journal 开关与引导 · [立即刷新]
-诊断       bd context 摘要 · dolt_mode · schema · 最近 20 条调用/错误 · [复制]
-关于       应用版本 · 开源许可 · 仓库链接 · [检查更新]
+#/settings/general       语言（en / zh-CN） · 主题（light / dark / system）
+#/settings/bd            当前路径 · 版本 · [重新检测] · [指定路径] · 安装引导
+#/settings/workspaces    工作区列表（名称、路径、project id、最近打开）· 添加 / 移除 / 重新定位 / 切换
+#/settings/sync          实时性状态 · lastSeq · 上次刷新 · journal 开关与引导 · [立即刷新]
+#/settings/diagnostics   bd context 摘要 · dolt_mode · schema · 最近 20 条调用/错误 · [复制]
+#/settings/about         应用版本 · 开源许可 · 仓库链接 · [检查更新]
 ```
+
+左侧栏固定宽度，内容列独立滚动；栏目切换走前端路由，不触发数据加载。
 
 ## 各区块行为
 

@@ -153,6 +153,17 @@ test('editable targets are inputs, textareas and contenteditable hosts', () => {
   host.append(locked);
   expect(isEditableTarget(locked)).toBe(false);
 
+  // A summary replaces the native select in dropdowns; it owns single keys.
+  const details = document.createElement('details');
+  const summary = document.createElement('summary');
+  const summaryChild = document.createElement('span');
+  summary.append(summaryChild);
+  details.append(summary);
+  document.body.append(details);
+  expect(isEditableTarget(summary)).toBe(true);
+  expect(isEditableTarget(summaryChild)).toBe(true);
+  details.remove();
+
   expect(isEditableTarget(document.createElement('button'))).toBe(false);
   expect(isEditableTarget(null)).toBe(false);
 });

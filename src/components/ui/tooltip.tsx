@@ -62,7 +62,7 @@ export function Tooltip({
           role="tooltip"
           id={id}
           className={cn(
-            'pointer-events-none absolute z-40 whitespace-nowrap rounded-sm border border-border bg-card px-1.5 py-0.5 text-2xs text-foreground shadow-sm',
+            'pointer-events-none absolute z-40 whitespace-nowrap rounded-sm border border-border bg-raised px-1.5 py-0.5 text-2xs text-foreground shadow-sm',
             side === 'right'
               ? 'left-full top-1/2 ml-2 -translate-y-1/2'
               : 'left-1/2 top-full mt-1 -translate-x-1/2'

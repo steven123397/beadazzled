@@ -32,7 +32,7 @@ test('keyboard shortcuts open the palette and the help panel', async ({ page }) 
 
   await page.keyboard.press('Enter');
   await expect(palette).toBeHidden();
-  await expect(page).toHaveURL(/#\/settings$/);
+  await expect(page).toHaveURL(/#\/settings\/general$/);
 });
 
 test('a chord miss or expiry does not swallow the next shortcut', async ({ page }) => {

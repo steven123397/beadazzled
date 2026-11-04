@@ -127,6 +127,21 @@ test('renders one list item per visible issue', () => {
   expect(row('bza-2')).toHaveTextContent('Issue bza-2');
 });
 
+test('a uniform type is not repeated in every row', () => {
+  renderList({ issues: [issue('bza-1'), issue('bza-2')] });
+
+  expect(row('bza-1')).not.toHaveTextContent('task');
+});
+
+test('mixed types keep the type column visible', () => {
+  renderList({
+    issues: [issue('bza-1', { issue_type: 'task' }), issue('bza-2', { issue_type: 'bug' })],
+  });
+
+  expect(row('bza-1')).toHaveTextContent('task');
+  expect(row('bza-2')).toHaveTextContent('bug');
+});
+
 test('J and K move the focused row', async () => {
   renderList({ issues: [issue('bza-1'), issue('bza-2'), issue('bza-3')] });
 

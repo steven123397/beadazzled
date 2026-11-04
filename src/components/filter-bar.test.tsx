@@ -215,14 +215,14 @@ test('the Ready toggle updates the ready filter', () => {
 test('changing the group and sort controls reports the new grouping and direction', () => {
   const { onChange } = renderBar();
 
-  fireEvent.change(screen.getByRole('combobox', { name: 'Group by' }), {
-    target: { value: 'status' },
-  });
+  const group = screen.getByRole('group', { name: 'Group by' });
+  fireEvent.click(group.querySelector('summary')!);
+  fireEvent.click(within(group).getByRole('radio', { name: 'Status' }));
   expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({ group: 'status' }));
 
-  fireEvent.change(screen.getByRole('combobox', { name: 'Sort by' }), {
-    target: { value: 'priority' },
-  });
+  const sort = screen.getByRole('group', { name: 'Sort by' });
+  fireEvent.click(sort.querySelector('summary')!);
+  fireEvent.click(within(sort).getByRole('radio', { name: 'Priority' }));
   expect(onChange).toHaveBeenLastCalledWith(
     expect.objectContaining({ sort: { by: 'priority', direction: 'asc' } })
   );

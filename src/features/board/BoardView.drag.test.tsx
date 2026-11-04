@@ -149,7 +149,7 @@ test('a drop outside any column is a no-op', async () => {
   act(() => capture.onDragEnd?.(drop('bza-1', null)));
 
   expect(writes.submit).not.toHaveBeenCalled();
-  expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  expect(screen.getByRole('alert')).toBeEmptyDOMElement();
 });
 
 test('a drop from Done submits reopen before the target status', async () => {

@@ -1,5 +1,6 @@
 import { useEffect, useState, type KeyboardEvent } from 'react';
 
+import { Avatar } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/input';
 import type { Comment } from '@/bindings/bd';
@@ -69,19 +70,22 @@ export function Comments({
       {ordered.length === 0 ? (
         <p className="mt-2 text-sm text-muted-foreground">{t('detail.comments.empty')}</p>
       ) : (
-        <ol aria-label={t('detail.comments')} className="mt-3 space-y-4">
+        <ol aria-label={t('detail.comments')} className="mt-3 divide-y divide-border-subtle">
           {ordered.map((comment) => (
-            <li key={comment.id}>
-              <div className="flex items-baseline gap-2 text-xs text-muted-foreground">
-                <span className="font-medium text-foreground">{comment.author}</span>
-                <time
-                  dateTime={comment.created_at}
-                  title={formatAbsoluteTime(comment.created_at, language)}
-                >
-                  {formatRelativeTime(comment.created_at, language)}
-                </time>
+            <li key={comment.id} className="flex gap-2.5 py-3 first:pt-0 last:pb-0">
+              <Avatar name={comment.author} size="sm" className="mt-0.5" />
+              <div className="min-w-0 flex-1">
+                <div className="flex items-baseline gap-2 text-xs text-muted-foreground">
+                  <span className="font-medium text-foreground">{comment.author}</span>
+                  <time
+                    dateTime={comment.created_at}
+                    title={formatAbsoluteTime(comment.created_at, language)}
+                  >
+                    {formatRelativeTime(comment.created_at, language)}
+                  </time>
+                </div>
+                <p className="mt-1 whitespace-pre-wrap text-sm leading-relaxed">{comment.text}</p>
               </div>
-              <p className="mt-1 whitespace-pre-wrap text-sm leading-relaxed">{comment.text}</p>
             </li>
           ))}
         </ol>

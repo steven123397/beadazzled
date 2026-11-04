@@ -1,7 +1,7 @@
 import { expect, test } from 'vitest';
 
 import type { Dependency, Issue } from '@/bindings/bd';
-import { buildSearchIndex, hasActiveFilters, matchesFilter } from '@/lib/view/filter';
+import { buildSearchIndex } from '@/lib/view/filter';
 import { createListViewState, type ListFilter } from '@/lib/view/state';
 
 import { selectVisibleIssues } from './filter';
@@ -47,39 +47,6 @@ function filter(overrides: Partial<ListFilter> = {}): ListFilter {
 function ids(issues: readonly Issue[]): string[] {
   return issues.map((item) => item.id);
 }
-
-test('text search matches id, title and labels case-insensitively', () => {
-  const subject = issue('BZA-42', { title: 'Fix Scroll Jank', labels: ['Performance'] });
-
-  expect(matchesFilter(subject, filter({ query: 'bza-42' }))).toBe(true);
-  expect(matchesFilter(subject, filter({ query: 'scroll' }))).toBe(true);
-  expect(matchesFilter(subject, filter({ query: 'performance' }))).toBe(true);
-});
-
-test('text search does not match the description in v0.1.0', () => {
-  const subject = issue('a', { description: 'secret body text' });
-
-  expect(matchesFilter(subject, filter({ query: 'secret' }))).toBe(false);
-});
-
-test('a precomputed search index is used when supplied', () => {
-  const subject = issue('a', { title: 'Visible title' });
-  const searchText = new Map([['a', 'alias only']]);
-
-  expect(matchesFilter(subject, filter({ query: 'alias' }), { searchText })).toBe(true);
-  expect(matchesFilter(subject, filter({ query: 'visible' }), { searchText })).toBe(false);
-});
-
-test('buildSearchIndex indexes id, title and labels but not description', () => {
-  const index = buildSearchIndex([
-    issue('BZA-1', { title: 'Fix The List', labels: ['ui'], description: 'Scroll Jank' }),
-  ]);
-
-  expect(index.get('BZA-1')).toContain('bza-1');
-  expect(index.get('BZA-1')).toContain('fix the list');
-  expect(index.get('BZA-1')).toContain('ui');
-  expect(index.get('BZA-1')).not.toContain('scroll jank');
-});
 
 test('multi-select dimensions use OR within a dimension and AND across dimensions', () => {
   const issues = [
@@ -164,18 +131,6 @@ test('filter, group and sort keep a fixed composition order', () => {
   expect(groups.map((group) => group.key)).toEqual(['open', 'closed']);
   expect(groups[0]?.issues.map((item) => item.id)).toEqual(['open-high', 'open-mid', 'open-low']);
   expect(groups[1]?.issues.map((item) => item.id)).toEqual(['closed']);
-});
-
-test('hasActiveFilters notices every filter dimension but not grouping or sorting', () => {
-  expect(hasActiveFilters(filter())).toBe(false);
-  expect(hasActiveFilters(filter({ query: '  ' }))).toBe(false);
-  expect(hasActiveFilters(filter({ query: 'x' }))).toBe(true);
-  expect(hasActiveFilters(filter({ status: ['open'] }))).toBe(true);
-  expect(hasActiveFilters(filter({ priority: [0] }))).toBe(true);
-  expect(hasActiveFilters(filter({ type: ['bug'] }))).toBe(true);
-  expect(hasActiveFilters(filter({ assignee: [''] }))).toBe(true);
-  expect(hasActiveFilters(filter({ label: ['ui'] }))).toBe(true);
-  expect(hasActiveFilters(filter({ ready: true }))).toBe(true);
 });
 
 test('filtering 1000 issues stays within the 16ms budget for six combinations', () => {

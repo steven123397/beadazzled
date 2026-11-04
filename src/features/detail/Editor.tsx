@@ -83,9 +83,9 @@ export function Editor({
   };
 
   return (
-    <div role="group" aria-label={label} onKeyDown={onKeyDown} className="max-w-[72ch]">
+    <div role="group" aria-label={label} onKeyDown={onKeyDown}>
       {preview ? (
-        <div className="rounded-md border border-border bg-card p-3 shadow-xs">
+        <div className="rounded-md border border-border bg-raised p-3 shadow-xs">
           {draft.trim() === '' ? null : <Markdown onOpenLink={onOpenLink}>{draft}</Markdown>}
         </div>
       ) : multiline ? (

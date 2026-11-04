@@ -45,20 +45,31 @@ function submitted(writes: UseWrite) {
   return vi.mocked(writes.submit).mock.calls.map(([submission]) => submission.build());
 }
 
+/** The popover renders its radios inside a closed `<details>`; open it first. */
+function menu(label: 'Status' | 'Priority'): HTMLDetailsElement {
+  const details = document.querySelector<HTMLDetailsElement>(`details[aria-label="${label}"]`);
+  if (details === null) {
+    throw new Error(`no ${label} menu`);
+  }
+  details.open = true;
+  return details;
+}
+
+function choose(label: 'Status' | 'Priority', option: RegExp) {
+  fireEvent.click(within(menu(label)).getByRole('radio', { name: option }));
+}
+
 test('a blocked target is disabled in the status menu and refuses to submit', () => {
   const blocker = issue('bza-a');
   const target = issue('bza-b', { dependencies: [blockerEdge('bza-a')] });
   const writes = fakeWrites({ submit: vi.fn(async () => ({ status: 'ok' as const })) });
   renderRail(target, [target, blocker], writes);
 
-  const status = screen.getByRole('combobox', { name: 'Status' });
-  expect(within(status).getByRole('option', { name: /In progress/ })).toBeDisabled();
-  expect(within(status).getByRole('option', { name: /Closed/ })).toBeDisabled();
-  expect(within(status).getByRole('option', { name: /Blocked/ })).toBeEnabled();
+  const status = menu('Status');
+  expect(within(status).getByRole('radio', { name: /In progress/ })).toBeDisabled();
+  expect(within(status).getByRole('radio', { name: /Closed/ })).toBeDisabled();
+  expect(within(status).getByRole('radio', { name: /Blocked/ })).toBeEnabled();
 
-  fireEvent.change(status, { target: { value: 'in_progress' } });
-
-  expect(screen.getByRole('alert')).toHaveTextContent('bza-a');
   expect(writes.submit).not.toHaveBeenCalled();
 });
 
@@ -66,9 +77,7 @@ test('an unblocked status change carries the expected-status guard', async () =>
   const writes = fakeWrites({ submit: vi.fn(async () => ({ status: 'ok' as const })) });
   renderRail(issue('bza-b'), undefined, writes);
 
-  fireEvent.change(screen.getByRole('combobox', { name: 'Status' }), {
-    target: { value: 'in_progress' },
-  });
+  choose('Status', /In progress/);
 
   await vi.waitFor(() => expect(writes.submit).toHaveBeenCalledTimes(1));
   expect(submitted(writes)[0]).toMatchObject({
@@ -82,7 +91,7 @@ test('a cleared blocker allows the same status change', () => {
   renderRail(target, [target, blocker], fakeWrites());
 
   expect(
-    within(screen.getByRole('combobox', { name: 'Status' })).getByRole('option', {
+    within(menu('Status')).getByRole('radio', {
       name: /In progress/,
     })
   ).toBeEnabled();
@@ -93,7 +102,7 @@ test('a target outside the store still counts as an unresolved blocker', () => {
   renderRail(target, [target], fakeWrites());
 
   expect(
-    within(screen.getByRole('combobox', { name: 'Status' })).getByRole('option', {
+    within(menu('Status')).getByRole('radio', {
       name: /Closed/,
     })
   ).toBeDisabled();
@@ -103,9 +112,7 @@ test('priority changes submit with the current status guard', async () => {
   const writes = fakeWrites({ submit: vi.fn(async () => ({ status: 'ok' as const })) });
   renderRail(issue('bza-b', { status: 'in_progress' }), undefined, writes);
 
-  fireEvent.change(screen.getByRole('combobox', { name: 'Priority' }), {
-    target: { value: '1' },
-  });
+  choose('Priority', /^P1$/);
 
   await vi.waitFor(() => expect(writes.submit).toHaveBeenCalledTimes(1));
   expect(submitted(writes)[0]).toMatchObject({
@@ -145,6 +152,7 @@ test('labels can be added and removed', async () => {
   const writes = fakeWrites({ submit: vi.fn(async () => ({ status: 'ok' as const })) });
   renderRail(issue('bza-b', { labels: ['ui'] }), undefined, writes);
 
+  fireEvent.click(screen.getByRole('button', { name: 'Edit labels' }));
   fireEvent.change(screen.getByRole('textbox', { name: 'New label' }), {
     target: { value: 'backend' },
   });
@@ -152,6 +160,7 @@ test('labels can be added and removed', async () => {
 
   await vi.waitFor(() => expect(writes.submit).toHaveBeenCalledTimes(1));
   expect(submitted(writes)[0]).toMatchObject({ Update: { add_labels: ['backend'] } });
+  await vi.waitFor(() => expect(screen.queryByRole('textbox', { name: 'New label' })).toBeNull());
 
   fireEvent.click(screen.getByRole('button', { name: 'Remove label ui' }));
 
@@ -187,16 +196,50 @@ test('a failed status write reports the error and leaves the control usable', as
   });
   renderRail(issue('bza-b'), undefined, writes);
 
-  const status = screen.getByRole('combobox', { name: 'Status' });
-  fireEvent.change(status, { target: { value: 'in_progress' } });
+  choose('Status', /In progress/);
 
   expect(await screen.findByRole('alert')).toHaveTextContent(
     'The beads database is busy; try again in a moment.'
   );
-  expect(status).toBeEnabled();
+  // The failed write never reached the store, so the trigger snaps back.
+  expect(document.getElementById('detail-status')).toHaveAttribute('aria-label', 'Status: Open');
+  expect(document.getElementById('detail-status')).not.toHaveAttribute('aria-disabled');
 
-  fireEvent.change(status, { target: { value: 'deferred' } });
+  choose('Status', /Deferred/);
   await vi.waitFor(() => expect(writes.submit).toHaveBeenCalledTimes(2));
+});
+
+test('a failed status write returns focus to the status trigger', async () => {
+  const writes = fakeWrites({
+    submit: vi.fn(async () => ({
+      status: 'failed' as const,
+      error: { code: 'BD_LOCKED' as const, message: 'the database is busy' },
+    })),
+  });
+  renderRail(issue('bza-b'), undefined, writes);
+  document.getElementById('detail-status')?.focus();
+
+  choose('Status', /In progress/);
+
+  expect(await screen.findByRole('alert')).toBeInTheDocument();
+  // The remount must hand focus back instead of dropping it to the body.
+  await vi.waitFor(() => expect(document.getElementById('detail-status')).toHaveFocus());
+});
+
+test('a failed priority write returns focus to the priority trigger', async () => {
+  const writes = fakeWrites({
+    submit: vi.fn(async () => ({
+      status: 'failed' as const,
+      error: { code: 'BD_LOCKED' as const, message: 'the database is busy' },
+    })),
+  });
+  renderRail(issue('bza-b'), undefined, writes);
+  document.getElementById('detail-priority')?.focus();
+
+  choose('Priority', /^P1$/);
+
+  expect(await screen.findByRole('alert')).toBeInTheDocument();
+  await vi.waitFor(() => expect(document.getElementById('detail-priority')).toHaveFocus());
 });
 
 test('a conflict while adding a label keeps the typed label', async () => {
@@ -208,6 +251,7 @@ test('a conflict while adding a label keeps the typed label', async () => {
   });
   renderRail(issue('bza-b'), undefined, writes);
 
+  fireEvent.click(screen.getByRole('button', { name: 'Edit labels' }));
   const input = screen.getByRole('textbox', { name: 'New label' });
   fireEvent.change(input, { target: { value: 'backend' } });
   fireEvent.click(screen.getByRole('button', { name: 'Add' }));
@@ -221,23 +265,22 @@ test('a conflict while adding a label keeps the typed label', async () => {
 test('a status and priority from a newer bd stay visible and selectable', () => {
   renderRail(issue('bza-b', { status: 'review', priority: 7 }), undefined, fakeWrites());
 
-  const status = screen.getByRole('combobox', { name: 'Status' });
-  expect(status).toHaveValue('review');
-  expect(within(status).getByRole('option', { name: 'review' })).toBeInTheDocument();
-  expect(within(status).getByRole('option', { name: 'Open' })).toBeInTheDocument();
+  expect(document.getElementById('detail-status')).toHaveAttribute('aria-label', 'Status: review');
+  expect(within(menu('Status')).getByRole('radio', { name: 'review' })).toBeInTheDocument();
+  expect(within(menu('Status')).getByRole('radio', { name: 'Open' })).toBeInTheDocument();
 
-  const priority = screen.getByRole('combobox', { name: 'Priority' });
-  expect(priority).toHaveValue('7');
-  expect(within(priority).getByRole('option', { name: 'P7' })).toBeInTheDocument();
+  expect(document.getElementById('detail-priority')).toHaveAttribute('aria-label', 'Priority: P7');
+  expect(within(menu('Priority')).getByRole('radio', { name: 'P7' })).toBeInTheDocument();
 });
 
 test('pending writes disable every metadata control', () => {
   const writes = fakeWrites({ isPending: () => true, pending: ['bza-b'] });
   renderRail(issue('bza-b', { assignee: 'ada', labels: ['ui'] }), undefined, writes);
 
-  expect(screen.getByRole('combobox', { name: 'Status' })).toBeDisabled();
-  expect(screen.getByRole('combobox', { name: 'Priority' })).toBeDisabled();
+  expect(document.getElementById('detail-status')).toHaveAttribute('aria-disabled', 'true');
+  expect(document.getElementById('detail-priority')).toHaveAttribute('aria-disabled', 'true');
   expect(screen.getByRole('button', { name: 'Edit assignee' })).toBeDisabled();
-  expect(screen.getByRole('textbox', { name: 'New label' })).toBeDisabled();
+  expect(screen.getByRole('button', { name: 'Edit labels' })).toBeDisabled();
+  expect(screen.queryByRole('textbox', { name: 'New label' })).toBeNull();
   expect(screen.getByRole('button', { name: 'Close ticket' })).toBeDisabled();
 });

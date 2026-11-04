@@ -27,7 +27,7 @@ function issue(overrides: Partial<Issue> = {}): Issue {
   };
 }
 
-function renderRow(overrides: Partial<Issue> = {}, focused = false) {
+function renderRow(overrides: Partial<Issue> = {}, focused = false, showType = true) {
   const onOpen = vi.fn();
   const onFocus = vi.fn();
   render(
@@ -36,6 +36,7 @@ function renderRow(overrides: Partial<Issue> = {}, focused = false) {
         issue={issue(overrides)}
         start={36}
         focused={focused}
+        showType={showType}
         onOpen={onOpen}
         onFocus={onFocus}
       />
@@ -48,10 +49,10 @@ test('a row exposes status, id, title, priority, type, assignee and capped label
   const { row } = renderRow();
 
   expect(row).toHaveAttribute('data-issue-id', 'bza-42');
-  expect(row).toHaveTextContent('Open');
+  expect(screen.getByRole('img', { name: 'Open' })).toBeInTheDocument();
   expect(row).toHaveTextContent('bza-42');
   expect(row).toHaveTextContent('Fix scroll jank');
-  expect(row).toHaveTextContent('P0');
+  expect(screen.getByRole('img', { name: 'P0' })).toBeInTheDocument();
   expect(row).toHaveTextContent('bug');
   expect(row).toHaveTextContent('ada');
   expect(row).toHaveTextContent('ui');
@@ -60,10 +61,16 @@ test('a row exposes status, id, title, priority, type, assignee and capped label
   expect(row).toHaveTextContent('+1');
 });
 
-test('an unknown status shows its raw value instead of a blank cell', () => {
-  const { row } = renderRow({ status: 'mystery' });
+test('the type column disappears when every visible ticket shares one type', () => {
+  const { row } = renderRow({}, false, false);
 
-  expect(row).toHaveTextContent('mystery');
+  expect(row).not.toHaveTextContent('bug');
+});
+
+test('an unknown status shows its raw value instead of a blank cell', () => {
+  renderRow({ status: 'mystery' });
+
+  expect(screen.getByRole('img', { name: 'mystery' })).toBeInTheDocument();
 });
 
 test('an unassigned issue says so', () => {

@@ -216,3 +216,68 @@ test('a 1000-card board virtualizes and calls no bd while scrolling or filtering
   // Scrolling, focusing and filtering are all derived in memory.
   expect(await invokeLog(page)).toEqual([]);
 });
+
+test('the keyboard sensor completes a drop and reaches the write gate', async ({ page }) => {
+  await openBoard(page, FIXTURE);
+  await page.getByRole('button', { name: 'Drag bza-1' }).focus();
+  await page.keyboard.press('Space');
+  await expect(page.locator('[data-issue-id="bza-1"]')).toHaveAttribute('data-dragging', 'true');
+  // dnd-kit attaches its document key listener on a later tick.
+  await page.waitForTimeout(100);
+
+  // The default coordinate getter moves 25px per press; cross into the next
+  // column before dropping.
+  for (let press = 0; press < 14; press += 1) {
+    await page.keyboard.press('ArrowRight');
+  }
+  await page.keyboard.press('Space');
+
+  await expect(page.getByRole('alert')).toContainText('bd is not available');
+  await expect(page.locator('[data-issue-id="bza-1"]')).not.toHaveAttribute(
+    'data-dragging',
+    'true'
+  );
+});
+
+test('moving a deferred blocked card to Ready names the blockers', async ({ page }) => {
+  const fixture = [
+    issue('bza-1'),
+    issue('bza-9', {
+      status: 'deferred',
+      dependency_count: 1,
+      dependencies: [{ issue_id: 'bza-9', depends_on_id: 'bza-1', type: 'blocks', created_at: TS }],
+    }),
+  ];
+  await openBoard(page, fixture);
+  await dragTo(page, 'bza-9', 'ready');
+
+  await expect(page.getByRole('alert')).toContainText('bza-1');
+  await expect(page.locator('[data-issue-id="bza-9"]')).toHaveAttribute(
+    'data-card-column',
+    'backlog'
+  );
+});
+
+test('scrolling the source column during a drag keeps the overlay alive', async ({ page }) => {
+  await openBoard(page, MANY);
+  const card = page.locator('[data-issue-id="bza-2"]');
+  const box = await card.boundingBox();
+  if (box === null) {
+    throw new Error('missing card geometry');
+  }
+
+  await page.mouse.move(box.x + 40, box.y + 20);
+  await page.mouse.down();
+  await page.mouse.move(box.x + 60, box.y + 30, { steps: 5 });
+  await expect(page.getByTestId('board-drag-overlay')).toBeVisible();
+
+  // Scroll the virtualized column while the drag is active: the source card
+  // leaves the window, but the overlay must keep following the pointer.
+  await page.mouse.move(box.x + 40, box.y + 120);
+  await page.mouse.wheel(0, 600);
+  await page.waitForTimeout(300);
+
+  await expect(page.getByTestId('board-drag-overlay')).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(page.getByTestId('board-drag-overlay')).toBeHidden();
+});

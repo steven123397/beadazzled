@@ -32,7 +32,7 @@ export function HelpPanel({
       aria-label={t('keyboard.title')}
       className="fixed inset-0 z-20 flex items-start justify-center overflow-auto bg-black/60 p-8"
     >
-      <div className="w-full max-w-lg rounded-lg border border-border bg-card p-4 text-foreground">
+      <div className="w-full max-w-lg rounded-lg border border-border bg-raised p-4 text-foreground">
         <div className="flex items-center justify-between">
           <h1 className="text-base font-semibold">{t('keyboard.title')}</h1>
           <button

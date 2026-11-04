@@ -140,7 +140,7 @@ export function Menu({ label, trigger, items, align = 'start', className }: Menu
           aria-label={label}
           onKeyDown={onMenuKeyDown}
           className={cn(
-            'absolute top-full z-40 mt-1 min-w-40 rounded-md border border-border bg-card p-1 shadow-popover',
+            'absolute top-full z-40 mt-1 min-w-40 rounded-md border border-border bg-raised p-1 shadow-popover',
             align === 'end' ? 'right-0' : 'left-0'
           )}
         >
@@ -155,7 +155,7 @@ export function Menu({ label, trigger, items, align = 'start', className }: Menu
                 close(true);
               }}
               className={cn(
-                'flex w-full items-center rounded-sm px-2 py-1 text-left text-xs hover:bg-hover focus-visible:bg-hover focus-visible:outline-none disabled:pointer-events-none disabled:opacity-50',
+                'flex w-full items-center rounded-sm px-2 py-1 text-left text-xs transition-colors hover:bg-hover focus-visible:bg-hover focus-visible:outline-none disabled:pointer-events-none disabled:opacity-50',
                 item.danger === true ? 'text-destructive' : 'text-foreground'
               )}
             >

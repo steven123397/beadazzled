@@ -1,13 +1,14 @@
 #!/usr/bin/env node
 /**
- * Captures the visual baseline for the design foundation.
+ * Captures the visual baseline for the list, its interaction states and the
+ * screens that share the shell card.
  *
- * Screenshots go to `docs/design/<date>-foundation/` so a later polish pass can
+ * Screenshots go to `docs/design/<date>-<screen>/` so a later polish pass can
  * compare against what shipped. They are produced from the production bundle
  * (the same `dist-e2e` seam `measure:navigation` uses) rather than the dev
  * server, so what is on screen matches what a user gets.
  *
- * Usage: node scripts/capture-ui.mjs [--out=docs/design/2026-11-02-foundation]
+ * Usage: node scripts/capture-ui.mjs [--out=docs/design/2026-11-03-list]
  */
 import { spawn, spawnSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
@@ -66,8 +67,18 @@ function fixture() {
     }),
     issue('bza-2', { title: 'Guard blocked status changes', status: 'blocked', priority: 2 }),
     issue('bza-3', { title: 'Ship the board', status: 'deferred', priority: 3, labels: ['board'] }),
-    issue('bza-4', { title: 'Write the release notes', status: 'closed', priority: 4 }),
-    issue('bza-5', { title: 'Very urgent fix', status: 'open', priority: 0 }),
+    issue('bza-4', {
+      title: 'Write the release notes',
+      status: 'closed',
+      priority: 4,
+      labels: ['polish', 'v0.1.0'],
+    }),
+    issue('bza-5', {
+      title: 'Very urgent fix',
+      status: 'open',
+      priority: 0,
+      labels: ['interaction', 'polish', 'phase-8'],
+    }),
   ];
 }
 
@@ -108,8 +119,25 @@ async function serve() {
   throw new Error(`preview server did not listen on ${PORT}`);
 }
 
-async function capture(browser, theme, name, route) {
-  const page = await browser.newPage({ viewport: { width: 1280, height: 800 }, theme });
+async function capture(
+  browser,
+  {
+    theme,
+    name,
+    route,
+    width = 1280,
+    height = 800,
+    hover,
+    focus = false,
+    collapseSidebar = false,
+    openFilter,
+    waitFor = '[data-testid="list-view"][data-state="ready"], article',
+  }
+) {
+  const page = await browser.newPage({
+    viewport: { width, height },
+    colorScheme: theme,
+  });
   try {
     await page.addInitScript(
       ({ records, mode }) => {
@@ -154,10 +182,24 @@ async function capture(browser, theme, name, route) {
     );
 
     await page.goto(`http://localhost:${PORT}/#${route}`);
-    await page.waitForSelector('[data-testid="list-view"][data-state="ready"], article', {
+    await page.waitForSelector(waitFor, {
       state: 'visible',
       timeout: 15_000,
     });
+    if (collapseSidebar) {
+      await page.getByRole('button', { name: 'Collapse sidebar' }).click();
+      await page.waitForTimeout(250);
+    }
+    if (openFilter !== undefined) {
+      await page.getByRole('group', { name: openFilter }).locator('summary').click();
+      await page.waitForTimeout(100);
+    }
+    if (focus) {
+      await page.keyboard.press('j');
+    }
+    if (hover !== undefined) {
+      await page.hover(`[data-issue-id="${hover}"]`);
+    }
     await page.evaluate(
       () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))
     );
@@ -180,9 +222,56 @@ async function main() {
   try {
     server = await serve();
     browser = await chromium.launch();
-    for (const theme of ['light', 'dark']) {
-      await capture(browser, theme, 'list', '/w/p1/list');
-      await capture(browser, theme, 'detail', '/w/p1/issue/bza-1');
+    const shotsToTake = [
+      { theme: 'light', name: 'list', route: '/w/p1/list' },
+      { theme: 'dark', name: 'list', route: '/w/p1/list' },
+      { theme: 'light', name: 'list-grouped', route: '/w/p1/list?group=status' },
+      { theme: 'dark', name: 'list-grouped', route: '/w/p1/list?group=status' },
+      { theme: 'light', name: 'list-hover', route: '/w/p1/list', hover: 'bza-2' },
+      { theme: 'light', name: 'list-focus', route: '/w/p1/list', focus: true },
+      { theme: 'light', name: 'list-narrow', route: '/w/p1/list', width: 1024, height: 768 },
+      {
+        theme: 'light',
+        name: 'list-collapsed',
+        route: '/w/p1/list',
+        collapseSidebar: true,
+      },
+      {
+        theme: 'light',
+        name: 'list-assignee-open',
+        route: '/w/p1/list',
+        openFilter: 'Assignee',
+      },
+      {
+        theme: 'light',
+        name: 'list-sort-open',
+        route: '/w/p1/list',
+        openFilter: 'Sort by',
+      },
+      {
+        theme: 'light',
+        name: 'list-workspace-open',
+        route: '/w/p1/list',
+        openFilter: 'Workspace',
+      },
+      { theme: 'light', name: 'detail', route: '/w/p1/issue/bza-1' },
+      { theme: 'dark', name: 'detail', route: '/w/p1/issue/bza-1' },
+      {
+        theme: 'light',
+        name: 'board',
+        route: '/w/p1/board',
+        waitFor: '[data-testid="board-view"][data-state="ready"]',
+      },
+      {
+        theme: 'dark',
+        name: 'board',
+        route: '/w/p1/board',
+        waitFor: '[data-testid="board-view"][data-state="ready"]',
+      },
+      { theme: 'light', name: 'settings', route: '/settings', waitFor: '#settings-title' },
+    ];
+    for (const shot of shotsToTake) {
+      await capture(browser, shot);
     }
     console.log(`screenshots written to ${path.relative(root, shots)}`);
   } finally {

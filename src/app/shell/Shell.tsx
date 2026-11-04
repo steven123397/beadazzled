@@ -302,13 +302,17 @@ export function Shell({
         project={project}
         workspaces={snapshot?.config.workspaces ?? []}
         missing={snapshot?.missing ?? []}
+        sidebarCollapsed={sidebarCollapsed}
+        onToggleSidebar={toggleSidebar}
         onSwitch={switchWorkspace}
         onRefresh={refresh}
         onOpenPalette={openPalette}
       />
-      <div className="flex min-h-0 flex-1">
-        <Sidebar project={project} collapsed={sidebarCollapsed} onToggle={toggleSidebar} />
-        <main className="min-w-0 flex-1 overflow-auto">
+      <div className="flex min-h-0 flex-1 pb-2 pr-2">
+        <Sidebar project={project} collapsed={sidebarCollapsed} />
+        {/* The content column is its own panel: the sidebar sits on the app
+            background, and every screen paints inside this card. */}
+        <main className="thin-scrollbar ml-2 mt-2 min-w-0 flex-1 overflow-auto rounded-lg border border-border bg-card shadow-xs">
           <AppRefreshProvider value={appRefresh}>
             <Outlet />
           </AppRefreshProvider>
@@ -326,15 +330,23 @@ export function Shell({
           onClose={closeOverlay}
         />
       ) : null}
-      {copyNotice !== null ? (
-        <p
-          role="status"
-          aria-live="polite"
-          className="pointer-events-none fixed bottom-8 left-1/2 z-40 -translate-x-1/2 rounded border border-border bg-card px-3 py-1 text-xs text-foreground shadow"
-        >
-          {t(copyNotice === 'copied' ? 'clipboard.copied' : 'clipboard.failed')}
-        </p>
-      ) : null}
+      {/* Mounted for the lifetime of the shell: a region inserted together
+          with its text is not announced. It only becomes visible when there
+          is a result to show. */}
+      <p
+        role="status"
+        aria-live="polite"
+        aria-atomic="true"
+        className={
+          copyNotice === null
+            ? 'sr-only'
+            : 'pointer-events-none fixed bottom-8 left-1/2 z-40 -translate-x-1/2 rounded border border-border bg-raised px-3 py-1 text-xs text-foreground shadow'
+        }
+      >
+        {copyNotice === null
+          ? ''
+          : t(copyNotice === 'copied' ? 'clipboard.copied' : 'clipboard.failed')}
+      </p>
     </div>
   );
 }

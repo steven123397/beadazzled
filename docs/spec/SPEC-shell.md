@@ -36,7 +36,7 @@ Hash 路由（`react-router-dom` v7），工作区由 `projectId` 标识：
 | `#/w/:projectId/list` | 列表（查询参数承载筛选/分组/排序/选中） |
 | `#/w/:projectId/board` | 看板 |
 | `#/w/:projectId/issue/:issueId` | 详情（覆盖在列表/看板上，Esc 返回） |
-| `#/settings` | 设置 |
+| `#/settings/:section` | 设置（栏目见 `SPEC-settings`；`#/settings` 重定向到 `general`） |
 | `#/welcome` | 未就绪引导（bd 缺失 / 无工作区） |
 
 - 切换工作区时替换 `:projectId` 并清空查询参数。

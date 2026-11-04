@@ -1,10 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { IconButton } from '@/components/ui/icon-button';
 import { Input } from '@/components/ui/input';
-import { Select } from '@/components/ui/select';
+import { PopoverSelect } from '@/components/ui/popover-select';
 import { PriorityIcon } from '@/components/ui/priority-icon';
 import { StatusIcon } from '@/components/ui/status-icon';
 import type { Issue, WriteCommand } from '@/bindings/bd';
@@ -44,10 +44,34 @@ export function MetadataRail({
   const { t, language } = useI18n();
   const [editingAssignee, setEditingAssignee] = useState(false);
   const [assigneeDirty, setAssigneeDirty] = useState(false);
+  const [editingLabels, setEditingLabels] = useState(false);
   const [newLabel, setNewLabel] = useState('');
   const [localError, setLocalError] = useState<string | null>(null);
+  // A select keeps the clicked value while its write is in flight. If that
+  // write fails the issue never changes, so bump an epoch to remount it back
+  // on the value that is actually stored.
+  const [statusReset, setStatusReset] = useState(0);
+  const [priorityReset, setPriorityReset] = useState(0);
+  // A failed write remounts the select on the stored value. Remember whether
+  // the keyboard was on it so the replacement trigger takes focus back.
+  const restoreStatusFocus = useRef(false);
+  const restorePriorityFocus = useRef(false);
 
-  const dirty = assigneeDirty || newLabel.trim() !== '';
+  useEffect(() => {
+    if (restoreStatusFocus.current) {
+      restoreStatusFocus.current = false;
+      document.getElementById('detail-status')?.focus();
+    }
+  }, [statusReset]);
+
+  useEffect(() => {
+    if (restorePriorityFocus.current) {
+      restorePriorityFocus.current = false;
+      document.getElementById('detail-priority')?.focus();
+    }
+  }, [priorityReset]);
+
+  const dirty = assigneeDirty || (editingLabels && newLabel.trim() !== '');
   useEffect(() => {
     onDirtyChange?.(dirty);
   }, [dirty, onDirtyChange]);
@@ -59,6 +83,23 @@ export function MetadataRail({
   const statuses = STATUS_ORDER.includes(issue.status)
     ? STATUS_ORDER
     : [...STATUS_ORDER, issue.status];
+  const statusOptions = statuses.map((status) => {
+    const decision = canChangeStatus(issue, status, blockers);
+    return {
+      value: status,
+      label: decision.allowed
+        ? statusText(status, t)
+        : `${statusText(status, t)} — ${t('detail.edit.blocked')}`,
+      disabled: !decision.allowed,
+    };
+  });
+  const priorities = PRIORITIES.includes(issue.priority)
+    ? PRIORITIES
+    : [...PRIORITIES, issue.priority];
+  const priorityOptions = priorities.map((priority) => ({
+    value: String(priority),
+    label: `P${priority}`,
+  }));
 
   const submitUpdate = async (
     input: UpdateInput,
@@ -97,7 +138,14 @@ export function MetadataRail({
       setLocalError(blockedMessage(decision.blockers));
       return;
     }
-    void submitUpdate({ status: target, ifStatus: issue.status }, `status:${target}`, ['status']);
+    void submitUpdate({ status: target, ifStatus: issue.status }, `status:${target}`, [
+      'status',
+    ]).then((saved) => {
+      if (!saved) {
+        restoreStatusFocus.current = true;
+        setStatusReset((value) => value + 1);
+      }
+    });
   };
 
   const saveAssignee = async (next: string): Promise<boolean> => {
@@ -123,8 +171,14 @@ export function MetadataRail({
     void submitUpdate({ addLabels: [value] }, `label:add:${value}`, ['labels']).then((saved) => {
       if (saved) {
         setNewLabel('');
+        setEditingLabels(false);
       }
     });
+  };
+
+  const cancelLabels = () => {
+    setNewLabel('');
+    setEditingLabels(false);
   };
 
   const closeTicket = () => {
@@ -167,30 +221,23 @@ export function MetadataRail({
       <h2 id="detail-metadata" className="text-sm font-semibold">
         {t('detail.metadata.title')}
       </h2>
-      <dl className="mt-3 grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1.5">
-        <dt className="text-muted-foreground">{t('detail.metadata.status')}</dt>
-        <dd>
+      <dl className="mt-2">
+        <PropertyRow label={t('detail.metadata.status')}>
           {canEdit ? (
             <span className="flex w-full items-center gap-1.5">
               <StatusIcon status={issue.status} />
-              <Select
+              <PopoverSelect
+                key={`${issue.status}:${statusReset}`}
                 id="detail-status"
-                aria-label={t('detail.metadata.status')}
+                label={t('detail.metadata.status')}
                 value={issue.status}
+                options={statusOptions}
+                size="xs"
+                className="w-20"
+                triggerClassName="w-full"
                 disabled={disabled}
-                onChange={(event) => changeStatus(event.target.value)}
-                className="w-full"
-              >
-                {statuses.map((status) => {
-                  const decision = canChangeStatus(issue, status, blockers);
-                  return (
-                    <option key={status} value={status} disabled={!decision.allowed}>
-                      {statusText(status, t)}
-                      {decision.allowed ? '' : ` — ${t('detail.edit.blocked')}`}
-                    </option>
-                  );
-                })}
-              </Select>
+                onChange={changeStatus}
+              />
             </span>
           ) : (
             <span className="flex items-center gap-1.5">
@@ -198,47 +245,47 @@ export function MetadataRail({
               {statusText(issue.status, t)}
             </span>
           )}
-        </dd>
+        </PropertyRow>
 
-        <dt className="text-muted-foreground">{t('detail.metadata.priority')}</dt>
-        <dd className="tabular-nums">
+        <PropertyRow label={t('detail.metadata.priority')}>
           {canEdit ? (
-            <Select
-              id="detail-priority"
-              aria-label={t('detail.metadata.priority')}
-              value={String(issue.priority)}
-              disabled={disabled}
-              onChange={(event) =>
-                void submitUpdate(
-                  { priority: Number(event.target.value), ifStatus: issue.status },
-                  `priority:${event.target.value}`,
-                  ['priority']
-                )
-              }
-              className="w-full"
-            >
-              {(PRIORITIES.includes(issue.priority)
-                ? PRIORITIES
-                : [...PRIORITIES, issue.priority]
-              ).map((priority) => (
-                <option key={priority} value={priority}>
-                  P{priority}
-                </option>
-              ))}
-            </Select>
+            <span className="flex w-full items-center gap-1.5">
+              <PriorityIcon priority={issue.priority} />
+              <PopoverSelect
+                key={`${issue.priority}:${priorityReset}`}
+                id="detail-priority"
+                label={t('detail.metadata.priority')}
+                value={String(issue.priority)}
+                options={priorityOptions}
+                size="xs"
+                className="w-20"
+                triggerClassName="w-full"
+                disabled={disabled}
+                onChange={(next) =>
+                  void submitUpdate(
+                    { priority: Number(next), ifStatus: issue.status },
+                    `priority:${next}`,
+                    ['priority']
+                  ).then((saved) => {
+                    if (!saved) {
+                      restorePriorityFocus.current = true;
+                      setPriorityReset((value) => value + 1);
+                    }
+                  })
+                }
+              />
+            </span>
           ) : (
             <span className="flex items-center gap-1.5">
               <PriorityIcon priority={issue.priority} />
               {`P${issue.priority}`}
             </span>
           )}
-        </dd>
+        </PropertyRow>
 
-        <dt className="text-muted-foreground">{t('detail.metadata.type')}</dt>
-        <dd>{issue.issue_type}</dd>
+        <PropertyRow label={t('detail.metadata.type')}>{issue.issue_type}</PropertyRow>
 
-        <dt className="text-muted-foreground">{t('detail.metadata.assignee')}</dt>
-        <dd>
+        <PropertyRow label={t('detail.metadata.assignee')}>
           {editingAssignee ? (
             <Editor
               label={t('detail.metadata.assignee')}
@@ -270,11 +317,10 @@ export function MetadataRail({
               ) : null}
             </span>
           )}
-        </dd>
+        </PropertyRow>
 
-        <dt className="text-muted-foreground">{t('detail.metadata.labels')}</dt>
-        <dd>
-          <div className="flex flex-wrap gap-1">
+        <PropertyRow label={t('detail.metadata.labels')}>
+          <div className="flex flex-wrap items-center gap-1">
             {issue.labels.length === 0 ? (
               <span className="text-muted-foreground">{t('detail.metadata.none')}</span>
             ) : (
@@ -299,46 +345,73 @@ export function MetadataRail({
                 </Badge>
               ))
             )}
+            {canEdit && !editingLabels ? (
+              <Button
+                variant="ghost"
+                size="xs"
+                aria-label={t('detail.edit.labels')}
+                disabled={disabled}
+                onClick={() => setEditingLabels(true)}
+              >
+                {t('detail.edit.edit')}
+              </Button>
+            ) : null}
           </div>
-          {canEdit ? (
-            <div className="mt-1 flex items-center gap-1">
+          {canEdit && editingLabels ? (
+            <div className="mt-1">
               <Input
                 aria-label={t('detail.edit.newLabel')}
                 value={newLabel}
                 disabled={disabled}
+                autoFocus
                 onChange={(event) => setNewLabel(event.target.value)}
                 onKeyDown={(event) => {
                   if (event.key === 'Enter') {
                     event.preventDefault();
                     addLabel();
                   }
+                  if (event.key === 'Escape') {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    cancelLabels();
+                  }
                 }}
-                className="min-w-0 flex-1"
+                className="h-control-md"
               />
-              <Button size="sm" onClick={addLabel} disabled={disabled || newLabel.trim() === ''}>
-                {t('detail.edit.add')}
-              </Button>
+              <div className="mt-2 flex items-center gap-2">
+                <Button
+                  variant="primary"
+                  onClick={addLabel}
+                  disabled={disabled || newLabel.trim() === ''}
+                >
+                  {t('detail.edit.add')}
+                </Button>
+                <Button variant="secondary" onClick={cancelLabels} disabled={pending}>
+                  {t('detail.edit.cancel')}
+                </Button>
+              </div>
             </div>
           ) : null}
-        </dd>
+        </PropertyRow>
 
-        <dt className="text-muted-foreground">{t('detail.metadata.created')}</dt>
-        <dd title={formatAbsoluteTime(issue.created_at, language)}>
-          {formatRelativeTime(issue.created_at, language)}
-        </dd>
+        <PropertyRow label={t('detail.metadata.created')}>
+          <span title={formatAbsoluteTime(issue.created_at, language)}>
+            {formatRelativeTime(issue.created_at, language)}
+          </span>
+        </PropertyRow>
 
-        <dt className="text-muted-foreground">{t('detail.metadata.updated')}</dt>
-        <dd title={formatAbsoluteTime(issue.updated_at, language)}>
-          {formatRelativeTime(issue.updated_at, language)}
-        </dd>
+        <PropertyRow label={t('detail.metadata.updated')}>
+          <span title={formatAbsoluteTime(issue.updated_at, language)}>
+            {formatRelativeTime(issue.updated_at, language)}
+          </span>
+        </PropertyRow>
 
         {issue.closed_at === undefined ? null : (
-          <>
-            <dt className="text-muted-foreground">{t('detail.metadata.closed')}</dt>
-            <dd title={formatAbsoluteTime(issue.closed_at, language)}>
+          <PropertyRow label={t('detail.metadata.closed')}>
+            <span title={formatAbsoluteTime(issue.closed_at, language)}>
               {formatRelativeTime(issue.closed_at, language)}
-            </dd>
-          </>
+            </span>
+          </PropertyRow>
         )}
       </dl>
 
@@ -370,5 +443,15 @@ export function MetadataRail({
 
       <Dependencies issue={issue} index={index} onOpenIssue={onOpenIssue} />
     </aside>
+  );
+}
+
+/** Every property row shares one label column and a 32px vertical rhythm. */
+function PropertyRow({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="grid min-h-8 grid-cols-[64px_minmax(0,1fr)] items-center gap-x-3">
+      <dt className="text-muted-foreground">{label}</dt>
+      <dd className="min-w-0">{children}</dd>
+    </div>
   );
 }

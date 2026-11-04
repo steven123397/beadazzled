@@ -52,7 +52,7 @@ export function Diagnostics({
         aria-labelledby="diagnostics-title"
         tabIndex={-1}
         onClick={(event) => event.stopPropagation()}
-        className="w-full max-w-md space-y-3 rounded-lg border border-border bg-card p-4 text-foreground shadow-lg"
+        className="w-full max-w-md space-y-3 rounded-lg border border-border bg-raised p-4 text-foreground shadow-lg"
       >
         <h2 id="diagnostics-title" className="text-base font-semibold">
           {t('diagnostics.title')}

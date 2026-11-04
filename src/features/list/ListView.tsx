@@ -1,21 +1,17 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { useVirtualizer } from '@tanstack/react-virtual';
+import { Inbox, SearchX, TriangleAlert } from 'lucide-react';
 
 import type { Issue, SyncState } from '@/bindings/bd';
 import { isEditableTarget, isOverlayOpen } from '@/app/keyboard/resolve';
+import { Button } from '@/components/ui/button';
+import { StateBadge } from '@/components/ui/state-badge';
 import { FilterBar } from '@/components/filter-bar';
 import { useI18n } from '@/lib/i18n/I18nProvider';
 import { buildSearchIndex, hasActiveFilters } from '@/lib/view/filter';
-import {
-  createListViewState,
-  hasViewParams,
-  parseListViewState,
-  serializeListViewState,
-  type GroupBy,
-  type ListViewState,
-} from '@/lib/view/state';
-import { loadSavedView, saveSavedView } from '@/lib/view/storage';
+import { createListViewState, type GroupBy } from '@/lib/view/state';
+import { usePersistedView } from '@/lib/view/usePersistedView';
 
 import { selectVisibleIssues } from './filter';
 import { GROUP_HEIGHT, GroupHeader } from './GroupHeader';
@@ -24,7 +20,7 @@ import { loadListPosition, saveListPosition } from './position';
 import { Row, rowId } from './Row';
 
 /** Must match `--row-height` in tokens.css. */
-const ROW_HEIGHT = 36;
+const ROW_HEIGHT = 42;
 const OVERSCAN = 10;
 const INITIAL_RECT = { width: 0, height: 600 };
 
@@ -64,51 +60,7 @@ export function ListRoute({ issues, syncState, onRefresh }: ListRouteProps) {
 export function ListView({ projectId, issues, syncState = HEALTHY, onRefresh }: ListViewProps) {
   const { t } = useI18n();
   const navigate = useNavigate();
-  const [searchParams, setSearchParams] = useSearchParams();
-  const search = searchParams.toString();
-  const hasParams = useMemo(() => hasViewParams(new URLSearchParams(search)), [search]);
-  const savedView = useMemo(() => loadSavedView(projectId), [projectId]);
-  const latestViewRef = useRef<ListViewState | null>(null);
-
-  // The URL wins; with no view parameters, keep the view the user was using.
-  // A sidebar "List" click or `g l` can strip the query string while this
-  // component stays mounted, and that must not clear the filters.
-  const view = useMemo(() => {
-    if (hasParams) {
-      return parseListViewState(new URLSearchParams(search));
-    }
-    return latestViewRef.current ?? savedView ?? createListViewState();
-  }, [hasParams, savedView, search]);
-
-  useEffect(() => {
-    latestViewRef.current = view;
-    saveSavedView(projectId, view);
-  }, [projectId, view]);
-
-  // Write a remembered view back to the URL, on mount with a saved view or
-  // after a navigation dropped the query string. Unknown-only URLs compare
-  // equal and are left alone.
-  useEffect(() => {
-    if (hasParams) {
-      return;
-    }
-    const next = serializeListViewState(view, new URLSearchParams(search));
-    if (next.toString() !== '' && next.toString() !== search) {
-      setSearchParams(next, { replace: true });
-    }
-  }, [hasParams, search, setSearchParams, view]);
-
-  const updateView = useCallback(
-    (next: ListViewState) => {
-      // Keep the fallback in sync so an explicit clear (which empties the URL)
-      // is not mistaken for a navigation that dropped the parameters.
-      latestViewRef.current = next;
-      setSearchParams((previous) => serializeListViewState(next, previous), {
-        replace: true,
-      });
-    },
-    [setSearchParams]
-  );
+  const { view, updateView } = usePersistedView(projectId);
 
   const initialPosition = useMemo(() => loadListPosition(projectId), [projectId]);
   const searchText = useMemo(() => buildSearchIndex(issues), [issues]);
@@ -117,6 +69,10 @@ export function ListView({ projectId, issues, syncState = HEALTHY, onRefresh }: 
     [issues, view, searchText]
   );
   const activeFilters = hasActiveFilters(view.filter);
+  const showType = useMemo(
+    () => new Set(visible.map((issue) => issue.issue_type)).size > 1,
+    [visible]
+  );
 
   const [focusedId, setFocusedId] = useState<string | null>(initialPosition?.focusedId ?? null);
   const [collapsedGroups, setCollapsedGroups] = useState<ReadonlySet<string>>(new Set());
@@ -375,8 +331,8 @@ export function ListView({ projectId, issues, syncState = HEALTHY, onRefresh }: 
       data-sync={syncState.kind}
       className="flex h-full min-h-0 flex-col"
     >
-      <header className="flex shrink-0 items-center justify-between border-b border-border px-3 py-2">
-        <h1 className="text-sm font-semibold">{t('nav.list')}</h1>
+      <header className="flex shrink-0 items-center justify-between border-b border-border px-4 py-2">
+        <h1 className="text-base font-semibold">{t('nav.list')}</h1>
       </header>
       {total > 0 ? (
         <FilterBar
@@ -395,13 +351,14 @@ export function ListView({ projectId, issues, syncState = HEALTHY, onRefresh }: 
         >
           <span className="min-w-0 flex-1">{t('list.state.stale')}</span>
           {onRefresh === undefined ? null : (
-            <button
-              type="button"
+            <Button
+              size="xs"
+              variant="secondary"
               onClick={onRefresh}
-              className="rounded border border-destructive/40 px-2 py-1"
+              className="border-destructive/40 text-destructive hover:bg-destructive/10"
             >
               {t('list.state.retry')}
-            </button>
+            </Button>
           )}
         </div>
       ) : null}
@@ -420,7 +377,7 @@ export function ListView({ projectId, issues, syncState = HEALTHY, onRefresh }: 
           role="list"
           aria-label={t('list.issues')}
           tabIndex={0}
-          className="min-h-0 flex-1 overflow-auto"
+          className="min-h-0 flex-1 overflow-auto thin-scrollbar pb-2"
         >
           <div className="relative w-full" style={{ height: virtualizer.getTotalSize() }}>
             {virtualItems.map((item) => {
@@ -450,6 +407,7 @@ export function ListView({ projectId, issues, syncState = HEALTHY, onRefresh }: 
                   issue={entry.issue}
                   start={item.start}
                   focused={entry.issue.id === focusedId}
+                  showType={showType}
                   onOpen={openIssue}
                   onFocus={setFocusedId}
                 />
@@ -475,7 +433,8 @@ function LoadingRows({ label }: { label: string }) {
           key={index}
           data-testid="list-skeleton-row"
           aria-hidden="true"
-          className="flex h-9 items-center gap-3 border-b border-border px-3"
+          className="mx-1 flex items-center gap-3 rounded-md bg-muted/30 px-3"
+          style={{ height: 'var(--row-height)' }}
         >
           <span className="h-3 w-24 rounded bg-muted" />
           <span className="h-3 w-16 rounded bg-muted" />
@@ -490,16 +449,13 @@ function LoadingRows({ label }: { label: string }) {
 function EmptyState() {
   const { t } = useI18n();
   return (
-    <div className="flex flex-1 flex-col items-center justify-center gap-2 p-6 text-center">
+    <div className="flex flex-1 flex-col items-center justify-center gap-2.5 p-6 text-center">
+      <StateBadge icon={<Inbox aria-hidden="true" className="size-4" />} />
       <p className="text-sm font-medium">{t('list.state.empty.title')}</p>
-      <p className="text-xs text-muted-foreground">{t('list.state.empty.body')}</p>
-      <button
-        type="button"
-        disabled
-        className="rounded border border-border px-3 py-1 text-xs text-muted-foreground disabled:opacity-60"
-      >
+      <p className="max-w-sm text-xs text-muted-foreground">{t('list.state.empty.body')}</p>
+      <Button size="md" variant="secondary" disabled className="mt-1">
         {t('list.state.empty.create')}
-      </button>
+      </Button>
       <p className="max-w-sm text-xs text-muted-foreground">
         {t('list.state.empty.createDisabled')}
       </p>
@@ -510,16 +466,13 @@ function EmptyState() {
 function NoMatchState({ onClear }: { onClear: () => void }) {
   const { t } = useI18n();
   return (
-    <div className="flex flex-1 flex-col items-center justify-center gap-2 p-6 text-center">
+    <div className="flex flex-1 flex-col items-center justify-center gap-2.5 p-6 text-center">
+      <StateBadge icon={<SearchX aria-hidden="true" className="size-4" />} />
       <p className="text-sm font-medium">{t('list.state.noMatch.title')}</p>
-      <p className="text-xs text-muted-foreground">{t('list.state.noMatch.body')}</p>
-      <button
-        type="button"
-        onClick={onClear}
-        className="rounded border border-border px-3 py-1 text-xs"
-      >
+      <p className="max-w-sm text-xs text-muted-foreground">{t('list.state.noMatch.body')}</p>
+      <Button size="md" variant="secondary" onClick={onClear} className="mt-1">
         {t('list.state.noMatch.clear')}
-      </button>
+      </Button>
     </div>
   );
 }
@@ -529,19 +482,16 @@ function ErrorState({ message, onRefresh }: { message: string; onRefresh?: () =>
   return (
     <div
       role="alert"
-      className="flex flex-1 flex-col items-center justify-center gap-2 p-6 text-center"
+      className="flex flex-1 flex-col items-center justify-center gap-2.5 p-6 text-center"
     >
+      <StateBadge tone="danger" icon={<TriangleAlert aria-hidden="true" className="size-4" />} />
       <p className="text-sm font-medium text-destructive">{t('list.state.error.title')}</p>
       <p className="text-xs text-muted-foreground">{t('list.state.error.body')}</p>
       <p className="max-w-md text-xs text-muted-foreground">{message}</p>
       {onRefresh === undefined ? null : (
-        <button
-          type="button"
-          onClick={onRefresh}
-          className="rounded border border-border px-3 py-1 text-xs"
-        >
+        <Button size="md" variant="secondary" onClick={onRefresh} className="mt-1">
           {t('list.state.retry')}
-        </button>
+        </Button>
       )}
     </div>
   );

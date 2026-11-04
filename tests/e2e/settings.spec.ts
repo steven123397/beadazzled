@@ -4,20 +4,22 @@ import { clearInvokeLog, installFakeBridge, invokeLog } from './fakeBridge';
 
 test('opening settings makes no bd call and writes preferences', async ({ page }) => {
   await installFakeBridge(page);
-  await page.goto('/#/settings');
+  await page.goto('/#/settings/general');
   await expect(page.getByRole('heading', { name: 'Settings' })).toBeVisible();
-  await expect(page.getByRole('main').getByText('bd 1.3.2')).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'General' })).toBeVisible();
 
   // Everything the page itself needs is already loaded; interacting with the
   // general block must not reach bd either (SPEC-settings acceptance 8).
   await clearInvokeLog(page);
 
-  await page.getByLabel('Language').selectOption('zh-CN');
+  await page.getByLabel('Language: English').click();
+  await page.getByRole('radio', { name: '中文' }).click();
   await expect(page.getByRole('heading', { name: '设置' })).toBeVisible();
   await expect(page.locator('html')).toHaveAttribute('lang', 'zh-CN');
   expect(await page.evaluate(() => localStorage.getItem('beadazzled.language'))).toBe('zh-CN');
 
-  await page.getByLabel('主题').selectOption('dark');
+  await page.getByLabel('主题: 跟随系统').click();
+  await page.getByRole('radio', { name: '深色' }).click();
   await expect(page.locator('html')).toHaveClass(/dark/);
   expect(await page.evaluate(() => localStorage.getItem('beadazzled.theme'))).toBe('dark');
 
@@ -28,7 +30,7 @@ test('opening settings makes no bd call and writes preferences', async ({ page }
 
 test('cancelling the bd picker leaves the configuration alone', async ({ page }) => {
   await installFakeBridge(page, { dialogPath: null });
-  await page.goto('/#/settings');
+  await page.goto('/#/settings/bd');
   await expect(page.getByRole('main').getByText('bd 1.3.2')).toBeVisible();
   await clearInvokeLog(page);
 
@@ -43,7 +45,7 @@ test('cancelling the bd picker leaves the configuration alone', async ({ page })
 
 test('choosing a bd executable probes it and becomes the configured path', async ({ page }) => {
   await installFakeBridge(page, { dialogPath: 'C:\\tools\\bd.exe' });
-  await page.goto('/#/settings');
+  await page.goto('/#/settings/bd');
   await expect(page.getByRole('main').getByText('bd 1.3.2')).toBeVisible();
   await clearInvokeLog(page);
 
@@ -60,7 +62,7 @@ test('choosing a bd executable probes it and becomes the configured path', async
 
 test('the bd controls are reachable and operable with the keyboard alone', async ({ page }) => {
   await installFakeBridge(page);
-  await page.goto('/#/settings');
+  await page.goto('/#/settings/bd');
   await expect(page.getByRole('main').getByText('bd 1.3.2')).toBeVisible();
   await clearInvokeLog(page);
 
@@ -84,8 +86,8 @@ test('the bd controls are reachable and operable with the keyboard alone', async
 test('diagnostics load on demand and copy the fixed report', async ({ page }) => {
   await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
   await installFakeBridge(page);
-  await page.goto('/#/settings');
-  await expect(page.getByRole('heading', { name: 'Settings' })).toBeVisible();
+  await page.goto('/#/settings/diagnostics');
+  await expect(page.getByRole('heading', { name: 'Diagnostics' })).toBeVisible();
   await clearInvokeLog(page);
 
   await page.getByRole('button', { name: 'Load diagnostics' }).click();

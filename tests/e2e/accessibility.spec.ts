@@ -25,7 +25,7 @@ test('shell routes have no serious or critical accessibility violations', async 
   await expect(page.getByRole('heading', { name: 'Board' })).toBeVisible();
   expect(await seriousViolations(page)).toEqual([]);
 
-  await page.goto('/#/settings');
+  await page.goto('/#/settings/general');
   await expect(page.getByRole('heading', { name: 'Settings' })).toBeVisible();
   expect(await seriousViolations(page)).toEqual([]);
 
@@ -53,6 +53,23 @@ test('the dark theme has no serious or critical violations', async ({ page }) =>
   await installFakeBridge(page, {
     theme: 'dark',
     syncState: { kind: 'healthy', lastSeq: 1, lastEventAt: null },
+    issues: [
+      {
+        id: 'bza-ryr.49.6',
+        title: 'Contrast probe',
+        description: 'See the [docs](https://example.com) for the long form.',
+        status: 'open',
+        priority: 1,
+        issue_type: 'task',
+        assignee: 'Steven Liang',
+        labels: ['polish', 'release'],
+        created_at: '2026-11-01T00:00:00Z',
+        updated_at: '2026-11-01T00:00:00Z',
+        dependency_count: 0,
+        dependent_count: 0,
+        comment_count: 0,
+      },
+    ],
   });
   await page.goto('/');
   await expect(page.getByRole('heading', { name: 'List' })).toBeVisible();
@@ -60,9 +77,15 @@ test('the dark theme has no serious or critical violations', async ({ page }) =>
 
   expect(await seriousViolations(page)).toEqual([]);
 
-  await page.goto('/#/settings');
-  await expect(page.getByRole('heading', { name: 'Settings' })).toBeVisible();
+  await page.goto('/#/w/p1/issue/bza-ryr.49.6');
+  await expect(page.getByRole('heading', { name: 'Contrast probe' })).toBeVisible();
   expect(await seriousViolations(page)).toEqual([]);
+
+  for (const section of ['general', 'bd', 'workspaces', 'sync', 'diagnostics', 'about']) {
+    await page.goto(`/#/settings/${section}`);
+    await expect(page.getByRole('heading', { name: 'Settings' })).toBeVisible();
+    expect(await seriousViolations(page), section).toEqual([]);
+  }
 
   await page.keyboard.press('?');
   await expect(page.getByRole('dialog', { name: 'Keyboard shortcuts' })).toBeVisible();
@@ -139,4 +162,15 @@ test('the detail reading page has no serious or critical violations', async ({ p
   await expect(page.getByRole('region', { name: 'Blocked by' })).toBeVisible();
 
   expect(await seriousViolations(page)).toEqual([]);
+});
+
+test('reduced motion collapses transitions', async ({ page }) => {
+  await installFakeBridge(page);
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.goto('/#/settings/general');
+  const link = page.getByRole('link', { name: 'Workspaces' });
+  await expect(link).toBeVisible();
+
+  const duration = await link.evaluate((element) => getComputedStyle(element).transitionDuration);
+  expect(parseFloat(duration)).toBeLessThan(0.001);
 });

@@ -298,20 +298,23 @@ function AppFrame({
                       }
                     />
                   </Route>
-                  <Route
-                    path="settings"
-                    element={
-                      <Suspense
-                        fallback={
-                          <p role="status" className="px-6 py-10 text-sm text-muted-foreground">
-                            {t('settings.loading')}
-                          </p>
-                        }
-                      >
-                        <SettingsRoute />
-                      </Suspense>
-                    }
-                  />
+                  <Route path="settings">
+                    <Route index element={<Navigate to="general" replace />} />
+                    <Route
+                      path=":section"
+                      element={
+                        <Suspense
+                          fallback={
+                            <p role="status" className="px-6 py-10 text-sm text-muted-foreground">
+                              {t('settings.loading')}
+                            </p>
+                          }
+                        >
+                          <SettingsRoute />
+                        </Suspense>
+                      }
+                    />
+                  </Route>
                   <Route path="*" element={<Navigate to="/welcome" replace />} />
                 </Route>
               </Routes>

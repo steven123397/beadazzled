@@ -31,16 +31,27 @@ import { chromium } from '@playwright/test';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const outDir = path.join(root, 'dist-e2e');
 const viteBin = path.join(root, 'node_modules', 'vite', 'bin', 'vite.js');
-const budgets = { p50: 20, p95: 24, max: 50 };
+// 60Hz ticks at 16.7ms: a p50 near one frame keeps 60fps, p95 allows one
+// extra frame, and max absorbs a single GC/compile pause.
+const budgets = { p50: 18, p95: 22, max: 50 };
 // Steady reading speed, a fast wheel fling, and the same steady speed with
 // group headers in the window. 240px/frame mounts roughly 6.7 rows per frame,
 // close to the low end of a real fling; 48px/frame is a comfortable read.
 const scenarios = [
   { name: 'steady', delta: 48, steps: 120, group: 'none', from: 0, minDistance: 5_000 },
   { name: 'fling', delta: 240, steps: 150, group: 'none', from: 0, minDistance: 25_000 },
-  // Start past the open bucket (about the first 570 rows) so the run crosses
-  // status-group headers and reaches the tail of the list.
-  { name: 'grouped', delta: 48, steps: 150, group: 'status', from: 20_000, minDistance: 6_000 },
+  // The open bucket runs to about 26,200px (624 rows x 42px), so start just
+  // past it and travel far enough to finish at the bottom of the list, which
+  // covers the remaining group headers instead of stopping mid-group.
+  {
+    name: 'grouped',
+    delta: 48,
+    steps: 330,
+    group: 'status',
+    from: 26_500,
+    minDistance: 14_000,
+    reachBottom: true,
+  },
 ];
 // The board virtualizes each column separately; Ready holds every open ticket
 // (about 570 of the 1000-issue fixture) and is the column under test.
@@ -62,6 +73,17 @@ const boardScenarios = [
     steps: 150,
     from: 0,
     minDistance: 25_000,
+  },
+  // Blocked cards carry the extra chip row, so the blocked column is the
+  // heaviest per-card case.
+  {
+    name: 'board-blocked',
+    view: 'board',
+    column: 'blocked',
+    delta: 48,
+    steps: 120,
+    from: 0,
+    minDistance: 3_000,
   },
 ];
 let port = 1431;
@@ -118,14 +140,34 @@ function issues() {
     id: `bza-${index}`,
     title: `Issue ${index}`,
     description: '',
-    status: index % 7 === 0 ? 'closed' : index % 5 === 0 ? 'in_progress' : 'open',
+    status:
+      index % 11 === 0
+        ? 'blocked'
+        : index % 7 === 0
+          ? 'closed'
+          : index % 5 === 0
+            ? 'in_progress'
+            : 'open',
     priority: index % 5,
     issue_type: index % 3 === 0 ? 'bug' : 'task',
     assignee: index % 4 === 0 ? 'ada' : index % 4 === 1 ? 'lin' : undefined,
     created_at: '2026-11-01T00:00:00Z',
     updated_at: '2026-11-01T00:00:00Z',
     labels: index % 2 === 0 ? ['ui'] : ['backend', 'perf', 'docs'],
-    dependency_count: 0,
+    // Half the blocked cards also name a real blocker, so the chip renders the
+    // dependency variant rather than only the manual one.
+    dependency_count: index % 11 === 0 && index % 22 === 0 ? 1 : 0,
+    dependencies:
+      index % 11 === 0 && index % 22 === 0
+        ? [
+            {
+              issue_id: `bza-${index}`,
+              depends_on_id: 'bza-1',
+              type: 'blocks',
+              created_at: '2026-11-01T00:00:00Z',
+            },
+          ]
+        : undefined,
     dependent_count: 0,
     comment_count: 0,
   }));
@@ -273,6 +315,7 @@ async function measureRun(browser, scenario, run) {
           previous = now;
         }
         const endScroll = list.scrollTop;
+        const maxScroll = list.scrollHeight - list.clientHeight;
         frames.sort((left, right) => left - right);
         return {
           p50: frames[Math.floor(frames.length * 0.5)],
@@ -280,6 +323,7 @@ async function measureRun(browser, scenario, run) {
           max: frames[frames.length - 1],
           startScroll,
           endScroll,
+          maxScroll,
           distance: endScroll - startScroll,
         };
       },
@@ -325,6 +369,11 @@ async function main() {
         runs,
         distance: runs[0]?.distance ?? 0,
         minDistance: scenario.minDistance,
+        // A scenario that claims to cover the tail has to actually arrive
+        // there, or the distance gate alone can pass in the middle of a group.
+        reachedBottom:
+          scenario.reachBottom !== true ||
+          runs.every((entry) => entry.maxScroll - entry.endScroll <= 1),
         median: {
           p50: median(runs.map((entry) => entry.p50)),
           p95: median(runs.map((entry) => entry.p95)),
@@ -337,7 +386,8 @@ async function main() {
         summary.median.p50 < budgets.p50 &&
         summary.median.p95 < budgets.p95 &&
         summary.worstMax < budgets.max &&
-        summary.distance >= summary.minDistance;
+        summary.distance >= summary.minDistance &&
+        summary.reachedBottom;
       results.push(summary);
     }
 
@@ -366,9 +416,9 @@ async function main() {
             1
           )}ms; worst max ${result.worstMax.toFixed(
             1
-          )}ms; travelled ${result.distance}px (min ${result.minDistance}px) — ${
-            result.passed ? 'PASS' : 'FAIL'
-          }\n`
+          )}ms; travelled ${result.distance}px (min ${result.minDistance}px)${
+            result.reachedBottom ? '' : '; stopped short of the tail'
+          } — ${result.passed ? 'PASS' : 'FAIL'}\n`
         );
       }
       console.log(

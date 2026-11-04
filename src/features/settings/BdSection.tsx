@@ -98,10 +98,10 @@ export function BdSection({ pickFile = defaultPicker, copy = copyText }: BdSecti
 
   return (
     <section aria-labelledby="settings-bd" className="space-y-3">
-      <h2 id="settings-bd" className="text-sm font-semibold">
+      <h2 id="settings-bd" className="text-lg font-semibold">
         {t('settings.bd')}
       </h2>
-      <div className="space-y-2 rounded-md border border-border bg-card p-3 text-xs">
+      <div className="space-y-2 rounded-md border border-border bg-raised p-3 text-xs">
         {shown === null ? (
           <p className="text-muted-foreground">{t('settings.bd.loading')}</p>
         ) : shown.kind === 'ready' ? (
@@ -155,19 +155,19 @@ export function BdSection({ pickFile = defaultPicker, copy = copyText }: BdSecti
         </p>
       )}
       <div className="flex flex-wrap gap-2">
-        <Button onClick={() => void detect()} disabled={busy}>
+        <Button size="md" onClick={() => void detect()} disabled={busy}>
           {t('settings.bd.redetect')}
         </Button>
-        <Button onClick={() => void choose()} disabled={busy}>
+        <Button size="md" onClick={() => void choose()} disabled={busy}>
           {t('settings.bd.choose')}
         </Button>
         {shown?.kind === 'not-found' ? (
-          <Button variant="ghost" onClick={() => void copyCommand()}>
+          <Button size="md" variant="ghost" onClick={() => void copyCommand()}>
             {t('settings.bd.copy')}
           </Button>
         ) : null}
         {configured === null ? null : (
-          <Button variant="ghost" onClick={() => void usePath()} disabled={busy}>
+          <Button size="md" variant="ghost" onClick={() => void usePath()} disabled={busy}>
             {t('settings.bd.usePath')}
           </Button>
         )}

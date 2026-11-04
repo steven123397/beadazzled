@@ -5,6 +5,7 @@
 import { registerCatalog } from '@/lib/i18n';
 
 export const settingsEn = {
+  'settings.sections': 'Settings sections',
   'settings.general': 'General',
   'settings.language': 'Language',
   'settings.theme': 'Theme',
@@ -80,9 +81,22 @@ export const settingsEn = {
   'settings.diagnostics.result': 'Result',
 
   'settings.about': 'About',
+  'settings.about.tagline': 'A focused desktop client for bd',
   'settings.about.version': 'Version {version}',
-  'settings.about.license': 'MIT license',
-  'settings.about.repository': 'Open the repository',
+  'settings.about.links': 'Documents and links',
+  'settings.about.links.source': 'Source',
+  'settings.about.links.docs': 'Docs',
+  'settings.about.links.issues': 'Issues',
+  'settings.about.links.license': 'License',
+  'settings.about.runtime': 'Runtime details',
+  'settings.about.runtime.app': 'App',
+  'settings.about.runtime.bd': 'bd',
+  'settings.about.runtime.workspace': 'Workspace',
+  'settings.about.runtime.project': 'Project',
+  'settings.about.runtime.theme': 'Theme',
+  'settings.about.runtime.language': 'Language',
+  'settings.about.runtime.unknown': 'unknown',
+  'settings.about.openDiagnostics': 'Open full diagnostics',
   'settings.about.checkUpdates': 'Check for updates',
   'settings.about.updatesLater':
     'Automatic updates arrive with the release build; this button stays off until then.',
@@ -91,6 +105,7 @@ export const settingsEn = {
 export type SettingsMessageKey = keyof typeof settingsEn;
 
 export const settingsZhCN: Record<SettingsMessageKey, string> = {
+  'settings.sections': '设置栏目',
   'settings.general': '通用',
   'settings.language': '语言',
   'settings.theme': '主题',
@@ -164,9 +179,22 @@ export const settingsZhCN: Record<SettingsMessageKey, string> = {
   'settings.diagnostics.result': '结果',
 
   'settings.about': '关于',
+  'settings.about.tagline': '面向 bd 的桌面客户端',
   'settings.about.version': '版本 {version}',
-  'settings.about.license': 'MIT 许可',
-  'settings.about.repository': '打开仓库',
+  'settings.about.links': '文档与链接',
+  'settings.about.links.source': '源码',
+  'settings.about.links.docs': '文档',
+  'settings.about.links.issues': '问题反馈',
+  'settings.about.links.license': '许可证',
+  'settings.about.runtime': '运行信息',
+  'settings.about.runtime.app': '应用',
+  'settings.about.runtime.bd': 'bd',
+  'settings.about.runtime.workspace': '工作区',
+  'settings.about.runtime.project': '项目',
+  'settings.about.runtime.theme': '主题',
+  'settings.about.runtime.language': '语言',
+  'settings.about.runtime.unknown': '未知',
+  'settings.about.openDiagnostics': '打开完整诊断',
   'settings.about.checkUpdates': '检查更新',
   'settings.about.updatesLater': '自动更新随发布版接入，在此之前该按钮不可用。',
 };
