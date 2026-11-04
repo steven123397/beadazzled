@@ -34,6 +34,18 @@ fn request(workspace: &Path, mode: &str) -> ProcessRequest {
     request
 }
 
+#[test]
+fn workspace_commands_run_with_the_workspace_as_cwd() {
+    let dir = temp_dir("cwd");
+    let workspace = workspace(&dir);
+
+    let output = runner()
+        .run(&request(&workspace, "cwd"))
+        .expect("fake_bd reports its cwd");
+
+    assert_eq!(Path::new(output.stdout.trim()), workspace.as_path());
+}
+
 fn detail<'a>(error: &'a BridgeError, key: &str) -> Option<&'a Value> {
     error.detail.as_ref()?.0.get(key)
 }

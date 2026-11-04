@@ -32,8 +32,8 @@ const CAPABILITY_MAP_SCRIPTS = [
   'verify:release',
 ];
 
-test('package.json declares version 0.1.0', () => {
-  assert.equal(readJson('package.json').version, '0.1.0');
+test('package.json declares a semantic version', () => {
+  assert.match(readJson('package.json').version, /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/);
 });
 
 test('package.json declares every capability-map command', () => {
@@ -45,7 +45,7 @@ test('package.json declares every capability-map command', () => {
 test('tauri.conf.json carries the product identity', () => {
   const config = readJson('src-tauri/tauri.conf.json');
   assert.equal(config.productName, 'beadazzled');
-  assert.equal(config.version, '0.1.0');
+  assert.equal(config.version, readJson('package.json').version);
   assert.equal(config.identifier, 'com.steven123397.beadazzled');
 });
 

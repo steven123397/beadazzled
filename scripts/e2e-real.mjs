@@ -44,13 +44,20 @@ function usage() {
     '',
     '  --exe <path>   application binary (default src-tauri/target/release/beadazzled.exe)',
     '  --installer <path>  install this NSIS package first, then test the installed app',
+    '  --force-install     allow --installer to upgrade an existing beadazzled install',
     '  --port <n>     DevTools port for the WebView2 instance (default 1435)',
     '  --keep         keep the temporary workspace and profile for inspection',
   ].join('\n');
 }
 
 function parseArgs(argv) {
-  const options = { exe: defaultExe, installer: null, port: 1435, keep: false };
+  const options = {
+    exe: defaultExe,
+    installer: null,
+    port: 1435,
+    keep: false,
+    forceInstall: false,
+  };
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
     const separator = arg.indexOf('=');
@@ -84,16 +91,55 @@ function parseArgs(argv) {
   return options;
 }
 
+/** An existing per-user install, read from the uninstall registry key. */
+function installedApp() {
+  const script = [
+    "Get-ItemProperty 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*' -ErrorAction SilentlyContinue |",
+    "Where-Object { $_.DisplayName -eq 'beadazzled' } |",
+    'Select-Object DisplayVersion,InstallLocation | ConvertTo-Json -Compress',
+  ].join(' ');
+  const result = spawnSync(
+    'powershell.exe',
+    ['-NoProfile', '-NonInteractive', '-Command', script],
+    {
+      encoding: 'utf8',
+      windowsHide: true,
+    }
+  );
+  const text = (result.stdout ?? '').trim();
+  if (text === '') {
+    return null;
+  }
+  const parsed = JSON.parse(text);
+  const location = typeof parsed.InstallLocation === 'string' ? parsed.InstallLocation : '';
+  return {
+    version: typeof parsed.DisplayVersion === 'string' ? parsed.DisplayVersion : 'unknown',
+    dir: location.replace(/^"|"$/g, ''),
+  };
+}
+
 /** Silent currentUser install; returns the installed exe and its directory. */
-async function installApp(installer) {
+async function installApp(installer, { force = false } = {}) {
   if (!existsSync(installer)) {
     throw new Error(`installer not found: ${installer}`);
   }
+  // NSIS reuses the previous install location, so running this on a machine
+  // that already has beadazzled upgrades the user's copy instead of creating
+  // the throwaway one the test expects. Refuse unless that is intended.
+  const existing = installedApp();
+  if (existing !== null && !force) {
+    throw new Error(
+      `beadazzled ${existing.version} is already installed at ${existing.dir || '(unknown)'}; ` +
+        'this test would upgrade it. Uninstall it first, or pass --force-install.'
+    );
+  }
   const localAppData = process.env.LOCALAPPDATA ?? '';
   const candidates = [
+    existing?.dir,
     path.join(localAppData, 'beadazzled'),
     path.join(localAppData, 'Programs', 'beadazzled'),
-  ];
+  ].filter((dir) => typeof dir === 'string' && dir !== '');
+
   const result = spawnSync(installer, ['/S'], {
     stdio: 'ignore',
     windowsHide: true,
@@ -112,7 +158,7 @@ async function installApp(installer) {
     }
     await sleep(200);
   }
-  throw new Error(`the installer did not place beadazzled.exe under ${localAppData}`);
+  throw new Error(`the installer did not place beadazzled.exe in ${candidates.join(', ')}`);
 }
 
 async function uninstallApp(dir) {
@@ -156,7 +202,7 @@ async function main() {
 
   try {
     if (options.installer !== null) {
-      installed = await installApp(options.installer);
+      installed = await installApp(options.installer, { force: options.forceInstall });
       options.exe = installed.exe;
       console.log(`PASS installer -> ${installed.exe}`);
     }

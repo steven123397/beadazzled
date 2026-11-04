@@ -30,7 +30,7 @@ use self::process::{
 };
 
 pub use argv::{argv_for, Argv, AssigneeChange, CreateSpec, UpdateSpec, WriteCommand};
-pub use error::{map_exit, BridgeError, BridgeErrorCode};
+pub use error::{map_exit, map_exit_with_output, BridgeError, BridgeErrorCode};
 pub use process::{shared_call_log, CallRecord};
 pub use types::{
     Comment, Dependency, Issue, JournalComment, JournalDep, JournalOp, JournalRecord,
@@ -79,7 +79,11 @@ impl BdBridge {
         request.timeout = VERSION_TIMEOUT;
         let output = self.runner.run(&request)?;
         if output.exit_code != 0 {
-            return Err(map_exit(output.exit_code, &output.stderr));
+            return Err(map_exit_with_output(
+                output.exit_code,
+                &output.stderr,
+                &output.stdout,
+            ));
         }
         parse_bd_version(&output.stdout)
     }
@@ -92,7 +96,11 @@ impl BdBridge {
         );
         let output = self.runner.run(&request)?;
         if output.exit_code != 0 {
-            return Err(map_exit(output.exit_code, &output.stderr));
+            return Err(map_exit_with_output(
+                output.exit_code,
+                &output.stderr,
+                &output.stdout,
+            ));
         }
         serde_json::from_str(&output.stdout).map_err(|error| {
             BridgeError::new(
@@ -106,7 +114,11 @@ impl BdBridge {
         let request = self.request("export", vec![OsString::from("export")], READ_TIMEOUT);
         let output = self.runner.run(&request)?;
         if output.exit_code != 0 {
-            return Err(map_exit(output.exit_code, &output.stderr));
+            return Err(map_exit_with_output(
+                output.exit_code,
+                &output.stderr,
+                &output.stdout,
+            ));
         }
         parse_export(output.stdout.as_bytes())
     }
@@ -142,7 +154,11 @@ impl BdBridge {
                 return Err(error);
             }
             if output.exit_code != 0 {
-                return Err(map_exit(output.exit_code, &output.stderr));
+                return Err(map_exit_with_output(
+                    output.exit_code,
+                    &output.stderr,
+                    &output.stdout,
+                ));
             }
             let mut stream = JournalStream::new();
             let records = stream.push(output.stdout.as_bytes())?;
@@ -187,7 +203,8 @@ impl BdBridge {
         }
         if let Some(code) = scanned.exit_code {
             if code != 0 {
-                return Err(map_exit(code, &stderr));
+                let stdout = String::from_utf8_lossy(&scanned.stdout);
+                return Err(map_exit_with_output(code, &stderr, &stdout));
             }
         }
 
@@ -210,7 +227,11 @@ impl BdBridge {
 
         let output = self.runner.run(&request)?;
         if output.exit_code != 0 {
-            return Err(map_exit(output.exit_code, &output.stderr));
+            return Err(map_exit_with_output(
+                output.exit_code,
+                &output.stderr,
+                &output.stdout,
+            ));
         }
 
         let created_id = match command {
@@ -249,7 +270,11 @@ impl BdBridge {
         );
         let output = self.runner.run(&request)?;
         if output.exit_code != 0 {
-            return Err(map_exit(output.exit_code, &output.stderr));
+            return Err(map_exit_with_output(
+                output.exit_code,
+                &output.stderr,
+                &output.stdout,
+            ));
         }
         Ok(output.stdout.trim().to_owned())
     }

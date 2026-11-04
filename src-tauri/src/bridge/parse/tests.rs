@@ -7,7 +7,7 @@
 use serde_json::Value;
 
 use super::{journal_disabled, journal_truncated, parse_export, JournalStream};
-use crate::bridge::error::{map_exit, BridgeError, BridgeErrorCode};
+use crate::bridge::error::{map_exit, map_exit_with_output, BridgeError, BridgeErrorCode};
 use crate::bridge::types::JournalOp;
 
 fn read_fixture(name: &str) -> String {
@@ -320,6 +320,40 @@ fn map_exit_preserves_pending_migration_text() {
         .and_then(Value::as_str)
         .expect("stderr is preserved");
     assert!(full.contains("bd migrate"), "{full}");
+}
+
+#[test]
+fn a_json_error_on_stdout_is_classified_like_a_stderr_one() {
+    let error = map_exit_with_output(
+        1,
+        "",
+        r#"{"error":"cannot resolve repo context: no .beads directory found","schema_version":1}"#,
+    );
+
+    assert_eq!(error.code, BridgeErrorCode::WsNotBeads);
+    assert_eq!(
+        detail_value(&error, "bd_error").and_then(Value::as_str),
+        Some("cannot resolve repo context: no .beads directory found")
+    );
+    assert!(detail_value(&error, "stderr").is_none());
+}
+
+#[test]
+fn an_unrecognized_stdout_error_keeps_the_generic_code_and_the_text() {
+    let error = map_exit_with_output(1, "", r#"{"error":"something odd happened"}"#);
+
+    assert_eq!(error.code, BridgeErrorCode::BdExitNonzero);
+    assert_eq!(
+        detail_value(&error, "bd_error").and_then(Value::as_str),
+        Some("something odd happened")
+    );
+}
+
+#[test]
+fn stderr_still_wins_when_both_streams_carry_text() {
+    let error = map_exit_with_output(1, "Error: database is locked", r#"{"error":"x"}"#);
+
+    assert_eq!(error.code, BridgeErrorCode::BdLocked);
 }
 
 #[test]

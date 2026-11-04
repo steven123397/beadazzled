@@ -372,7 +372,12 @@ impl ProcessRunner {
     fn spawn_child(&self, request: &ProcessRequest) -> Result<(Child, JobHandle), BridgeError> {
         let mut command = Command::new(&self.bd_path);
         if let Some(workspace) = &request.workspace {
+            // bd's `-C` selects the workspace but 1.3.2 still resolves the git
+            // repository from the process cwd. Launched from the install folder
+            // (the Start-menu shortcut's working directory), `bd context` then
+            // fails with "not a git repository" even for a valid workspace.
             command.arg("-C").arg(workspace);
+            command.current_dir(workspace);
         }
         command
             .args(&request.args)

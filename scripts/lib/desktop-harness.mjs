@@ -108,6 +108,11 @@ export async function createFixture(base, { count = 1000, prefix = 'mem' } = {})
 
 export function launchApp({ exe, fixture, port }) {
   return spawn(exe, [], {
+    // The installed app starts with its own folder as the working directory
+    // (the Start-menu shortcut's "Start in"). bd 1.3.2 resolves the git root
+    // from the process cwd even when `-C` names the workspace, so launching
+    // from the repository here would hide that failure mode.
+    cwd: path.dirname(exe),
     env: {
       ...process.env,
       BEADAZZLED_CONFIG_DIR: fixture.configDir,
