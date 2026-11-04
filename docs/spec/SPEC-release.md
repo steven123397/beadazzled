@@ -78,7 +78,10 @@
 ## 版本与发布渠道
 
 - 发布在 GitHub Releases（公开仓库），tag 形如 `v0.1.0`。
-- `docs/releases/<version>.md` 记录：变更、已知限制、验证证据、未验证项。
+- `docs/releases/<version>.md` 是**给用户的发布说明**（`gh release create --notes-file`
+  直接使用）：这个版本是什么、安装与卸载、SmartScreen、变更、已知限制。
+- `docs/releases/<version>-evidence.md` 记录内部证据：四层验证、发布步骤、性能数字、
+  未验证项与回滚说明。两者分开，避免把内部检查清单放进 Release 页面。
 - CI（GitHub Actions）负责检查；发布构建在本机完成（签名密钥不进入仓库），上传用 `gh release upload`。
 - 首个正式版 v0.1.0 之前允许 `v0.1.0-beta.N` 预发布，但不得占用 `latest` 端点。
 
@@ -94,7 +97,7 @@ CONSTRAINTS 中的以下检查在发布前必须跑过并留证据：
 - 3 条真实 E2E 全绿
 - 依赖高危漏洞 0、secrets 0
 
-测量脚本产出的数字写入 `docs/releases/<version>.md`；未达标按 CONSTRAINTS 的 block/warn 规则处理，不得改预算迁就结果。
+测量脚本产出的数字写入 `docs/releases/<version>-evidence.md`；未达标按 CONSTRAINTS 的 block/warn 规则处理，不得改预算迁就结果。
 
 ## Acceptance Criteria
 
