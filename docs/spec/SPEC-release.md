@@ -8,7 +8,7 @@
 让用户**下载一个安装包、双击、装上即用**，并且之后的更新不需要再手动找安装包。
 
 发布形态（用户已定）：**开源、免费、自动更新**。不做 Authenticode 代码签名。
-许可证：**MIT**（仓库根 [LICENSE](../../LICENSE)）。
+许可证：**MIT**（仓库根 [LICENSE](../../LICENSE)）；第三方来源与依赖署名见 [NOTICE](../../NOTICE)。
 
 ## 两种「签名」的边界（必须先说清）
 
@@ -46,7 +46,7 @@
 - 启动后延迟检查（≥10s，避免与基线争用 bd / 首屏）；检查失败静默记录到诊断，不打扰用户。
 - v0.1.0 的检查频率固定为「启动后一次 + 手动检查」，不设每日轮询（已定）。
 - 手动检查入口在「关于」；无更新时显示「已是最新」。
-- 更新流程：下载 → 校验签名 → passive 安装 → 提示重启；不强制重启、不后台静默重启。
+- 更新流程：用户确认 → 下载 → 校验签名 → passive 安装 → 自动重启；不做后台静默安装、不静默重启。
 - 拒绝签名不匹配或版本不更高的更新包；不做降级。
 - 更新检查不调用 bd、不阻塞启动。
 
@@ -78,7 +78,10 @@
 ## 版本与发布渠道
 
 - 发布在 GitHub Releases（公开仓库），tag 形如 `v0.1.0`。
-- `docs/releases/<version>.md` 记录：变更、已知限制、验证证据、未验证项。
+- `docs/releases/<version>.md` 是**给用户的发布说明**（`gh release create --notes-file`
+  直接使用）：这个版本是什么、安装与卸载、SmartScreen、变更、已知限制。
+- `docs/releases/<version>-evidence.md` 记录内部证据：四层验证、发布步骤、性能数字、
+  未验证项与回滚说明。两者分开，避免把内部检查清单放进 Release 页面。
 - CI（GitHub Actions）负责检查；发布构建在本机完成（签名密钥不进入仓库），上传用 `gh release upload`。
 - 首个正式版 v0.1.0 之前允许 `v0.1.0-beta.N` 预发布，但不得占用 `latest` 端点。
 
@@ -88,12 +91,13 @@ CONSTRAINTS 中的以下检查在发布前必须跑过并留证据：
 
 - 安装包体积 ≤15 MB
 - 冷启动 ≤2.0s（P95）、热启动 ≤800ms
-- 常驻内存 ≤150 MB（1000 条票）
+- 常驻内存 ≤600 MB 且 ≤1 条基线 +50 MB（1000 条票；原 150 MB 预算已由
+  [ADR-0011](../adr/0011-memory-budget.md) 重设）
 - 详情切换 ≤50ms、列表滚动 60fps
 - 3 条真实 E2E 全绿
 - 依赖高危漏洞 0、secrets 0
 
-测量脚本产出的数字写入 `docs/releases/<version>.md`；未达标按 CONSTRAINTS 的 block/warn 规则处理，不得改预算迁就结果。
+测量脚本产出的数字写入 `docs/releases/<version>-evidence.md`；未达标按 CONSTRAINTS 的 block/warn 规则处理，不得改预算迁就结果。
 
 ## Acceptance Criteria
 
@@ -113,7 +117,7 @@ CONSTRAINTS 中的以下检查在发布前必须跑过并留证据：
 - `npm run build:app` — 构建 NSIS 安装包
 - `npm run check:size` — 体积预算
 - `npm run verify:release` — 本地产物与清单校验
-- `npm run e2e -- --real` — 3 条真实 E2E
+- `npm run e2e:real -- --installer <exe>` — 真实安装 → 列表 → 详情 → 改状态 → 卸载
 - `npm run measure:startup|memory|navigation|scroll`
 - `gitleaks detect --source . --redact --no-banner`
 
@@ -123,10 +127,13 @@ CONSTRAINTS 中的以下检查在发布前必须跑过并留证据：
 src-tauri/tauri.conf.json        bundle / updater / 图标
 src-tauri/capabilities/          最小权限（updater、opener、dialog 等）
 scripts/check-size.mjs           安装包体积
+scripts/check-versions.mjs       版本三处一致
 scripts/verify-release.mjs       签名、清单、哈希校验
+scripts/make-latest-json.mjs     生成更新清单
+scripts/e2e-real.mjs             真实安装 → 列表 → 详情 → 改状态 → 卸载
 scripts/measure-*.mjs            启动/内存/导航/滚动
 docs/releases/                   版本发布记录
-.github/workflows/checks.yml     typecheck / lint / tests / gitleaks / osv
+.github/workflows/ci.yml         typecheck / lint / tests / gitleaks / osv / e2e
 ```
 
 ## Module Code Style

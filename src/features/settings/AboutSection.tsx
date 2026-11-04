@@ -1,5 +1,5 @@
 import { ChevronRight, ExternalLink, RefreshCw } from 'lucide-react';
-import { useState } from 'react';
+import { useState, useSyncExternalStore } from 'react';
 import { Link } from 'react-router-dom';
 
 import appIcon from '@/assets/app-icon.svg';
@@ -12,6 +12,7 @@ import { useI18n } from '@/lib/i18n/I18nProvider';
 import type { MessageKey } from '@/lib/i18n';
 import { openExternal } from '@/lib/links';
 import { useTheme } from '@/lib/theme/ThemeProvider';
+import { checkForUpdate, getUpdateState, installUpdate, subscribeUpdate } from '@/lib/updates';
 import { cn } from '@/lib/utils';
 
 import { LANGUAGE_LABELS, THEME_LABELS } from './labels';
@@ -38,17 +39,38 @@ const LINKS: readonly { href: string; labelKey: MessageKey; label: string }[] = 
 ];
 
 /**
- * Version, links and runtime facts. The update check stays disabled until the
- * updater ships with the release build (bza-058); showing an enabled button
- * that does nothing would be worse than saying so.
+ * Version, links, update control and runtime facts. The updater is checked
+ * once after launch; this section only mirrors that state and offers a manual
+ * check or install.
  */
 export function AboutSection() {
   const { t, language } = useI18n();
   const version = useAppVersion();
   const { preference } = useTheme();
   const { snapshot, bd } = useWorkspaceContext();
+  const update = useSyncExternalStore(subscribeUpdate, getUpdateState, getUpdateState);
   const [linkError, setLinkError] = useState<string | null>(null);
+  const [confirmingInstall, setConfirmingInstall] = useState(false);
   const entry = activeWorkspace(snapshot);
+
+  function updateMessage(): string {
+    switch (update.kind) {
+      case 'checking':
+        return t('settings.about.checking');
+      case 'current':
+        return t('settings.about.current');
+      case 'available':
+        return t('settings.about.updateAvailable', { version: update.version });
+      case 'installing':
+        return t('settings.about.installing', { version: update.version });
+      case 'installed':
+        return t('settings.about.installed');
+      case 'error':
+        return t('settings.about.updateFailed', { message: update.message });
+      case 'idle':
+        return t('settings.about.updatesHint');
+    }
+  }
 
   async function openLink(href: string): Promise<void> {
     setLinkError(null);
@@ -72,12 +94,48 @@ export function AboutSection() {
             {version === null ? null : ` · ${t('settings.about.version', { version })}`}
           </p>
         </div>
-        <Button size="md" variant="secondary" disabled title={t('settings.about.updatesLater')}>
-          <RefreshCw aria-hidden="true" className="size-3.5" />
-          {t('settings.about.checkUpdates')}
-        </Button>
+        {update.kind === 'available' && confirmingInstall ? (
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <p className="max-w-60 text-xs text-muted-foreground">
+              {t('settings.about.installConfirmHint')}
+            </p>
+            <Button size="md" variant="ghost" onClick={() => setConfirmingInstall(false)}>
+              {t('settings.about.cancel')}
+            </Button>
+            <Button
+              size="md"
+              variant="primary"
+              onClick={() => {
+                setConfirmingInstall(false);
+                void installUpdate();
+              }}
+            >
+              <RefreshCw aria-hidden="true" className="size-3.5" />
+              {t('settings.about.installConfirm', { version: update.version })}
+            </Button>
+          </div>
+        ) : update.kind === 'available' ? (
+          <Button size="md" variant="primary" onClick={() => setConfirmingInstall(true)}>
+            <RefreshCw aria-hidden="true" className="size-3.5" />
+            {t('settings.about.installUpdate', { version: update.version })}
+          </Button>
+        ) : (
+          <Button
+            size="md"
+            variant="secondary"
+            disabled={update.kind === 'checking' || update.kind === 'installing'}
+            onClick={() => void checkForUpdate()}
+          >
+            <RefreshCw aria-hidden="true" className="size-3.5" />
+            {update.kind === 'checking'
+              ? t('settings.about.checking')
+              : update.kind === 'installing'
+                ? t('settings.about.installing', { version: update.version })
+                : t('settings.about.checkUpdates')}
+          </Button>
+        )}
       </div>
-      <p className="text-xs text-muted-foreground">{t('settings.about.updatesLater')}</p>
+      <p className="text-xs text-muted-foreground">{updateMessage()}</p>
 
       <div className="space-y-2">
         <h3 className="text-sm font-semibold">{t('settings.about.links')}</h3>

@@ -3,6 +3,7 @@ name = "beadazzled"
 version = "0.1.0"
 description = "Windows desktop frontend for beads"
 authors = ["Steven Liang"]
+license = "MIT"
 edition = "2021"
 rust-version = "1.77.2"
 
@@ -21,3 +22,15 @@ ts-rs = { version = "10.1.0", features = ["no-serde-warnings"] }
 windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Security", "Win32_System_JobObjects", "Win32_System_Pipes", "Win32_System_Threading"] }
 tauri-plugin-opener = "2.5.5"
 tauri-plugin-dialog = "2.7.3"
+tauri-plugin-updater = "2"
+
+# Release artifacts ship inside an installer, so trade build time for size.
+# A panic is a bug: no path relies on unwinding (every command returns a
+# Result), so aborting is smaller and leaves an unambiguous crash instead of a
+# poisoned process.
+[profile.release]
+strip = true
+lto = true
+codegen-units = 1
+opt-level = "s"
+panic = "abort"

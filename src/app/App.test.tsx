@@ -1,5 +1,5 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { beforeEach, expect, test, vi } from 'vitest';
+import { beforeAll, beforeEach, expect, test, vi } from 'vitest';
 
 import type { BdStatus, Issue, SyncState, WorkspaceEntry, WorkspaceSnapshot } from '@/bindings/bd';
 import { setDraftGuard } from '@/lib/draft-guard';
@@ -115,6 +115,18 @@ function fakeSyncApi() {
     emit: (event: SyncEvent, payload: unknown) => handlers.get(event)?.(payload),
   };
 }
+
+beforeAll(async () => {
+  // The first render of a lazy route pays its chunk transform. Under a loaded
+  // worker that one-off cost can outlast the test's wait budget and read as a
+  // routing failure (bza-ryr.52), so load the chunks once per file. Each test
+  // then measures routing instead of module loading.
+  await Promise.all([
+    import('@/features/detail/DetailView'),
+    import('@/features/board/BoardView'),
+    import('@/features/settings/SettingsView'),
+  ]);
+});
 
 beforeEach(() => {
   window.location.hash = '';
@@ -1071,4 +1083,38 @@ test('a board move conflict is visible and triggers a baseline refresh', async (
     '1'
   );
   await waitFor(() => expect(vi.mocked(sync.api.refresh)).toHaveBeenCalled());
+});
+
+test('the startup update check waits ten seconds and runs once', async () => {
+  window.location.hash = '#/w/p1/list';
+  const sync = fakeSyncApi();
+  const check = vi.fn(async () => null);
+  vi.doMock('@tauri-apps/plugin-updater', () => ({ check }));
+  const setTimeoutSpy = vi.spyOn(window, 'setTimeout');
+
+  const view = render(
+    <App
+      workspaceApi={fakeApi({
+        snapshot: async () => snapshot([entry('p1', 'alpha')], '/repo/p1'),
+      })}
+      syncEnabled
+      syncApi={sync.api}
+    />
+  );
+  await waitFor(() => expect(sync.start).toHaveBeenCalledWith('/repo/p1'));
+
+  try {
+    const scheduled = setTimeoutSpy.mock.calls.find(([, delay]) => delay === 10_000);
+    expect(scheduled).toBeDefined();
+    expect(check).not.toHaveBeenCalled();
+
+    act(() => {
+      (scheduled as [() => void, number])[0]();
+    });
+    await waitFor(() => expect(check).toHaveBeenCalledTimes(1));
+  } finally {
+    setTimeoutSpy.mockRestore();
+    view.unmount();
+    vi.doUnmock('@tauri-apps/plugin-updater');
+  }
 });

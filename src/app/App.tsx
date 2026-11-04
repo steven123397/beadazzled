@@ -4,6 +4,7 @@ import { HashRouter, Navigate, Outlet, Route, Routes, useParams } from 'react-ro
 import type { BdStatus, Issue, SyncState } from '@/bindings/bd';
 import { ListRoute } from '@/features/list/ListView';
 import { workspaceApi as defaultWorkspaceApi, type WorkspaceApi } from '@/lib/workspace/api';
+import { checkForUpdate } from '@/lib/updates';
 import { useWorkspace } from '@/lib/workspace/useWorkspace';
 import { I18nProvider, useI18n } from '@/lib/i18n/I18nProvider';
 import type { Language } from '@/lib/i18n';
@@ -148,6 +149,19 @@ function AppFrame({
   const { t } = useI18n();
   const workspace = useWorkspace(workspaceApi);
   const { reload, snapshot, bd } = workspace;
+
+  // Check once, ten seconds after launch: the first screen and the baseline
+  // export must never compete with a network request. Only the real app does
+  // this; unit tests and the browser seam inject their own state.
+  useEffect(() => {
+    if (!syncEnabled) {
+      return undefined;
+    }
+    const timer = window.setTimeout(() => {
+      void checkForUpdate({ background: true });
+    }, 10_000);
+    return () => window.clearTimeout(timer);
+  }, [syncEnabled]);
   const preferencesApi = useMemo<PreferencesApi>(
     () => ({
       setPreferences: (language, theme) => workspaceApi.setPreferences(language, theme),
