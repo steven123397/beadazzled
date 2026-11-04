@@ -17,7 +17,7 @@
 附加：`keyboard.spec` 3、`keyboard-loop.spec` 1、`accessibility.spec` 5（axe 覆盖四屏与明暗）、
 `csp.spec` 2、`smoke.spec` 1、`perf-palette.spec` 1。
 
-截图（明/暗 × 四屏）：`assets/phase7/cp7/cp7-{light,dark}-{list,board,detail,settings}.png`。
+截图（明/暗 × 四屏）：`../assets/phase7/cp7/cp7-{light,dark}-{list,board,detail,settings}.png`。
 
 ## 2. 诊断信息可复制
 
