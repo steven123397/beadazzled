@@ -35,6 +35,27 @@ test('bd exit failures include a truncated stderr summary', () => {
   expect(described.message).not.toContain('x'.repeat(301));
 });
 
+test('bd errors reported on stdout are shown when stderr is empty', () => {
+  const described = describeError({
+    code: 'BD_EXIT_NONZERO',
+    message: 'bd exited with status 1',
+    detail: { bd_error: 'cannot resolve repo context: no .beads directory found', exit: 1 },
+  });
+
+  expect(described.message).toContain('cannot resolve repo context');
+});
+
+test('stderr wins over a stdout error when both are present', () => {
+  const described = describeError({
+    code: 'BD_EXIT_NONZERO',
+    message: 'bd exited with status 1',
+    detail: { stderr: 'from stderr', bd_error: 'from stdout' },
+  });
+
+  expect(described.message).toContain('from stderr');
+  expect(described.message).not.toContain('from stdout');
+});
+
 test('unknown codes fall back to the bridge message instead of an empty string', () => {
   const described = describeError(error('INTERNAL', 'something specific broke'));
 

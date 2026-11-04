@@ -271,6 +271,10 @@ fn main() {
             let newline_every = env_u64("FAKE_BD_NEWLINE_EVERY", 0) as usize;
             write_large(bytes, newline_every);
         }
+        "cwd" => {
+            let cwd = env::current_dir().expect("read cwd");
+            println!("{}", cwd.display());
+        }
         other => {
             eprintln!("fake_bd: unknown mode {other}");
             process::exit(2);

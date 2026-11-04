@@ -117,15 +117,31 @@ const STDERR_EXCERPT_LIMIT: usize = 2 * 1024;
 /// `BD_EXIT_NONZERO` with the exit code and a stderr excerpt. Unknown stderr
 /// is never interpreted as a more specific failure.
 pub fn map_exit(exit_code: i32, stderr: &str) -> BridgeError {
-    let excerpt = stderr_excerpt(stderr);
-    let lower = stderr.to_ascii_lowercase();
+    map_exit_with_output(exit_code, stderr, "")
+}
+
+/// Like [`map_exit`], but also reads the JSON error bd prints on stdout.
+///
+/// `bd context --json` reports an unusable workspace as
+/// `{"error": "cannot resolve repo context: ..."}` with an empty stderr, so
+/// classifying only stderr would surface a generic "bd rejected the change"
+/// instead of "this directory is not a beads workspace".
+pub fn map_exit_with_output(exit_code: i32, stderr: &str, stdout: &str) -> BridgeError {
+    let stdout_error = bd_stdout_error(stdout);
+    let report = if stderr.trim().is_empty() {
+        stdout_error.clone().unwrap_or_default()
+    } else {
+        stderr.to_owned()
+    };
+    let excerpt = stderr_excerpt(&report);
+    let lower = report.to_ascii_lowercase();
 
     if exit_code == 13 {
         return BridgeError::new(
             BridgeErrorCode::WriteConflict,
             "the issue changed while you were editing it; reload and try again",
         )
-        .with_detail(exit_detail(exit_code, &excerpt));
+        .with_detail(failure_detail(exit_code, stderr, &excerpt, &stdout_error));
     }
 
     if lower.contains("database is locked") || lower.contains("lock conflict") {
@@ -133,13 +149,13 @@ pub fn map_exit(exit_code: i32, stderr: &str) -> BridgeError {
             BridgeErrorCode::BdLocked,
             "beads is locked by another process; retry after it finishes",
         )
-        .with_detail(exit_detail(exit_code, &excerpt));
+        .with_detail(failure_detail(exit_code, stderr, &excerpt, &stdout_error));
     }
 
     if is_schema_mismatch(&lower) {
-        let mut detail = exit_detail(exit_code, &excerpt);
+        let mut detail = failure_detail(exit_code, stderr, &excerpt, &stdout_error);
         if let Some(hint) = matching_line(
-            stderr,
+            &report,
             &[
                 "pending schema migration",
                 "bd_allow_remote_migrate",
@@ -159,19 +175,54 @@ pub fn map_exit(exit_code: i32, stderr: &str) -> BridgeError {
     if lower.contains("not a beads workspace")
         || lower.contains("no beads database")
         || lower.contains("no beads project found")
+        || lower.contains("no .beads directory")
+        || lower.contains("cannot resolve repo context")
     {
         return BridgeError::new(
             BridgeErrorCode::WsNotBeads,
             "this directory is not a beads workspace",
         )
-        .with_detail(exit_detail(exit_code, &excerpt));
+        .with_detail(failure_detail(exit_code, stderr, &excerpt, &stdout_error));
     }
 
     BridgeError::new(
         BridgeErrorCode::BdExitNonzero,
         format!("bd exited with status {exit_code}"),
     )
-    .with_detail(exit_detail(exit_code, &excerpt))
+    .with_detail(failure_detail(exit_code, stderr, &excerpt, &stdout_error))
+}
+
+/// The `error` string from bd's JSON-on-stdout failure form, if this is one.
+fn bd_stdout_error(stdout: &str) -> Option<String> {
+    let value: Value = serde_json::from_str(stdout.trim()).ok()?;
+    value
+        .get("error")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|message| !message.is_empty())
+        .map(str::to_owned)
+}
+
+/// Detail fields for a failed call. `stderr` stays empty when the failure came
+/// from stdout, so the two sources never masquerade as one another.
+fn failure_detail(
+    exit_code: i32,
+    stderr: &str,
+    excerpt: &str,
+    stdout_error: &Option<String>,
+) -> Map<String, Value> {
+    let mut detail = exit_detail(
+        exit_code,
+        if stderr.trim().is_empty() {
+            ""
+        } else {
+            excerpt
+        },
+    );
+    if let Some(message) = stdout_error {
+        detail.insert("bd_error".to_owned(), Value::String(message.clone()));
+    }
+    detail
 }
 
 fn stderr_excerpt(stderr: &str) -> String {

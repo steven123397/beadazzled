@@ -1,6 +1,6 @@
 [package]
 name = "beadazzled"
-version = "0.1.0"
+version = "0.1.1"
 description = "Windows desktop frontend for beads"
 authors = ["Steven Liang"]
 license = "MIT"

@@ -88,3 +88,20 @@ npm run e2e:real -- --installer src-tauri/target/release/bundle/nsis/beadazzled_
   本地 `.sig` / `latest.json` 的签名与清单一致性，以及篡改检测。
 - 安装测试使用静默安装（`/S`）到 currentUser，未走交互式安装向导与
   SmartScreen 提示。
+## v0.1.1（2026-11-04）
+
+修复两个问题：bd 子进程没有把 cwd 设为工作区（从安装目录启动时 `bd context` 因
+“not a git repository” 失败）；bd 写在 stdout 的 JSON 错误没有被识别。
+
+| 检查 | 结果 |
+|---|---|
+| 版本三处一致 | PASS（0.1.1） |
+| `npm run build:app` | PASS（release） |
+| `npm run check:size` | PASS（2.15 MB / 15 MB） |
+| `npm run verify:release` | PASS（签名、版本、URL、SHA-256） |
+| 安装包 | 2,256,268 B，sha256 `0d74626b8fec9f0b9bc76509a70110f1fd5ef60a63f934210a353e2ca8b91b96` |
+| 签名 key id | `08170ebc532efce9` |
+| `e2e:real --exe`（cwd = 安装目录） | 启动 → 列表 → 详情 → 改状态持久化 PASS |
+| 添加工作区（cwd = 安装目录） | PASS |
+
+`e2e:real` 现在也把工作目录设为 exe 所在目录，否则会再次漏掉这条启动路径。
