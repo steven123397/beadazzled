@@ -31,7 +31,8 @@
   metadata, dependencies and comments are editable; status changes are written back
   through `bd`.
 - ⌨️ **Keyboard-first** — command palette, deep links to any view, no mouse required.
-- 🔄 **Signed updates** — minisign-verified, installed passively, checked once per launch.
+- 🔄 **Signed updates** — minisign-verified, checked once per launch, installed only
+  after you confirm; the installer restarts the app.
 - 🔒 **Local only** — talks to `bd` and nothing else: no Dolt access, no background
   service, no network requests beyond the update check.
 

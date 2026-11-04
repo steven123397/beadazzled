@@ -50,6 +50,7 @@ export function AboutSection() {
   const { snapshot, bd } = useWorkspaceContext();
   const update = useSyncExternalStore(subscribeUpdate, getUpdateState, getUpdateState);
   const [linkError, setLinkError] = useState<string | null>(null);
+  const [confirmingInstall, setConfirmingInstall] = useState(false);
   const entry = activeWorkspace(snapshot);
 
   function updateMessage(): string {
@@ -93,8 +94,28 @@ export function AboutSection() {
             {version === null ? null : ` · ${t('settings.about.version', { version })}`}
           </p>
         </div>
-        {update.kind === 'available' ? (
-          <Button size="md" variant="primary" onClick={() => void installUpdate()}>
+        {update.kind === 'available' && confirmingInstall ? (
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <p className="max-w-60 text-xs text-muted-foreground">
+              {t('settings.about.installConfirmHint')}
+            </p>
+            <Button size="md" variant="ghost" onClick={() => setConfirmingInstall(false)}>
+              {t('settings.about.cancel')}
+            </Button>
+            <Button
+              size="md"
+              variant="primary"
+              onClick={() => {
+                setConfirmingInstall(false);
+                void installUpdate();
+              }}
+            >
+              <RefreshCw aria-hidden="true" className="size-3.5" />
+              {t('settings.about.installConfirm', { version: update.version })}
+            </Button>
+          </div>
+        ) : update.kind === 'available' ? (
+          <Button size="md" variant="primary" onClick={() => setConfirmingInstall(true)}>
             <RefreshCw aria-hidden="true" className="size-3.5" />
             {t('settings.about.installUpdate', { version: update.version })}
           </Button>

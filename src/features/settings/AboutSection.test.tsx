@@ -113,7 +113,7 @@ test('the update check is enabled and reports the latest version', async () => {
   expect(await screen.findByText('You are on the latest version.')).toBeInTheDocument();
 });
 
-test('an available update turns the button into install and reports progress', async () => {
+test('installing an update asks first, then reports progress', async () => {
   getVersion.mockResolvedValue('0.1.0');
   const downloadAndInstall = vi.fn(async () => undefined);
   updater.check.mockResolvedValue({ version: '0.1.1', downloadAndInstall });
@@ -121,11 +121,31 @@ test('an available update turns the button into install and reports progress', a
 
   fireEvent.click(screen.getByRole('button', { name: 'Check for updates' }));
 
-  const install = await screen.findByRole('button', { name: 'Install 0.1.1' });
-  fireEvent.click(install);
+  fireEvent.click(await screen.findByRole('button', { name: 'Install 0.1.1' }));
+
+  expect(
+    screen.getByText('beadazzled will close and reopen to finish installing the update.')
+  ).toBeInTheDocument();
+  expect(downloadAndInstall).not.toHaveBeenCalled();
+
+  fireEvent.click(screen.getByRole('button', { name: 'Install 0.1.1 and restart' }));
 
   expect(await screen.findByText('Installed. The app will restart to finish.')).toBeInTheDocument();
   expect(downloadAndInstall).toHaveBeenCalledTimes(1);
+});
+
+test('cancelling the confirmation does not install the update', async () => {
+  getVersion.mockResolvedValue('0.1.0');
+  const downloadAndInstall = vi.fn(async () => undefined);
+  updater.check.mockResolvedValue({ version: '0.1.1', downloadAndInstall });
+  renderSection();
+
+  fireEvent.click(screen.getByRole('button', { name: 'Check for updates' }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Install 0.1.1' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+
+  expect(screen.getByRole('button', { name: 'Install 0.1.1' })).toBeInTheDocument();
+  expect(downloadAndInstall).not.toHaveBeenCalled();
 });
 
 test('a failed check shows the reason and leaves the button usable', async () => {
