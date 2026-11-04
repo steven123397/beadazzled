@@ -1,0 +1,99 @@
+beadazzled
+Copyright (c) 2026 Steven Liang
+
+This product is released under the MIT License; see LICENSE.
+
+This NOTICE records the third-party projects whose code, values or domain
+definitions were carried into this repository, as required by ADR-0001 and
+ADR-0002, and the license audit recorded for v0.1.0 (bza-d9q).
+
+## Adapted material
+
+### Bead Me Up, Scotty (MIT)
+Copyright (c) 2026 Brendan
+https://github.com/brendan-appstart/bead-me-up-scotty
+Version v0.4.0, commit cf6dda198db15a77399d1d9e77292618a7d08fa1
+
+Domain definitions and blocking semantics were adapted (not copied
+verbatim) in:
+
+- src/lib/status.ts: status set and display order
+- src/lib/dependencies.ts: blocking dependency types
+- src/lib/writes/guard.ts: blockingDeps and the status guard
+- src/lib/view/ready.ts: the Ready predicate
+
+Scotty itself documents these against the bd data model; the implementations
+here are rewritten for this codebase.
+
+### Circle (MIT)
+Copyright (c) 2025 lndev-ui | Circle Template
+https://github.com/ln-dev7/circle
+Commit b0ba7ddcc3d0f4c16092236ca6a01b56c0614810
+
+Visual and structural reference for the shell, list, detail, board and
+command palette. No source file was copied; a shared-code scan against the
+reference checkout found no matching block.
+
+### Cuelark UI, Linear theme (MIT)
+https://github.com/cuelark/ui
+https://ui.cuelark.com/themes/linear
+
+Starting values for the CSS custom properties in src/styles/tokens.css
+(--primary #5e6ad2, --foreground #282a30, --ring #7170ff, 8px radius,
+Inter at 510/590). The values were then adjusted for contrast and density.
+No component source is included.
+
+### shadcn/ui (MIT)
+https://github.com/shadcn-ui/ui
+
+The component layout and components.json follow shadcn/ui conventions. The
+primitives under src/components/ui were written for this project; no upstream
+component source is included.
+
+## Bundled dependencies
+
+Only permissive licenses are used. The full transitive set and exact version
+pins are in package-lock.json and src-tauri/Cargo.lock.
+
+Frontend:
+
+| Package | License |
+|---|---|
+| @dnd-kit/core | MIT |
+| @tanstack/react-virtual | MIT |
+| @tauri-apps/api | Apache-2.0 OR MIT |
+| @tauri-apps/plugin-dialog | MIT OR Apache-2.0 |
+| @tauri-apps/plugin-opener | MIT OR Apache-2.0 |
+| class-variance-authority | Apache-2.0 |
+| clsx | MIT |
+| cmdk | MIT |
+| lucide-react | ISC |
+| react, react-dom | MIT |
+| react-markdown | MIT |
+| react-router-dom | MIT |
+| rehype-sanitize | MIT |
+| remark-gfm | MIT |
+| tailwind-merge | MIT |
+
+Backend:
+
+| Crate | License |
+|---|---|
+| tauri, tauri-build | Apache-2.0 OR MIT |
+| tauri-plugin-dialog, tauri-plugin-opener | Apache-2.0 OR MIT |
+| serde, serde_json | MIT OR Apache-2.0 |
+| ts-rs | MIT |
+| windows-sys | MIT OR Apache-2.0 |
+
+## License audit
+
+Audited 2026-11-04 (bza-d9q). No AGPL, EPL, Elastic License or CC BY-NC
+licensed code is present:
+
+- npm: 369 installed packages, all with a declared license, none on the
+  banned list.
+- Cargo: 456 resolved crates, all with a declared license, none on the
+  banned list. `r-efi` is triple-licensed MIT OR Apache-2.0 OR
+  LGPL-2.1-or-later; this project takes the MIT option.
+- Source scan: scripts/check-boundaries.mjs is clean over the repository.
+  No next/*, nuqs or mock-data imports enter src/.
