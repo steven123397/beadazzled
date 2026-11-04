@@ -34,7 +34,7 @@
 | 产物 | 大小 | SHA-256 |
 |---|---:|---|
 | `src-tauri/target/release/beadazzled.exe` | 5,501,440 B（5.25 MB） | — |
-| `beadazzled_0.1.0_x64-setup.exe` | 2,255,321 B（2.15 MB） | `5a715ba0ec6322138e58ed0ef00bbbf00c8e6dff18bfb6f7008cd136fcfebccb` |
+| `beadazzled_0.1.0_x64-setup.exe` | 2,257,247 B（2.15 MB） | `bf8b7316d1be5ed5b6cb49d805a117740bd9f1e2e870df0971c0e0e8700c3b36` |
 | `beadazzled_0.1.0_x64-setup.exe.sig` | 440 B | — |
 | `latest.json` | 由 `npm run make:latest` 生成 | 同上 |
 
@@ -57,8 +57,8 @@
 ```
 verify-release: PASS
   version    0.1.0 (package.json, Cargo.toml, tauri.conf.json, latest.json)
-  artifact   beadazzled_0.1.0_x64-setup.exe (2,255,321 bytes)
-  sha256     5a715ba0ec6322138e58ed0ef00bbbf00c8e6dff18bfb6f7008cd136fcfebccb
+  artifact   beadazzled_0.1.0_x64-setup.exe (2,257,247 bytes)
+  sha256     bf8b7316d1be5ed5b6cb49d805a117740bd9f1e2e870df0971c0e0e8700c3b36
   signature  OK (key id 08170ebc532efce9)
   manifest   windows-x86_64 -> https://github.com/steven123397/beadazzled/releases/download/v0.1.0/beadazzled_0.1.0_x64-setup.exe
 ```

@@ -66,7 +66,7 @@ bridge 测试**禁止真的 spawn `bd`**：单次调用 1.0–1.4s，几十个�
 | 指标 | 今日值 | 备注 |
 |---|---|---|
 | secrets | 0 | 2026-10-31 实测，gitleaks 8.30.1，2 commits / 29.34 KB / 395ms |
-| 安装包体积 | NSIS x64 2.15 MB（2,255,321 B）；release exe 5.25 MB | 2026-11-04 `build:app`；strip/LTO/opt-s；`check:size` PASS；NOTICE/LICENSE 随包 |
+| 安装包体积 | NSIS x64 2.15 MB（2,257,247 B）；release exe 5.25 MB | 2026-11-04 `build:app`；strip/LTO/opt-s；`check:size` PASS；NOTICE/LICENSE 随包 |
 | 冷启动 | P95 908ms（n=20，P50 648ms） | 2026-11-04 实测，release 5.25MB；页面加载完成标记；预算 2000ms |
 | 热启动 | P95 725–807ms（三轮 n=20，P50 620–638ms） | 2026-11-04 修复测量节奏后；原 873–990ms 的尾部尖峰消失，见 [记录](docs/measurements/2026-11-01-startup.md) |
 | 内存 | 1000 条 467 MB；1 条基线 452 MB；增量 +15 MB | 2026-11-04，ADR-0011；预算 600 MB / 基线 +50 MB。见 [记录](docs/measurements/2026-11-04-memory.md) |
