@@ -1,7 +1,7 @@
 # Board 验收矩阵（2026-11-02）
 
 状态：验收记录，回答 `bza-z2l` 的「15 条验收对应测试通过」。对应
-[SPEC-board](../spec/SPEC-board.md) 的 Acceptance Criteria。
+[SPEC-board](../../spec/SPEC-board.md) 的 Acceptance Criteria。
 
 命令：`npm run test:unit -- src/features/board`、`npm run e2e -- board`、
 `npm run measure:scroll -- --view=board`。
