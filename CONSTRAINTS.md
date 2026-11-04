@@ -66,14 +66,14 @@ bridge 测试**禁止真的 spawn `bd`**：单次调用 1.0–1.4s，几十个�
 | 指标 | 今日值 | 备注 |
 |---|---|---|
 | secrets | 0 | 2026-10-31 实测，gitleaks 8.30.1，2 commits / 29.34 KB / 395ms |
-| 安装包体积 | NSIS x64 2.15 MB（2,254,990 B）；release exe 5.25 MB | 2026-11-04 `build:app`；strip/LTO/opt-s；`check:size` PASS；NOTICE/LICENSE 随包 |
+| 安装包体积 | NSIS x64 2.15 MB（2,255,321 B）；release exe 5.25 MB | 2026-11-04 `build:app`；strip/LTO/opt-s；`check:size` PASS；NOTICE/LICENSE 随包 |
 | 冷启动 | P95 908ms（n=20，P50 648ms） | 2026-11-04 实测，release 5.25MB；页面加载完成标记；预算 2000ms |
 | 热启动 | P95 725–807ms（三轮 n=20，P50 620–638ms） | 2026-11-04 修复测量节奏后；原 873–990ms 的尾部尖峰消失，见 [记录](docs/measurements/2026-11-01-startup.md) |
 | 内存 | 1000 条 467 MB；1 条基线 452 MB；增量 +15 MB | 2026-11-04，ADR-0011；预算 600 MB / 基线 +50 MB。见 [记录](docs/measurements/2026-11-04-memory.md) |
 | 详情切换 | 打开 P95 32.7ms；64 KiB 首渲染 P50 102.4ms | 2026-11-04，预算 50ms / 100ms；64 KiB 略超属已记录噪声 |
 | 滚动 | List 与 Board 全部场景 PASS | 2026-11-04，p50 <18 / p95 <22 / max <50；见 `2026-11-03-scroll-budget-alignment.md` |
 | bridge 行覆盖率 | 91.2%（1226/1345 行，6 个 bridge 文件） | 2026-11-01 实测；阈值 80% 由 `check:task` 执行 |
-| 依赖漏洞 | 0 高危（2 medium；2 unknown 已登记 allowlist） | 2026-11-01 实测，osv-scanner 2.7.0，npm 285 包 + crates 407 包 |
+| 依赖漏洞 | 0 高危（2 medium；5 unknown 已登记 allowlist，均为仅 Linux 编译路径） | 2026-11-04 实测，osv-scanner 2.7.0，npm + Cargo 锁文件 |
 | 对比度、键盘可达 | axe 0 serious/critical；键盘闭环 E2E 通过 | 2026-11-01 实测；见 `tests/e2e/accessibility.spec.ts`、`keyboard-loop.spec.ts`；axe 尚未接 CI |
 
 ## Exceptions

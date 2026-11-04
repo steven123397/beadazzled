@@ -1084,3 +1084,37 @@ test('a board move conflict is visible and triggers a baseline refresh', async (
   );
   await waitFor(() => expect(vi.mocked(sync.api.refresh)).toHaveBeenCalled());
 });
+
+test('the startup update check waits ten seconds and runs once', async () => {
+  window.location.hash = '#/w/p1/list';
+  const sync = fakeSyncApi();
+  const check = vi.fn(async () => null);
+  vi.doMock('@tauri-apps/plugin-updater', () => ({ check }));
+  const setTimeoutSpy = vi.spyOn(window, 'setTimeout');
+
+  const view = render(
+    <App
+      workspaceApi={fakeApi({
+        snapshot: async () => snapshot([entry('p1', 'alpha')], '/repo/p1'),
+      })}
+      syncEnabled
+      syncApi={sync.api}
+    />
+  );
+  await waitFor(() => expect(sync.start).toHaveBeenCalledWith('/repo/p1'));
+
+  try {
+    const scheduled = setTimeoutSpy.mock.calls.find(([, delay]) => delay === 10_000);
+    expect(scheduled).toBeDefined();
+    expect(check).not.toHaveBeenCalled();
+
+    act(() => {
+      (scheduled as [() => void, number])[0]();
+    });
+    await waitFor(() => expect(check).toHaveBeenCalledTimes(1));
+  } finally {
+    setTimeoutSpy.mockRestore();
+    view.unmount();
+    vi.doUnmock('@tauri-apps/plugin-updater');
+  }
+});

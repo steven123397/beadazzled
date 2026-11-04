@@ -88,7 +88,8 @@ CONSTRAINTS 中的以下检查在发布前必须跑过并留证据：
 
 - 安装包体积 ≤15 MB
 - 冷启动 ≤2.0s（P95）、热启动 ≤800ms
-- 常驻内存 ≤150 MB（1000 条票）
+- 常驻内存 ≤600 MB 且 ≤1 条基线 +50 MB（1000 条票；原 150 MB 预算已由
+  [ADR-0011](../adr/0011-memory-budget.md) 重设）
 - 详情切换 ≤50ms、列表滚动 60fps
 - 3 条真实 E2E 全绿
 - 依赖高危漏洞 0、secrets 0
@@ -113,7 +114,7 @@ CONSTRAINTS 中的以下检查在发布前必须跑过并留证据：
 - `npm run build:app` — 构建 NSIS 安装包
 - `npm run check:size` — 体积预算
 - `npm run verify:release` — 本地产物与清单校验
-- `npm run e2e -- --real` — 3 条真实 E2E
+- `npm run e2e:real -- --installer <exe>` — 真实安装 → 列表 → 详情 → 改状态 → 卸载
 - `npm run measure:startup|memory|navigation|scroll`
 - `gitleaks detect --source . --redact --no-banner`
 
@@ -123,10 +124,13 @@ CONSTRAINTS 中的以下检查在发布前必须跑过并留证据：
 src-tauri/tauri.conf.json        bundle / updater / 图标
 src-tauri/capabilities/          最小权限（updater、opener、dialog 等）
 scripts/check-size.mjs           安装包体积
+scripts/check-versions.mjs       版本三处一致
 scripts/verify-release.mjs       签名、清单、哈希校验
+scripts/make-latest-json.mjs     生成更新清单
+scripts/e2e-real.mjs             真实安装 → 列表 → 详情 → 改状态 → 卸载
 scripts/measure-*.mjs            启动/内存/导航/滚动
 docs/releases/                   版本发布记录
-.github/workflows/checks.yml     typecheck / lint / tests / gitleaks / osv
+.github/workflows/ci.yml         typecheck / lint / tests / gitleaks / osv / e2e
 ```
 
 ## Module Code Style

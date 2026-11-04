@@ -65,6 +65,7 @@
       "endpoints": [
         "https://github.com/steven123397/beadazzled/releases/latest/download/latest.json"
       ],
+      "requireSignedVersion": true,
       "windows": {
         "installMode": "passive"
       }

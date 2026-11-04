@@ -10,10 +10,12 @@
  *   2. read the issue body
  *   3. change the status and confirm bd persisted it
  *
- * The NSIS installer itself is not executed here; installing and uninstalling
- * stay manual evidence steps in docs/releases, and that is stated there.
+ * The launch checks run against the release executable. With `--installer
+ * <exe>` the script first installs the NSIS package silently, runs the three
+ * checks on the installed binary, and uninstalls at the end; the interactive
+ * wizard and the SmartScreen prompt remain manual evidence steps.
  *
- * Usage: npm run e2e:real -- [--exe <path>] [--port=1435] [--keep]
+ * Usage: npm run e2e:real -- [--exe <path>] [--installer <path>] [--port=1435] [--keep]
  */
 import { spawnSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
@@ -116,13 +118,17 @@ async function installApp(installer) {
 async function uninstallApp(dir) {
   const uninstaller = path.join(dir, 'uninstall.exe');
   if (!existsSync(uninstaller)) {
-    return;
+    throw new Error(`no uninstaller at ${uninstaller}`);
   }
   spawnSync(uninstaller, ['/S'], { stdio: 'ignore', windowsHide: true, timeout: 120_000 });
   // NSIS copies the uninstaller to temp and returns immediately.
+  const exe = path.join(dir, 'beadazzled.exe');
   const deadline = Date.now() + 60_000;
-  while (Date.now() < deadline && existsSync(path.join(dir, 'beadazzled.exe'))) {
+  while (Date.now() < deadline && existsSync(exe)) {
     await sleep(200);
+  }
+  if (existsSync(exe)) {
+    throw new Error('uninstall did not remove the installed executable within 60s');
   }
 }
 

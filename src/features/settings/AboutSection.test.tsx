@@ -22,12 +22,16 @@ vi.mock('@/lib/links', () => ({
   openExternal: vi.fn(async () => undefined),
 }));
 
+const updater = vi.hoisted(() => ({ check: vi.fn() }));
+
 vi.mock('@tauri-apps/plugin-updater', () => ({
-  check: vi.fn(async () => null),
+  check: updater.check,
 }));
 
 beforeEach(() => {
   resetUpdates();
+  updater.check.mockReset();
+  updater.check.mockResolvedValue(null);
 });
 
 const TS = '2026-11-01T00:00:00Z';
@@ -107,6 +111,32 @@ test('the update check is enabled and reports the latest version', async () => {
   fireEvent.click(button);
 
   expect(await screen.findByText('You are on the latest version.')).toBeInTheDocument();
+});
+
+test('an available update turns the button into install and reports progress', async () => {
+  getVersion.mockResolvedValue('0.1.0');
+  const downloadAndInstall = vi.fn(async () => undefined);
+  updater.check.mockResolvedValue({ version: '0.1.1', downloadAndInstall });
+  renderSection();
+
+  fireEvent.click(screen.getByRole('button', { name: 'Check for updates' }));
+
+  const install = await screen.findByRole('button', { name: 'Install 0.1.1' });
+  fireEvent.click(install);
+
+  expect(await screen.findByText('Installed. The app will restart to finish.')).toBeInTheDocument();
+  expect(downloadAndInstall).toHaveBeenCalledTimes(1);
+});
+
+test('a failed check shows the reason and leaves the button usable', async () => {
+  getVersion.mockResolvedValue('0.1.0');
+  updater.check.mockRejectedValue(new Error('network unreachable'));
+  renderSection();
+
+  fireEvent.click(screen.getByRole('button', { name: 'Check for updates' }));
+
+  expect(await screen.findByText('Update check failed: network unreachable')).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Check for updates' })).toBeEnabled();
 });
 
 test('a webview without the app plugin omits the version', async () => {

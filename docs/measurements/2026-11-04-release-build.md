@@ -15,6 +15,9 @@
 
 - `bundle.targets = ["nsis"]`，`bundle.windows.nsis.installMode = "currentUser"`。
 - `bundle.createUpdaterArtifacts = true`，构建产出安装包 `.sig`。
+- `plugins.updater.requireSignedVersion = true`：清单来自网络且自身未签名，
+  开启后安装包签名注释里的版本必须与清单一致，堵住「有效旧包 + 虚高版本号」的
+  降级路径。当前 CLI 签出的 `.sig` 已带 `version:`，不影响升级。
 - `bundle.resources` 把仓库根的 `NOTICE` 与 `LICENSE` 放进安装目录；
   NSIS 卸载脚本同时删除两者。
 - `[profile.release]`：`strip = true`、`lto = true`、`codegen-units = 1`、
@@ -31,7 +34,7 @@
 | 产物 | 大小 | SHA-256 |
 |---|---:|---|
 | `src-tauri/target/release/beadazzled.exe` | 5,501,440 B（5.25 MB） | — |
-| `beadazzled_0.1.0_x64-setup.exe` | 2,254,990 B（2.15 MB） | `bce157443d96fe1ba2ff77c9d86cd75bb040975faffc7cac82c6443a3a2e3f22` |
+| `beadazzled_0.1.0_x64-setup.exe` | 2,255,321 B（2.15 MB） | `5a715ba0ec6322138e58ed0ef00bbbf00c8e6dff18bfb6f7008cd136fcfebccb` |
 | `beadazzled_0.1.0_x64-setup.exe.sig` | 440 B | — |
 | `latest.json` | 由 `npm run make:latest` 生成 | 同上 |
 
@@ -54,8 +57,8 @@
 ```
 verify-release: PASS
   version    0.1.0 (package.json, Cargo.toml, tauri.conf.json, latest.json)
-  artifact   beadazzled_0.1.0_x64-setup.exe (2,254,990 bytes)
-  sha256     bce157443d96fe1ba2ff77c9d86cd75bb040975faffc7cac82c6443a3a2e3f22
+  artifact   beadazzled_0.1.0_x64-setup.exe (2,255,321 bytes)
+  sha256     5a715ba0ec6322138e58ed0ef00bbbf00c8e6dff18bfb6f7008cd136fcfebccb
   signature  OK (key id 08170ebc532efce9)
   manifest   windows-x86_64 -> https://github.com/steven123397/beadazzled/releases/download/v0.1.0/beadazzled_0.1.0_x64-setup.exe
 ```

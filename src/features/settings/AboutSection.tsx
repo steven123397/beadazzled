@@ -106,9 +106,11 @@ export function AboutSection() {
             onClick={() => void checkForUpdate()}
           >
             <RefreshCw aria-hidden="true" className="size-3.5" />
-            {update.kind === 'checking' || update.kind === 'installing'
+            {update.kind === 'checking'
               ? t('settings.about.checking')
-              : t('settings.about.checkUpdates')}
+              : update.kind === 'installing'
+                ? t('settings.about.installing', { version: update.version })
+                : t('settings.about.checkUpdates')}
           </Button>
         )}
       </div>

@@ -62,6 +62,7 @@ function writeFixture(root, overrides = {}) {
         'windows-x86_64': {
           signature,
           url: `https://github.com/steven123397/beadazzled/releases/download/v${manifestVersion}/${installerName}`,
+          ...(overrides.entrySha256 === undefined ? {} : { sha256: overrides.entrySha256 }),
         },
       },
     })
@@ -96,6 +97,22 @@ test('a matching artifact, manifest and signature pass', () => {
   assert.equal(summary.version, '0.1.0');
   assert.equal(summary.signature.verified, true);
   assert.equal(summary.sha256.length, 64);
+});
+
+test('the platform sha256 in latest.json is checked against the installer', () => {
+  const good = createHash('sha256').update(Buffer.from('installer bytes')).digest('hex');
+  const root = makeRoot();
+  const { installer } = writeFixture(root, { entrySha256: good });
+
+  const ok = run(root, installer);
+  assert.equal(ok.status, 0, ok.stdout + ok.stderr);
+
+  const badRoot = makeRoot();
+  const bad = writeFixture(badRoot, { entrySha256: 'f'.repeat(64) });
+  const result = run(badRoot, bad.installer);
+
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /platforms\.windows-x86_64 sha256 does not match the installer/);
 });
 
 test('tampered installer bytes fail the signature check', () => {

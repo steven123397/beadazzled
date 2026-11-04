@@ -23,6 +23,10 @@ let state: UpdateState = { kind: 'idle' };
 let lastError: UpdateError | null = null;
 let pending: Update | null = null;
 let inFlight: Promise<UpdateState> | null = null;
+// A manual click can land while the delayed background check is still running.
+// The shared request then has to report its "no update" result, which a purely
+// background check deliberately keeps quiet.
+let manualRequested = false;
 const listeners = new Set<() => void>();
 
 function setState(next: UpdateState): void {
@@ -53,6 +57,7 @@ export function resetUpdates(): void {
   lastError = null;
   pending = null;
   inFlight = null;
+  manualRequested = false;
 }
 
 /**
@@ -62,6 +67,10 @@ export function resetUpdates(): void {
  */
 export async function checkForUpdate({ background = false } = {}): Promise<UpdateState> {
   if (inFlight !== null) {
+    if (!background) {
+      manualRequested = true;
+      setState({ kind: 'checking' });
+    }
     return inFlight;
   }
   if (!background) {
@@ -77,7 +86,7 @@ export async function checkForUpdate({ background = false } = {}): Promise<Updat
       lastError = null;
       if (update === null) {
         pending = null;
-        if (!background) {
+        if (!background || manualRequested) {
           setState({ kind: 'current', checkedAt });
         }
       } else {
@@ -93,6 +102,7 @@ export async function checkForUpdate({ background = false } = {}): Promise<Updat
       setState({ kind: 'error', message, checkedAt: at });
     } finally {
       inFlight = null;
+      manualRequested = false;
     }
     return state;
   })();
@@ -111,6 +121,8 @@ export async function installUpdate(): Promise<UpdateState> {
   setState({ kind: 'installing', version: update.version });
   try {
     await update.downloadAndInstall();
+    // On Windows the installer is started and the process exits before this
+    // resolves, so `installed` is reachable only in tests and on other hosts.
     setState({ kind: 'installed' });
   } catch (error) {
     const message = messageOf(error);

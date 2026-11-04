@@ -181,8 +181,15 @@ try {
     if (options.sha256 !== null && options.sha256 !== sha256) {
       errors.push(`SHA-256 is ${sha256}, expected ${options.sha256}`);
     }
-    if (typeof manifest.sha256 === 'string' && manifest.sha256.toLowerCase() !== sha256) {
-      errors.push('latest.json sha256 does not match the installer');
+    // make-latest-json records the hash per platform; older manifests may carry
+    // it at the top level. Either one must match when present.
+    for (const [where, recorded] of [
+      ['latest.json', manifest.sha256],
+      [`latest.json platforms.${PLATFORM}`, entry?.sha256],
+    ]) {
+      if (typeof recorded === 'string' && recorded.toLowerCase() !== sha256) {
+        errors.push(`${where} sha256 does not match the installer`);
+      }
     }
 
     const summary = {
