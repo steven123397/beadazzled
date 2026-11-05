@@ -11,6 +11,7 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
 
+use crate::util::lock;
 use crate::workspace::registry::{save_atomic, AppConfig};
 
 /// The registry write budget from `SPEC-workspace`.
@@ -167,12 +168,6 @@ impl ConfigWriter {
         }
         result
     }
-}
-
-fn lock<T>(mutex: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
-    mutex
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner())
 }
 
 #[cfg(test)]

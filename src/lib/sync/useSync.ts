@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 
-import type { BridgeError, Issue, JournalRecord, SyncState } from '@/bindings/bd';
+import type { Issue, JournalRecord, SyncState } from '@/bindings/bd';
+import { internalError, isBridgeError } from '@/lib/errors';
 
 import { syncApi, type SyncApi, type SyncSnapshot } from './api';
 import { createTicketStore, type TicketStore } from './store';
@@ -146,20 +147,6 @@ function unavailable(error: unknown): SyncState {
   }
   return {
     kind: 'bd-unavailable',
-    error: {
-      code: 'INTERNAL',
-      message: error instanceof Error ? error.message : String(error),
-    },
+    error: internalError(error),
   };
-}
-
-function isBridgeError(value: unknown): value is BridgeError {
-  return (
-    typeof value === 'object' &&
-    value !== null &&
-    'code' in value &&
-    'message' in value &&
-    typeof (value as { code: unknown }).code === 'string' &&
-    typeof (value as { message: unknown }).message === 'string'
-  );
 }

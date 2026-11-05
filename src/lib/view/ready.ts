@@ -1,6 +1,6 @@
 import type { Issue } from '@/bindings/bd';
 
-import { isBlockingDependency } from '@/lib/dependencies';
+import * as guard from '@/lib/writes/guard';
 
 /** Resolves a dependency target; a missing id means "not in the store". */
 export type IssueLookup = (id: string) => Issue | undefined;
@@ -11,21 +11,9 @@ export type IssueLookup = (id: string) => Issue | undefined;
  * than silently ready.
  */
 export function blockingDeps(issue: Issue, lookup: IssueLookup): string[] {
-  const blockers: string[] = [];
-  for (const dependency of issue.dependencies ?? []) {
-    if (!isBlockingDependency(dependency.type)) {
-      continue;
-    }
-    if (lookup(dependency.depends_on_id)?.status === 'closed') {
-      continue;
-    }
-    // Two edges of different types can point at the same ticket; it is still
-    // one blocker, matching `lib/writes/guard.blockingDeps`.
-    if (!blockers.includes(dependency.depends_on_id)) {
-      blockers.push(dependency.depends_on_id);
-    }
-  }
-  return blockers;
+  // Two edges of different types can point at the same ticket; it is still
+  // one blocker, matching `lib/writes/guard.blockingDeps`.
+  return guard.blockingDeps(issue.dependencies, (id) => lookup(id)?.status);
 }
 
 /** Ready means the issue is open and nothing blocking remains. */

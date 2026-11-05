@@ -26,6 +26,7 @@ use windows_sys::Win32::System::JobObjects::{
 use windows_sys::Win32::System::Pipes::PeekNamedPipe;
 
 use crate::bridge::{BridgeError, BridgeErrorCode};
+use crate::util::lock;
 
 /// Timeouts from SPEC-bridge §进程规则.
 pub const VERSION_TIMEOUT: Duration = Duration::from_secs(5);
@@ -149,10 +150,7 @@ type WorkspaceLocks = Mutex<HashMap<PathBuf, Arc<Mutex<()>>>>;
 
 fn workspace_lock(workspace: &Path) -> Arc<Mutex<()>> {
     static LOCKS: OnceLock<WorkspaceLocks> = OnceLock::new();
-    LOCKS
-        .get_or_init(|| Mutex::new(HashMap::new()))
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner())
+    lock(LOCKS.get_or_init(|| Mutex::new(HashMap::new())))
         .entry(normalize_workspace(workspace))
         .or_insert_with(|| Arc::new(Mutex::new(())))
         .clone()
@@ -204,8 +202,8 @@ impl ProcessRunner {
     pub fn run(&self, request: &ProcessRequest) -> Result<ProcessOutput, BridgeError> {
         let (result, started) = match &request.workspace {
             Some(workspace) => {
-                let lock = workspace_lock(workspace);
-                let _guard = lock.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+                let workspace_mutex = workspace_lock(workspace);
+                let _guard = lock(&workspace_mutex);
                 let started = Instant::now();
                 (self.run_locked(request, started), started)
             }
@@ -238,8 +236,8 @@ impl ProcessRunner {
         // `run`, so it cannot overlap a write on that workspace.
         let (result, started) = match &request.workspace {
             Some(workspace) => {
-                let lock = workspace_lock(workspace);
-                let _guard = lock.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+                let workspace_mutex = workspace_lock(workspace);
+                let _guard = lock(&workspace_mutex);
                 let started = Instant::now();
                 (self.run_scan_locked(request, bounds, started), started)
             }
@@ -332,12 +330,7 @@ impl ProcessRunner {
 
     /// Most recent calls, oldest first.
     pub fn recent_calls(&self) -> Vec<CallRecord> {
-        self.calls
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner())
-            .iter()
-            .cloned()
-            .collect()
+        lock(&self.calls).iter().cloned().collect()
     }
 
     fn run_locked(
@@ -450,9 +443,7 @@ fn drain_follow_stderr(mut stderr: ChildStderr, buffer: Arc<Mutex<Vec<u8>>>) {
         match stderr.read(&mut chunk) {
             Ok(0) | Err(_) => break,
             Ok(read) => {
-                let mut captured = buffer
-                    .lock()
-                    .unwrap_or_else(|poisoned| poisoned.into_inner());
+                let mut captured = lock(&buffer);
                 let remaining = FOLLOW_STDERR_LIMIT.saturating_sub(captured.len());
                 if remaining > 0 {
                     let take = remaining.min(read);
@@ -499,10 +490,7 @@ impl FollowProcess {
     /// The first 2 KiB of follow stderr, drained internally so the child can
     /// never block on a full stderr pipe.
     pub fn stderr_snapshot(&self) -> Vec<u8> {
-        self.stderr
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner())
-            .clone()
+        lock(&self.stderr).clone()
     }
 
     pub fn stderr_lossy(&self) -> String {
@@ -1014,7 +1002,7 @@ fn truncate_chars(text: &str, limit: usize) -> String {
 }
 
 fn push_record(log: &CallLog, record: CallRecord) {
-    let mut calls = log.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+    let mut calls = lock(log);
     if calls.len() >= CALL_LOG_CAPACITY {
         calls.pop_front();
     }

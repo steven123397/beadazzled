@@ -8,16 +8,16 @@
 
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Mutex, MutexGuard};
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::sync::Mutex;
 
 use serde::{Deserialize, Serialize};
-use serde_json::{Map, Value};
 use ts_rs::TS;
 
 use super::config_writer::ConfigWriter;
+use super::{bd_status_error, not_registered, ws_inaccessible};
 use crate::bridge::{BdBridge, BridgeError, BridgeErrorCode, WriteCommand, WriteOutcome};
-use crate::workspace::discovery::{BdDiscovery, BdStatus, MIN_BD_VERSION};
+use crate::util::{lock, unix_secs_now};
+use crate::workspace::discovery::{BdDiscovery, BdStatus};
 use crate::workspace::registry::{
     load, AddOutcome, AppConfig, Checkpoint, Language, Theme, WorkspaceEntry,
 };
@@ -316,65 +316,16 @@ impl WorkspaceService {
         self.writer.flush()
     }
 
-    fn ready_bd_path(&self) -> Result<String, BridgeError> {
+    pub(crate) fn ready_bd_path(&self) -> Result<String, BridgeError> {
         match self.bd_status(false) {
             BdStatus::Ready { path, .. } => Ok(path),
-            BdStatus::Unsupported { found, min, .. } => {
-                let mut detail = Map::new();
-                detail.insert("found".to_owned(), Value::String(found.clone()));
-                detail.insert("min".to_owned(), Value::String(min.clone()));
-                Err(BridgeError::new(
-                    BridgeErrorCode::BdVersionUnsupported,
-                    format!("bd {found} is older than the required {min}"),
-                )
-                .with_detail(detail))
-            }
-            BdStatus::Broken { error, .. } => Err(error),
-            BdStatus::NotFound { searched } => {
-                let mut detail = Map::new();
-                detail.insert(
-                    "searched".to_owned(),
-                    Value::Array(searched.into_iter().map(Value::String).collect()),
-                );
-                Err(BridgeError::new(
-                    BridgeErrorCode::BdNotFound,
-                    format!("bd was not found; install it or set its path in Settings (requires {MIN_BD_VERSION})"),
-                )
-                .with_detail(detail))
-            }
+            status => Err(bd_status_error(&status)),
         }
     }
 }
 
-fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
-    mutex
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner())
-}
-
-fn ws_inaccessible(path: &str) -> BridgeError {
-    let mut detail = Map::new();
-    detail.insert("path".to_owned(), Value::String(path.to_owned()));
-    BridgeError::new(
-        BridgeErrorCode::WsInaccessible,
-        format!("the workspace directory is missing: {path}"),
-    )
-    .with_detail(detail)
-}
-
-fn not_registered(path: &str) -> BridgeError {
-    BridgeError::new(
-        BridgeErrorCode::Internal,
-        format!("workspace is not registered: {path}"),
-    )
-}
-
 fn now_iso() -> String {
-    let seconds = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|duration| duration.as_secs())
-        .unwrap_or(0);
-    format_utc(seconds)
+    format_utc(unix_secs_now())
 }
 
 fn format_utc(seconds: u64) -> String {

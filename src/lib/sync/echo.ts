@@ -11,8 +11,6 @@ export type EchoWaiter = (
 ) => Promise<EchoOutcome>;
 
 /**
- * Builds `sync.waitForEcho` for the writes flow.
- *
  * The write path does not update the store optimistically; it waits until a
  * journal record for the issue lands past `afterSeq`. A disabled journal is
  * reported immediately so the caller can refresh instead of waiting 3s.

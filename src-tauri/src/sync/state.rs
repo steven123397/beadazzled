@@ -49,20 +49,6 @@ pub enum SyncState {
     },
 }
 
-impl SyncState {
-    /// The wire discriminant, for exhaustive matches in the UI layer.
-    pub fn kind(&self) -> &'static str {
-        match self {
-            Self::Loading { .. } => "loading",
-            Self::Healthy { .. } => "healthy",
-            Self::JournalDisabled => "journal-disabled",
-            Self::JournalTruncated { .. } => "journal-truncated",
-            Self::Restarting { .. } => "restarting",
-            Self::BdUnavailable { .. } => "bd-unavailable",
-        }
-    }
-}
-
 /// Receives everything the engine produces: a snapshot, journal records and
 /// every state transition. Implementations forward to Tauri events and the
 /// ticket store.
@@ -184,42 +170,6 @@ mod tests {
         assert_eq!(
             serde_json::to_value(&state).expect("state serialises"),
             json!({ "kind": "healthy", "lastSeq": 0, "lastEventAt": null })
-        );
-    }
-
-    #[test]
-    fn kind_matches_the_serialised_discriminant() {
-        assert_eq!(
-            SyncState::Loading {
-                step: LoadingStep::Journal
-            }
-            .kind(),
-            "loading"
-        );
-        assert_eq!(SyncState::JournalDisabled.kind(), "journal-disabled");
-        assert_eq!(
-            SyncState::JournalTruncated {
-                floor: 1,
-                recovered: false
-            }
-            .kind(),
-            "journal-truncated"
-        );
-        assert_eq!(SyncState::Restarting { attempt: 1 }.kind(), "restarting");
-        assert_eq!(
-            SyncState::BdUnavailable {
-                error: unavailable()
-            }
-            .kind(),
-            "bd-unavailable"
-        );
-        assert_eq!(
-            SyncState::Healthy {
-                last_seq: 0,
-                last_event_at: None
-            }
-            .kind(),
-            "healthy"
         );
     }
 }

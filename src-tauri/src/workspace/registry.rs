@@ -9,13 +9,13 @@ use std::fs;
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use ts_rs::TS;
 
 use crate::bridge::WorkspaceContext;
+use crate::util::unix_secs_now;
 
 /// Bumped only when the on-disk shape changes incompatibly.
 pub const SCHEMA_VERSION: u32 = 1;
@@ -396,10 +396,7 @@ fn file_stem(path: &Path) -> &str {
 fn corrupt_backup_path(config_path: &Path) -> PathBuf {
     let directory = parent_dir(config_path);
     let stem = file_stem(config_path);
-    let seconds = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|duration| duration.as_secs())
-        .unwrap_or(0);
+    let seconds = unix_secs_now();
 
     let mut candidate = directory.join(format!("{stem}.corrupt-{seconds}.json"));
     let mut suffix = 1;

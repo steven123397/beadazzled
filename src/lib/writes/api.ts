@@ -1,6 +1,7 @@
 import { invoke } from '@tauri-apps/api/core';
 
-import type { BridgeError, WriteCommand, WriteOutcome as RustWriteOutcome } from '@/bindings/bd';
+import type { WriteCommand, WriteOutcome as RustWriteOutcome } from '@/bindings/bd';
+import { isBridgeError } from '@/lib/errors';
 import type { Invoke } from '@/lib/invoke';
 
 import type { WriteOutcome } from './queue';
@@ -24,16 +25,6 @@ export function createWritesApi(call: Invoke): WritesApi {
       }
     },
   };
-}
-
-function isBridgeError(value: unknown): value is BridgeError {
-  return (
-    typeof value === 'object' &&
-    value !== null &&
-    'code' in value &&
-    'message' in value &&
-    typeof (value as { message: unknown }).message === 'string'
-  );
 }
 
 export const writesApi = createWritesApi((command, args) => invoke(command, args));

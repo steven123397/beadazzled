@@ -28,6 +28,7 @@ use self::process::{
     FollowProcess, FollowStop, ProcessRequest, ProcessRunner, ScanBounds, ScanStop, READ_TIMEOUT,
     VERSION_TIMEOUT, WRITE_TIMEOUT,
 };
+use crate::util::lock;
 
 pub use argv::{argv_for, Argv, AssigneeChange, CreateSpec, UpdateSpec, WriteCommand};
 pub use error::{map_exit, map_exit_with_output, BridgeError, BridgeErrorCode};
@@ -63,11 +64,7 @@ impl BdBridge {
     /// Terminates the current follow process. A thread blocked in
     /// [`JournalReader::next_batch`] sees end-of-stream and returns.
     pub fn interrupt_follow(&self) {
-        let stop = self
-            .follow_stop
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner())
-            .take();
+        let stop = lock(&self.follow_stop).take();
         if let Some(stop) = stop {
             stop.stop();
         }
@@ -131,10 +128,7 @@ impl BdBridge {
         if follow {
             let request = self.request("journal", args, READ_TIMEOUT);
             let mut process = self.runner.spawn_follow(&request)?;
-            *self
-                .follow_stop
-                .lock()
-                .unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(process.stop_handle());
+            *lock(&self.follow_stop) = Some(process.stop_handle());
             let stdout = process.take_stdout().ok_or_else(|| {
                 BridgeError::new(
                     BridgeErrorCode::Internal,
