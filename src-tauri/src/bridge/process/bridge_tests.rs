@@ -26,6 +26,7 @@ use crate::bridge::argv::{argv_for, CreateSpec, WriteCommand};
 use crate::bridge::error::{map_exit, BridgeError, BridgeErrorCode};
 use crate::bridge::parse::{parse_export, JournalStream};
 use crate::bridge::test_support::{env, fake_bd, runner, temp_dir, workspace};
+use crate::util::lock;
 
 fn request(workspace: &Path, mode: &str) -> ProcessRequest {
     let mut request = ProcessRequest::new("test", workspace, Vec::new());
@@ -531,8 +532,8 @@ fn scans_wait_for_the_workspace_lock() {
     let runner = Arc::new(runner());
     let request = request(&workspace, "ok");
 
-    let lock = workspace_lock(&workspace);
-    let guard = lock.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+    let workspace_mutex = workspace_lock(&workspace);
+    let guard = lock(&workspace_mutex);
     let scan = std::thread::spawn(move || runner.run_scan(&request, ScanBounds { max_lines: 10 }));
 
     std::thread::sleep(Duration::from_millis(200));

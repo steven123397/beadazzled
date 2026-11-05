@@ -6,6 +6,7 @@ use tauri::Manager;
 pub mod bridge;
 pub mod commands;
 pub mod sync;
+pub mod util;
 pub mod workspace;
 
 /// Accepts a trace path only when it resolves inside the OS temp directory.

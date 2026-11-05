@@ -13,10 +13,11 @@ use std::thread::{self, JoinHandle};
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, State};
 
+use super::{not_active, not_registered, ws_inaccessible};
 use crate::bridge::{BdBridge, BridgeError, BridgeErrorCode, Issue, JournalRecord};
 use crate::commands::WorkspaceService;
 use crate::sync::{BaselineOutcome, FollowOutcome, SyncConfig, SyncEngine, SyncSink, SyncState};
-use crate::workspace::discovery::BdStatus;
+use crate::util::lock;
 
 pub const EVENT_SNAPSHOT: &str = "sync:snapshot";
 pub const EVENT_RECORDS: &str = "sync:records";
@@ -89,22 +90,7 @@ impl SyncController {
             .iter()
             .find(|entry| entry.path == workspace)
             .ok_or_else(|| not_registered(workspace))?;
-        let bd_path = match service.bd_status(false) {
-            BdStatus::Ready { path, .. } => path,
-            BdStatus::NotFound { .. } => {
-                return Err(BridgeError::new(
-                    BridgeErrorCode::BdNotFound,
-                    "bd was not found; install it or set its path in Settings",
-                ));
-            }
-            BdStatus::Unsupported { found, min, .. } => {
-                return Err(BridgeError::new(
-                    BridgeErrorCode::BdVersionUnsupported,
-                    format!("bd {found} is older than {min}; update bd to continue"),
-                ));
-            }
-            BdStatus::Broken { error, .. } => return Err(error),
-        };
+        let bd_path = service.ready_bd_path()?;
         let since = service
             .checkpoint(workspace, &entry.project_id)
             .map(|checkpoint| checkpoint.seq)
@@ -291,33 +277,6 @@ impl SyncSink for TauriSink {
             self.persist(*last_seq);
         }
     }
-}
-
-fn lock<T>(mutex: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
-    mutex
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner())
-}
-
-fn not_registered(path: &str) -> BridgeError {
-    BridgeError::new(
-        BridgeErrorCode::Internal,
-        format!("workspace is not registered: {path}"),
-    )
-}
-
-fn not_active(path: &str) -> BridgeError {
-    BridgeError::new(
-        BridgeErrorCode::Internal,
-        format!("workspace is not the active one: {path}"),
-    )
-}
-
-fn ws_inaccessible(path: &str) -> BridgeError {
-    BridgeError::new(
-        BridgeErrorCode::WsInaccessible,
-        format!("the workspace directory is missing: {path}"),
-    )
 }
 
 // ---- Tauri commands -------------------------------------------------------

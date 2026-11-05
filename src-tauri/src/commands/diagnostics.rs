@@ -11,6 +11,7 @@ use ts_rs::TS;
 
 use crate::bridge::{shared_call_log, BdBridge, BridgeError, BridgeErrorCode, WorkspaceContext};
 use crate::commands::WorkspaceService;
+use crate::util::lock;
 use crate::workspace::discovery::BdStatus;
 
 /// The newest calls kept for the report. The shared buffer holds 200; the
@@ -86,12 +87,7 @@ pub fn collect(service: &WorkspaceService) -> DiagnosticsSnapshot {
         _ => (None, None),
     };
 
-    let mut calls: Vec<DiagnosticsCall> = shared_call_log()
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner())
-        .iter()
-        .map(summarize)
-        .collect();
+    let mut calls: Vec<DiagnosticsCall> = lock(&shared_call_log()).iter().map(summarize).collect();
     calls.reverse();
     calls.truncate(CALL_LIMIT);
 

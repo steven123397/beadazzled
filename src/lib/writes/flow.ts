@@ -1,6 +1,6 @@
 import type { WriteCommand } from '@/bindings/bd';
 
-import { createEchoWaiter, type EchoOutcome } from '../sync/echo';
+import { createEchoWaiter, ECHO_TIMEOUT_MS, type EchoOutcome } from '../sync/echo';
 import type { TicketStore } from '../sync/store';
 import { createWriteQueue, type WriteOutcome, type WriteQueue, type WriteResult } from './queue';
 
@@ -24,8 +24,6 @@ export type WriteSubmission = {
   issueId: string | null;
   build: () => WriteCommand;
 };
-
-const ECHO_TIMEOUT_MS = 3_000;
 
 /**
  * Runs one write and the post-write flow from `SPEC-writes`.
@@ -81,7 +79,6 @@ export type WriteFlowOptions = {
   store: TicketStore;
   /** The workspace the UI is editing; each submission carries it to the backend. */
   workspace: () => string;
-  /** The IPC call; `writesApi.execute` in the app. */
   execute: (workspace: string, command: WriteCommand) => Promise<WriteOutcome>;
   /** Re-runs the baseline after a conflict, echo timeout or disabled journal. */
   refresh: () => void;
@@ -89,7 +86,6 @@ export type WriteFlowOptions = {
   isJournalDisabled: () => boolean;
 };
 
-/** Builds the production flow from the ticket store and the writes API. */
 export function createWriteFlow(options: WriteFlowOptions): WriteFlow {
   return {
     queue: createWriteQueue(options.execute),

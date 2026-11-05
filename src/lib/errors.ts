@@ -35,12 +35,17 @@ export function messageOf(error: unknown): string {
   return String(error);
 }
 
-function isBridgeError(value: unknown): value is BridgeError {
+export function internalError(error: unknown): BridgeError {
+  return { code: 'INTERNAL', message: messageOf(error) };
+}
+
+export function isBridgeError(value: unknown): value is BridgeError {
   return (
     typeof value === 'object' &&
     value !== null &&
     'code' in value &&
     'message' in value &&
+    typeof (value as { code: unknown }).code === 'string' &&
     typeof (value as { message: unknown }).message === 'string'
   );
 }

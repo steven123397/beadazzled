@@ -14,6 +14,7 @@ use serde_json::Value;
 use ts_rs::TS;
 
 use crate::bridge::{BdVersion, BridgeError, BridgeErrorCode};
+use crate::util::lock;
 
 /// The executable name to look for on PATH.
 pub const BD_EXECUTABLE: &str = if cfg!(windows) { "bd.exe" } else { "bd" };
@@ -195,12 +196,6 @@ fn version_bounds(error: &BridgeError) -> (String, String) {
         .unwrap_or(MIN_BD_VERSION)
         .to_owned();
     (found, min)
-}
-
-fn lock<T>(mutex: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
-    mutex
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner())
 }
 
 #[cfg(test)]

@@ -1,5 +1,6 @@
 import type { BridgeError, WriteCommand } from '@/bindings/bd';
 
+import { internalError } from '@/lib/errors';
 import type { EchoOutcome } from '../sync/echo';
 
 /** What the IPC layer reports for one `bd` write. */
@@ -119,12 +120,5 @@ export function createWriteQueue(execute: WriteExecutor): WriteQueue {
     pendingCount() {
       return waiting.length;
     },
-  };
-}
-
-function internalError(error: unknown): BridgeError {
-  return {
-    code: 'INTERNAL',
-    message: error instanceof Error ? error.message : String(error),
   };
 }
