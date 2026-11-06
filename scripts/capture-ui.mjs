@@ -16,7 +16,7 @@ import { fileURLToPath } from 'node:url';
 
 import { runMain } from './lib/cli.mjs';
 import { resolvePort, withPreview } from './lib/prod-preview.mjs';
-import { installSeam } from './lib/seam.mjs';
+import { installSeam, makeIssue } from './lib/seam.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const TS = '2026-11-01T00:00:00Z';
@@ -29,21 +29,7 @@ const shots = path.resolve(
 );
 
 function issue(id, overrides = {}) {
-  return {
-    id,
-    title: `Issue ${id}`,
-    description: '',
-    status: 'open',
-    priority: 2,
-    issue_type: 'task',
-    created_at: TS,
-    updated_at: TS,
-    labels: [],
-    dependency_count: 0,
-    dependent_count: 0,
-    comment_count: 0,
-    ...overrides,
-  };
+  return makeIssue(id, overrides);
 }
 
 function fixture() {
@@ -78,6 +64,8 @@ function fixture() {
   ];
 }
 
+const FIXTURE = fixture();
+
 async function capture(
   browser,
   {
@@ -102,7 +90,7 @@ async function capture(
     await installSeam(page, {
       projectId: 'p1',
       workspaceName: 'alpha',
-      issues: fixture(),
+      issues: FIXTURE,
       theme,
       recordInvokeLog: false,
     });

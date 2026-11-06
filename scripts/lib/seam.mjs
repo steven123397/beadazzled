@@ -127,3 +127,35 @@ export async function installSeam(page, options = {}) {
     }
   );
 }
+
+export function makeIssue(idOrOverrides = {}, maybeOverrides = {}) {
+  const overrides =
+    typeof idOrOverrides === 'string'
+      ? { id: idOrOverrides, ...maybeOverrides }
+      : typeof idOrOverrides === 'number'
+        ? { id: `bza-${idOrOverrides}`, title: `Issue ${idOrOverrides}`, ...maybeOverrides }
+        : { ...idOrOverrides, ...maybeOverrides };
+
+  const id = overrides.id ?? 'bza-1';
+  return {
+    id,
+    title: overrides.title ?? `Issue ${id}`,
+    description: overrides.description ?? '',
+    status: overrides.status ?? 'open',
+    priority: overrides.priority ?? 2,
+    issue_type: overrides.issue_type ?? 'task',
+    created_at: overrides.created_at ?? '2026-11-01T00:00:00Z',
+    updated_at: overrides.updated_at ?? '2026-11-01T00:00:00Z',
+    labels: overrides.labels ?? [],
+    dependency_count: overrides.dependency_count ?? 0,
+    dependent_count: overrides.dependent_count ?? 0,
+    comment_count: overrides.comment_count ?? 0,
+    ...overrides,
+  };
+}
+
+export function makeIssues(count, map) {
+  return Array.from({ length: count }, (_, index) =>
+    map ? map(index) : makeIssue(index)
+  );
+}

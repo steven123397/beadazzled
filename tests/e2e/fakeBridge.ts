@@ -5,7 +5,11 @@ import {
   TAURI_INTERNALS,
   BEADAZZLED_E2E,
   makeWorkspaceSnapshot,
+  makeIssue,
+  makeIssues,
 } from '../../scripts/lib/seam.mjs';
+
+export { makeIssue, makeIssues };
 
 export type FakeBridgeOptions = {
   projectId?: string;
@@ -42,22 +46,7 @@ export async function installFakeBridge(
   const {
     projectId = 'p1',
     name = 'alpha',
-    issues = [
-      {
-        id: 'bza-1',
-        title: 'Detail reading',
-        description: '',
-        status: 'open',
-        priority: 2,
-        issue_type: 'task',
-        created_at: '2026-11-01T00:00:00Z',
-        updated_at: '2026-11-01T00:00:00Z',
-        labels: [],
-        dependency_count: 0,
-        dependent_count: 0,
-        comment_count: 0,
-      },
-    ],
+    issues = [makeIssue({ id: 'bza-1', title: 'Detail reading' })],
     syncState,
     theme,
     language,

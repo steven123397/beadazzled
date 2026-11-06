@@ -22,7 +22,7 @@
  */
 import { parseOptions, runMain } from './lib/cli.mjs';
 import { resolvePort, withPreview } from './lib/prod-preview.mjs';
-import { installSeam } from './lib/seam.mjs';
+import { installSeam, makeIssue, makeIssues } from './lib/seam.mjs';
 
 // 60Hz ticks at 16.7ms: a p50 near one frame keeps 60fps, p95 allows one
 // extra frame, and max absorbs a single GC/compile pause.
@@ -115,42 +115,41 @@ function median(values) {
 
 /** A deterministic 1000-issue fixture close to a real workspace. */
 function issues() {
-  return Array.from({ length: 1000 }, (_, index) => ({
-    id: `bza-${index}`,
-    title: `Issue ${index}`,
-    description: '',
-    status:
-      index % 11 === 0
-        ? 'blocked'
-        : index % 7 === 0
-          ? 'closed'
-          : index % 5 === 0
-            ? 'in_progress'
-            : 'open',
-    priority: index % 5,
-    issue_type: index % 3 === 0 ? 'bug' : 'task',
-    assignee: index % 4 === 0 ? 'ada' : index % 4 === 1 ? 'lin' : undefined,
-    created_at: '2026-11-01T00:00:00Z',
-    updated_at: '2026-11-01T00:00:00Z',
-    labels: index % 2 === 0 ? ['ui'] : ['backend', 'perf', 'docs'],
-    // Half the blocked cards also name a real blocker, so the chip renders the
-    // dependency variant rather than only the manual one.
-    dependency_count: index % 11 === 0 && index % 22 === 0 ? 1 : 0,
-    dependencies:
-      index % 11 === 0 && index % 22 === 0
-        ? [
-            {
-              issue_id: `bza-${index}`,
-              depends_on_id: 'bza-1',
-              type: 'blocks',
-              created_at: '2026-11-01T00:00:00Z',
-            },
-          ]
-        : undefined,
-    dependent_count: 0,
-    comment_count: 0,
-  }));
+  return makeIssues(1000, (index) =>
+    makeIssue({
+      id: `bza-${index}`,
+      title: `Issue ${index}`,
+      status:
+        index % 11 === 0
+          ? 'blocked'
+          : index % 7 === 0
+            ? 'closed'
+            : index % 5 === 0
+              ? 'in_progress'
+              : 'open',
+      priority: index % 5,
+      issue_type: index % 3 === 0 ? 'bug' : 'task',
+      assignee: index % 4 === 0 ? 'ada' : index % 4 === 1 ? 'lin' : undefined,
+      labels: index % 2 === 0 ? ['ui'] : ['backend', 'perf', 'docs'],
+      // Half the blocked cards also name a real blocker, so the chip renders the
+      // dependency variant rather than only the manual one.
+      dependency_count: index % 11 === 0 && index % 22 === 0 ? 1 : 0,
+      dependencies:
+        index % 11 === 0 && index % 22 === 0
+          ? [
+              {
+                issue_id: `bza-${index}`,
+                depends_on_id: 'bza-1',
+                type: 'blocks',
+                created_at: '2026-11-01T00:00:00Z',
+              },
+            ]
+          : undefined,
+    })
+  );
 }
+
+const ISSUES = issues();
 
 async function measureRun(browser, scenario, run, port) {
   const page = await browser.newPage();
@@ -158,7 +157,7 @@ async function measureRun(browser, scenario, run, port) {
     await installSeam(page, {
       projectId: 'p1',
       workspaceName: 'alpha',
-      issues: issues(),
+      issues: ISSUES,
     });
 
     const isBoard = scenario.view === 'board';

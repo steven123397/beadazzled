@@ -29,7 +29,7 @@
  */
 import { parseOptions, runMain } from './lib/cli.mjs';
 import { resolvePort, withPreview } from './lib/prod-preview.mjs';
-import { installSeam } from './lib/seam.mjs';
+import { installSeam, makeIssue, makeIssues } from './lib/seam.mjs';
 
 const budgets = { openP95: 50, markdownFirstRenderP50: 100, markdownSteadyStateP50: 100 };
 const TS = '2026-11-01T00:00:00Z';
@@ -59,21 +59,10 @@ function parseArgs(argv) {
 }
 
 function issue(id, overrides = {}) {
-  return {
-    id,
-    title: `Issue ${id}`,
+  return makeIssue(id, {
     description: 'A short **description** for this ticket.',
-    status: 'open',
-    priority: 2,
-    issue_type: 'task',
-    created_at: TS,
-    updated_at: TS,
-    labels: [],
-    dependency_count: 0,
-    dependent_count: 0,
-    comment_count: 0,
     ...overrides,
-  };
+  });
 }
 
 function bigDescription() {
@@ -108,12 +97,14 @@ function bigDescription() {
 }
 
 function tickets() {
-  const list = Array.from({ length: 1000 }, (_, index) => issue(`bza-${index}`));
+  const list = makeIssues(1000, (index) => issue(`bza-${index}`));
   // Keep the long ticket near the top; the default sort orders by timestamp,
   // then id, so an id outside the sequence could land off-screen.
   list[1] = issue('bza-1', { description: bigDescription() });
   return list;
 }
+
+const TICKETS = tickets();
 
 
 async function waitForList(page) {
@@ -185,7 +176,7 @@ async function measureRun(browser, run, port) {
     await installSeam(page, {
       projectId: 'p1',
       workspaceName: 'alpha',
-      issues: tickets(),
+      issues: TICKETS,
     });
 
     await page.goto(`http://localhost:${port}/#/w/p1/list`);

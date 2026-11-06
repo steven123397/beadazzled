@@ -1,39 +1,22 @@
 import { expect, test, type Page } from '@playwright/test';
 
-import { clearInvokeLog, installFakeBridge, invokeLog } from './fakeBridge';
+import { clearInvokeLog, installFakeBridge, invokeLog, makeIssue, makeIssues } from './fakeBridge';
 
 const TS = '2026-11-01T00:00:00Z';
 
-function issue(id: string, overrides: Record<string, unknown> = {}) {
-  return {
-    id,
-    title: `Issue ${id}`,
-    description: '',
-    status: 'open',
-    priority: 2,
-    issue_type: 'task',
-    created_at: TS,
-    updated_at: TS,
-    labels: [],
-    dependency_count: 0,
-    dependent_count: 0,
-    comment_count: 0,
-    ...overrides,
-  };
-}
-
 const FIXTURE = [
-  issue('bza-1'),
-  issue('bza-2', { status: 'in_progress' }),
-  issue('bza-3', { status: 'blocked' }),
+  makeIssue('bza-1'),
+  makeIssue('bza-2', { status: 'in_progress' }),
+  makeIssue('bza-3', { status: 'blocked' }),
 ];
 
 /** Enough cards that the dragged one is not the first virtual row. */
-const MANY = Array.from({ length: 13 }, (_, index) => issue(`bza-${index}`));
+const MANY = makeIssues(13);
 
 function thousandIssues() {
-  return Array.from({ length: 1000 }, (_, index) =>
-    issue(`bza-${index}`, {
+  return makeIssues(1000, (index) =>
+    makeIssue({
+      id: `bza-${index}`,
       title: `Issue ${index}`,
       status: index % 7 === 0 ? 'closed' : index % 5 === 0 ? 'in_progress' : 'open',
       priority: index % 5,
@@ -241,8 +224,8 @@ test('the keyboard sensor completes a drop and reaches the write gate', async ({
 
 test('moving a deferred blocked card to Ready names the blockers', async ({ page }) => {
   const fixture = [
-    issue('bza-1'),
-    issue('bza-9', {
+    makeIssue('bza-1'),
+    makeIssue('bza-9', {
       status: 'deferred',
       dependency_count: 1,
       dependencies: [{ issue_id: 'bza-9', depends_on_id: 'bza-1', type: 'blocks', created_at: TS }],

@@ -81,3 +81,29 @@ export type InstallSeamOptions = {
 };
 
 export function installSeam(page: Page, options?: InstallSeamOptions): Promise<void>;
+
+export type IssueFixture = {
+  id: string;
+  title: string;
+  description: string;
+  status: string;
+  priority: number;
+  issue_type: string;
+  created_at: string;
+  updated_at: string;
+  labels: string[];
+  dependency_count: number;
+  dependent_count: number;
+  comment_count: number;
+  [key: string]: unknown;
+};
+
+export function makeIssue(
+  idOrOverrides?: string | number | Record<string, unknown>,
+  overrides?: Record<string, unknown>
+): IssueFixture;
+
+export function makeIssues(
+  count: number,
+  map?: (index: number) => IssueFixture
+): IssueFixture[];

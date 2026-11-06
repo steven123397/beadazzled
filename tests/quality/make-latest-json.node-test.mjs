@@ -1,64 +1,24 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { createHash, generateKeyPairSync, randomBytes, sign } from 'node:crypto';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import os from 'node:os';
+import { readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { afterEach, test } from 'node:test';
 import { fileURLToPath } from 'node:url';
+
+import { createTempRoots, signatureBlob, writeInstaller, writeRepo } from './release-fixtures.mjs';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const makeScript = path.join(repoRoot, 'scripts/make-latest-json.mjs');
 const verifyScript = path.join(repoRoot, 'scripts/verify-release.mjs');
 
-const { publicKey, privateKey } = generateKeyPairSync('ed25519');
-const rawPublicKey = publicKey.export({ format: 'der', type: 'spki' }).subarray(-32);
-const keyId = randomBytes(8);
-const publicKeyBlob = Buffer.concat([Buffer.from('Ed'), keyId, rawPublicKey]).toString('base64');
-
-const tempRoots = [];
-
-function makeRoot() {
-  const root = mkdtempSync(path.join(os.tmpdir(), 'beadazzled-latest-'));
-  tempRoots.push(root);
-  return root;
-}
-
-function signatureBlob(data) {
-  const digest = createHash('blake2b512').update(data).digest();
-  return Buffer.concat([Buffer.from('ED'), keyId, sign(null, digest, privateKey)]).toString(
-    'base64'
-  );
-}
-
-function writeRepo(root, version = '0.1.0') {
-  mkdirSync(path.join(root, 'src-tauri'), { recursive: true });
-  writeFileSync(path.join(root, 'package.json'), JSON.stringify({ version }));
-  writeFileSync(
-    path.join(root, 'src-tauri/Cargo.toml'),
-    `[package]\nname = "beadazzled"\nversion = "${version}"\n`
-  );
-  writeFileSync(
-    path.join(root, 'src-tauri/tauri.conf.json'),
-    JSON.stringify({ version, plugins: { updater: { pubkey: publicKeyBlob } } })
-  );
-}
-
-afterEach(() => {
-  while (tempRoots.length > 0) {
-    rmSync(tempRoots.pop(), { recursive: true, force: true });
-  }
-});
+const { makeRoot, cleanup } = createTempRoots('beadazzled-latest-');
+afterEach(cleanup);
 
 test('the generated manifest passes verify-release', () => {
   const root = makeRoot();
   writeRepo(root);
   const dir = path.join(root, 'release');
-  mkdirSync(dir, { recursive: true });
-  const installer = path.join(dir, 'beadazzled_0.1.0_x64-setup.exe');
-  const bytes = Buffer.from('installer bytes');
-  writeFileSync(installer, bytes);
-  writeFileSync(`${installer}.sig`, signatureBlob(bytes));
+  const { installer, bytes } = writeInstaller(dir);
 
   const made = spawnSync(
     process.execPath,

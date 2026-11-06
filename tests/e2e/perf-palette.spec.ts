@@ -1,23 +1,6 @@
 import { expect, test } from '@playwright/test';
 
-import { installFakeBridge } from './fakeBridge';
-
-function issue(index: number) {
-  return {
-    id: `bza-${index}`,
-    title: `Keyboard issue ${index}`,
-    description: '',
-    status: 'open',
-    priority: 2,
-    issue_type: 'task',
-    created_at: '2026-11-01T00:00:00Z',
-    updated_at: '2026-11-01T00:00:00Z',
-    labels: [],
-    dependency_count: 0,
-    dependent_count: 0,
-    comment_count: 0,
-  };
-}
+import { installFakeBridge, makeIssue, makeIssues } from './fakeBridge';
 
 async function measure(page: import('@playwright/test').Page, query: string): Promise<number> {
   return page.evaluate(async (value) => {
@@ -36,7 +19,9 @@ async function measure(page: import('@playwright/test').Page, query: string): Pr
 test('palette input to rendered results stays under 50ms', async ({ page }) => {
   test.setTimeout(60_000);
   await installFakeBridge(page, {
-    issues: Array.from({ length: 1200 }, (_, index) => issue(index)),
+    issues: makeIssues(1200, (index) =>
+      makeIssue({ id: `bza-${index}`, title: `Keyboard issue ${index}` })
+    ),
   });
   await page.goto('/#/w/p1/list');
   await expect(page.getByRole('heading', { name: 'List' })).toBeVisible({ timeout: 15_000 });
@@ -61,7 +46,9 @@ test('palette input to rendered results stays under 50ms', async ({ page }) => {
 test('typing in the list filter stays under 50ms with 1000 issues', async ({ page }) => {
   test.setTimeout(60_000);
   await installFakeBridge(page, {
-    issues: Array.from({ length: 1000 }, (_, index) => issue(index)),
+    issues: makeIssues(1000, (index) =>
+      makeIssue({ id: `bza-${index}`, title: `Keyboard issue ${index}` })
+    ),
   });
   await page.goto('/#/w/p1/list');
   await expect(page.getByRole('heading', { name: 'List' })).toBeVisible({ timeout: 15_000 });
