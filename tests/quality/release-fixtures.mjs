@@ -1,9 +1,9 @@
 import { createHash, generateKeyPairSync, randomBytes, sign } from 'node:crypto';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
-import os from 'node:os';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 
 import { UPDATER_PLATFORM } from '../../scripts/lib/release-meta.mjs';
+import { withTempRoots } from './helpers.mjs';
 
 export const keyPair = generateKeyPairSync('ed25519');
 export const rawPublicKey = keyPair.publicKey.export({ format: 'der', type: 'spki' }).subarray(-32);
@@ -77,17 +77,5 @@ export function writeFixture(root, overrides = {}) {
 }
 
 export function createTempRoots(prefix = 'beadazzled-') {
-  const roots = [];
-  return {
-    makeRoot() {
-      const root = mkdtempSync(path.join(os.tmpdir(), prefix));
-      roots.push(root);
-      return root;
-    },
-    cleanup() {
-      while (roots.length > 0) {
-        rmSync(roots.pop(), { recursive: true, force: true });
-      }
-    },
-  };
+  return withTempRoots({ prefix });
 }

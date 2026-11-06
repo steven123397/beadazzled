@@ -1,26 +1,18 @@
 import assert from 'node:assert/strict';
-import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
-import { afterEach, test } from 'node:test';
-import { fileURLToPath } from 'node:url';
+import { test } from 'node:test';
 
 import { UPDATER_PLATFORM } from '../../scripts/lib/release-meta.mjs';
-import { createTempRoots, writeFixture } from './release-fixtures.mjs';
+import { scriptFor, spawnCheck, withTempRoots } from './helpers.mjs';
+import { writeFixture } from './release-fixtures.mjs';
 
-const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
-const scriptPath = path.join(repoRoot, 'scripts/verify-release.mjs');
-
-const { makeRoot, cleanup } = createTempRoots('beadazzled-release-');
-afterEach(cleanup);
+const scriptPath = scriptFor('verify-release');
+const { makeRoot } = withTempRoots({ prefix: 'beadazzled-release-' });
 
 function run(root, installer, extra = []) {
-  return spawnSync(
-    process.execPath,
-    [scriptPath, '--root', root, '--installer', installer, '--json', ...extra],
-    { encoding: 'utf8' }
-  );
+  return spawnCheck(scriptPath, ['--root', root, '--installer', installer, '--json', ...extra]);
 }
 
 test('a matching artifact, manifest and signature pass', () => {
