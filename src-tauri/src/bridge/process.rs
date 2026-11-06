@@ -585,6 +585,27 @@ pub struct ScannedOutput {
     pub stop: ScanStop,
 }
 
+/// Whether a short call must return a complete output or may stop early with a
+/// partial one. The stopping conditions in `capture` used to branch on
+/// `scan.is_some()` (and `lines.max.is_some()` inside `pump_stdout`); keeping
+/// the choice here lets the loop just drain.
+#[derive(Clone, Copy)]
+enum CaptureMode {
+    Complete,
+    Scan,
+}
+
+impl CaptureMode {
+    /// A bounded scan reports a `ScanStop`; a normal call has no partial result
+    /// to return, so the same condition is a hard error instead (`None`).
+    fn stop(self, reason: ScanStop) -> Option<ScanStop> {
+        match self {
+            CaptureMode::Scan => Some(reason),
+            CaptureMode::Complete => None,
+        }
+    }
+}
+
 fn capture(
     child: &mut Child,
     mut stdout: ChildStdout,
@@ -593,6 +614,11 @@ fn capture(
     started: Instant,
     scan: Option<ScanBounds>,
 ) -> Result<CaptureResult, BridgeError> {
+    let mode = if scan.is_some() {
+        CaptureMode::Scan
+    } else {
+        CaptureMode::Complete
+    };
     let limits = request.limits;
     let deadline = started + request.timeout;
     let mut out = Vec::new();
@@ -630,6 +656,15 @@ fn capture(
                 PumpOutcome::State(PipeState::Progress) => progressed = true,
                 PumpOutcome::State(PipeState::Eof) => stdout_eof = true,
                 PumpOutcome::Stop(reason) => stop = Some(reason),
+                PumpOutcome::BudgetExceeded => {
+                    if let Some(reason) = mode.stop(ScanStop::OutputLimit) {
+                        stop = Some(reason);
+                    } else {
+                        // Force-closing an oversized stdout cannot return
+                        // partial data, so a normal call reports the error.
+                        return Err(output_too_large(limits, budget.total()));
+                    }
+                }
             }
         }
 
@@ -670,8 +705,8 @@ fn capture(
                 }
                 if grace_deadline.is_some_and(|grace| Instant::now() >= grace) {
                     if !stdout_eof {
-                        if scan.is_some() {
-                            stop = Some(ScanStop::Incomplete);
+                        if let Some(reason) = mode.stop(ScanStop::Incomplete) {
+                            stop = Some(reason);
                             break;
                         }
                         // Force-closing a still-open stdout can drop the tail
@@ -685,8 +720,8 @@ fn capture(
             }
             None => {
                 if Instant::now() >= deadline {
-                    if scan.is_some() {
-                        stop = Some(ScanStop::Deadline);
+                    if let Some(reason) = mode.stop(ScanStop::Deadline) {
+                        stop = Some(reason);
                         break;
                     }
                     return Err(timeout_error(request));
@@ -719,6 +754,9 @@ enum PipeState {
 enum PumpOutcome {
     State(PipeState),
     Stop(ScanStop),
+    /// The last chunk exceeded the output budget; the caller decides whether
+    /// that is a scan stop or a hard error for a complete call.
+    BudgetExceeded,
 }
 
 enum Available {
@@ -757,10 +795,7 @@ fn pump_stdout(
                 Ok(0) => Ok(PumpOutcome::State(PipeState::Eof)),
                 Ok(read) => {
                     if !budget.push(&buffer[..read], limits) {
-                        if lines.max.is_some() {
-                            return Ok(PumpOutcome::Stop(ScanStop::OutputLimit));
-                        }
-                        return Err(output_too_large(limits, budget.total()));
+                        return Ok(PumpOutcome::BudgetExceeded);
                     }
                     out.extend_from_slice(&buffer[..read]);
                     if lines.count(&buffer[..read]) {
