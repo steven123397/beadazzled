@@ -262,7 +262,7 @@ impl SyncSink for TauriSink {
         if !self.alive() || records.is_empty() {
             return;
         }
-        let _ = self.app.emit(EVENT_RECORDS, records.to_vec());
+        let _ = self.app.emit(EVENT_RECORDS, records);
         if let Some(last) = records.last() {
             self.persist(last.seq);
         }

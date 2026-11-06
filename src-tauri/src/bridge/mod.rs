@@ -23,7 +23,10 @@ use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
 use self::error::version_unsupported;
-use self::parse::{journal_disabled, journal_truncated, parse_export, JournalStream};
+use self::parse::{
+    journal_disabled, journal_truncated, parse_export, truncation_marker_present, JournalStream,
+    JOURNAL_TRUNCATED_MARKER,
+};
 use self::process::{
     FollowProcess, FollowStop, ProcessOutput, ProcessRequest, ProcessRunner, ScanBounds, ScanStop,
     READ_TIMEOUT, VERSION_TIMEOUT, WRITE_TIMEOUT,
@@ -389,9 +392,16 @@ impl JournalReader {
 
                     // The truncation marker is a JSON line that is not a
                     // record; catch it before the parser rejects the batch.
-                    let stderr = process.stderr_lossy();
-                    if let Some(error) = journal_truncated(tail.as_slice(), &stderr) {
-                        return Err(error);
+                    // Only decode the full stderr snapshot when the marker is
+                    // actually present, so a silent stream does not clone the
+                    // buffer on every chunk.
+                    if truncation_marker_present(tail.as_slice())
+                        || process.stderr_contains(JOURNAL_TRUNCATED_MARKER)
+                    {
+                        let stderr = process.stderr_lossy();
+                        if let Some(error) = journal_truncated(tail.as_slice(), &stderr) {
+                            return Err(error);
+                        }
                     }
 
                     let records = stream.push(chunk)?;

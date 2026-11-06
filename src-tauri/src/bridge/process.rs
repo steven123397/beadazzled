@@ -500,6 +500,13 @@ impl FollowProcess {
         lock(&self.stderr).clone()
     }
 
+    /// Checks the buffered stderr for a marker without cloning the buffer.
+    /// The follow loop only decodes the full snapshot when this hits.
+    pub fn stderr_contains(&self, needle: &str) -> bool {
+        let captured = lock(&self.stderr);
+        String::from_utf8_lossy(&captured).contains(needle)
+    }
+
     pub fn stderr_lossy(&self) -> String {
         String::from_utf8_lossy(&self.stderr_snapshot()).into_owned()
     }

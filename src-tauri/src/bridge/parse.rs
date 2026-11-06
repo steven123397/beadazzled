@@ -15,6 +15,9 @@ mod tests;
 /// Exact marker bd writes when the events journal is disabled.
 const JOURNAL_DISABLED_MARKER: &str = "events journal is disabled";
 
+/// Exact `code` value of the JSON truncation marker bd writes.
+pub const JOURNAL_TRUNCATED_MARKER: &str = "events_journal_truncated";
+
 /// Parses a full `bd export` snapshot.
 ///
 /// The output must be newline-terminated: a final line without its newline is
@@ -109,9 +112,10 @@ impl JournalStream {
     pub fn push(&mut self, chunk: &[u8]) -> Result<Vec<JournalRecord>, BridgeError> {
         self.buffer.extend_from_slice(chunk);
         let mut records = Vec::new();
-        // Walk the buffer once. Copying each line out keeps the borrows simple;
-        // draining per line would memmove the rest of the buffer every time,
-        // which is quadratic when a backfill pushes the whole scan at once.
+        // Walk the buffer once. Borrowing each line avoids a per-line copy and
+        // keeps the single drain after the loop: draining per line would
+        // memmove the rest of the buffer every time, which is quadratic when a
+        // backfill pushes the whole scan at once.
         let mut line_start = 0;
         let mut scan_from = self.scan_offset;
 
@@ -120,7 +124,7 @@ impl JournalStream {
             .position(|byte| *byte == b'\n')
         {
             let newline = scan_from + offset;
-            let line = self.buffer[line_start..newline].to_vec();
+            let line = &self.buffer[line_start..newline];
             if line.len() > self.line_limit {
                 return Err(journal_line_too_large(line.len(), self.line_limit));
             }
@@ -128,7 +132,7 @@ impl JournalStream {
             self.lines_seen += 1;
             let line_number = self.lines_seen;
 
-            let text = std::str::from_utf8(&line).map_err(|error| {
+            let text = std::str::from_utf8(line).map_err(|error| {
                 parse_error(
                     format!("bd journal line {line_number} is not valid UTF-8: {error}"),
                     line_number,
@@ -201,10 +205,24 @@ pub fn journal_disabled(exit_code: i32, stdout: &[u8], stderr: &str) -> Option<B
 
 /// Recognizes the JSON truncation marker emitted on stdout or stderr.
 pub fn journal_truncated(stdout: &[u8], stderr: &str) -> Option<BridgeError> {
-    std::str::from_utf8(stdout)
-        .ok()
+    // Most chunks are ordinary records. A marker that is not even present can
+    // skip the line split and the per-line JSON parse entirely; detection
+    // semantics and the wire shape stay the same.
+    let stdout_text = std::str::from_utf8(stdout).ok();
+    if !stdout_text.is_some_and(|text| text.contains(JOURNAL_TRUNCATED_MARKER))
+        && !stderr.contains(JOURNAL_TRUNCATED_MARKER)
+    {
+        return None;
+    }
+    stdout_text
         .and_then(truncation_from_text)
         .or_else(|| truncation_from_text(stderr))
+}
+
+/// Cheap necessary-condition check for the follow loop: whether the stdout
+/// bytes could contain the truncation marker at all.
+pub fn truncation_marker_present(stdout: &[u8]) -> bool {
+    std::str::from_utf8(stdout).is_ok_and(|text| text.contains(JOURNAL_TRUNCATED_MARKER))
 }
 
 fn truncation_from_text(text: &str) -> Option<BridgeError> {
@@ -221,7 +239,7 @@ fn truncation_from_line(line: &str) -> Option<BridgeError> {
     }
 
     let value = serde_json::from_str::<Value>(&line[start..=end]).ok()?;
-    if value.get("code").and_then(Value::as_str)? != "events_journal_truncated" {
+    if value.get("code").and_then(Value::as_str)? != JOURNAL_TRUNCATED_MARKER {
         return None;
     }
 
