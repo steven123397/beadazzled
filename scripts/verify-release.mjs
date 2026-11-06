@@ -13,13 +13,13 @@
 import { createHash } from 'node:crypto';
 import { existsSync, readFileSync, statSync } from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 
 import { decodeSignature, verifyMinisign } from './lib/minisign.mjs';
 import { readReleaseVersions, readUpdaterPublicKey } from './lib/release-meta.mjs';
+import { parseOptions, runMain } from './lib/cli.mjs';
+import { projectRoot } from './lib/paths.mjs';
 
-const scriptPath = fileURLToPath(import.meta.url);
-const defaultRoot = path.resolve(path.dirname(scriptPath), '..');
+const defaultRoot = projectRoot(import.meta.url);
 const PLATFORM = 'windows-x86_64';
 
 function usage() {
@@ -38,50 +38,38 @@ function usage() {
 }
 
 function parseArgs(argv) {
-  const options = {
-    installer: null,
-    signature: null,
-    manifest: null,
-    publicKey: null,
-    sha256: null,
-    root: defaultRoot,
-    json: false,
-  };
-  const valueOptions = new Set([
-    '--installer',
-    '--signature',
-    '--manifest',
-    '--public-key',
-    '--sha256',
-    '--root',
-  ]);
-  for (let index = 0; index < argv.length; index += 1) {
-    const arg = argv[index];
-    const separator = arg.indexOf('=');
-    const name = separator === -1 ? arg : arg.slice(0, separator);
-    const inline = separator === -1 ? undefined : arg.slice(separator + 1);
-    if (name === '--json') {
-      options.json = true;
-      continue;
-    }
-    if (name === '--help' || name === '-h') {
-      console.log(usage());
-      process.exit(0);
-    }
-    if (!valueOptions.has(name)) {
-      throw new Error(`unknown option: ${arg}`);
-    }
-    const value = inline ?? argv[(index += 1)];
-    if (value === undefined || value === '') {
-      throw new Error(`${name} needs a value`);
-    }
-    if (name === '--installer') options.installer = path.resolve(value);
-    if (name === '--signature') options.signature = path.resolve(value);
-    if (name === '--manifest') options.manifest = path.resolve(value);
-    if (name === '--public-key') options.publicKey = value;
-    if (name === '--sha256') options.sha256 = value.toLowerCase();
-    if (name === '--root') options.root = path.resolve(value);
-  }
+  const options = parseOptions(argv, {
+    flags: ['--json'],
+    values: [
+      '--installer',
+      '--signature',
+      '--manifest',
+      '--public-key',
+      '--sha256',
+      '--root',
+    ],
+    usage,
+    defaults: {
+      installer: null,
+      signature: null,
+      manifest: null,
+      publicKey: null,
+      sha256: null,
+      root: defaultRoot,
+      json: false,
+    },
+    onFlag(opts, name) {
+      if (name === '--json') opts.json = true;
+    },
+    onValue(opts, name, value) {
+      if (name === '--installer') opts.installer = path.resolve(value);
+      if (name === '--signature') opts.signature = path.resolve(value);
+      if (name === '--manifest') opts.manifest = path.resolve(value);
+      if (name === '--public-key') opts.publicKey = value;
+      if (name === '--sha256') opts.sha256 = value.toLowerCase();
+      if (name === '--root') opts.root = path.resolve(value);
+    },
+  });
   if (options.installer === null) {
     throw new Error('--installer is required');
   }
@@ -112,7 +100,7 @@ function fail(errors) {
   process.exitCode = 1;
 }
 
-try {
+runMain('verify-release', () => {
   const options = parseArgs(process.argv.slice(2));
   const errors = [];
 
@@ -224,7 +212,4 @@ try {
     }
     process.exitCode = summary.passed ? 0 : 1;
   }
-} catch (error) {
-  console.error(`verify-release: ${error.message}`);
-  process.exitCode = 1;
-}
+});

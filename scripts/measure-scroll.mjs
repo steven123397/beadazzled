@@ -28,6 +28,8 @@ import { fileURLToPath } from 'node:url';
 
 import { chromium } from '@playwright/test';
 
+import { parseOptions, runMain } from './lib/cli.mjs';
+
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const outDir = path.join(root, 'dist-e2e');
 const viteBin = path.join(root, 'node_modules', 'vite', 'bin', 'vite.js');
@@ -102,31 +104,31 @@ function resolvePort(raw) {
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 function parseArgs(argv) {
-  const options = { runs: 5, json: false, view: 'list' };
-  for (let index = 0; index < argv.length; index += 1) {
-    const arg = argv[index];
-    const separator = arg.indexOf('=');
-    const name = separator === -1 ? arg : arg.slice(0, separator);
-    const inline = separator === -1 ? undefined : arg.slice(separator + 1);
-    if (name === '--json') {
-      options.json = true;
-    } else if (name === '--runs') {
-      const value = Number(inline ?? argv[(index += 1)]);
-      if (!Number.isInteger(value) || value < 1) {
-        throw new Error('--runs needs a positive integer');
+  return parseOptions(argv, {
+    flags: ['--json'],
+    values: ['--runs', '--view'],
+    usage: () => 'Usage: npm run measure:scroll -- [--runs=5] [--view=list|board] [--json]',
+    defaults: { runs: 5, json: false, view: 'list' },
+    onFlag(opts, name) {
+      if (name === '--json') {
+        opts.json = true;
       }
-      options.runs = value;
-    } else if (name === '--view') {
-      const value = inline ?? argv[(index += 1)];
-      if (value !== 'list' && value !== 'board') {
-        throw new Error('--view must be list or board');
+    },
+    onValue(opts, name, value) {
+      if (name === '--runs') {
+        const parsed = Number(value);
+        if (!Number.isInteger(parsed) || parsed < 1) {
+          throw new Error('--runs needs a positive integer');
+        }
+        opts.runs = parsed;
+      } else if (name === '--view') {
+        if (value !== 'list' && value !== 'board') {
+          throw new Error('--view must be list or board');
+        }
+        opts.view = value;
       }
-      options.view = value;
-    } else {
-      throw new Error(`unknown option: ${arg}`);
-    }
-  }
-  return options;
+    },
+  });
 }
 
 function median(values) {
@@ -436,7 +438,4 @@ async function main() {
   }
 }
 
-main().catch((error) => {
-  console.error(`measure:scroll failed: ${error.message}`);
-  process.exitCode = 1;
-});
+runMain('measure:scroll failed', main);

@@ -24,6 +24,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { parseOptions, runMain } from './lib/cli.mjs';
 import { summarize } from './lib/startup-stats.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -55,64 +56,43 @@ function usage() {
 }
 
 function parseArgs(argv) {
-  const options = {
-    runs: 20,
-    warmRuns: 20,
-    exe: defaultExe,
-    timeout: 20_000,
-    build: true,
-    json: false,
-  };
-
-  const valueOptions = new Set(['--runs', '--warm-runs', '--exe', '--timeout']);
-  const flagOptions = new Set(['--no-build', '--json']);
-
-  for (let index = 0; index < argv.length; index += 1) {
-    const arg = argv[index];
-    // Split on the first '=' only: a Windows path such as --exe=C:\a=b\app.exe
-    // would otherwise be truncated at the second one.
-    const separator = arg.indexOf('=');
-    const name = separator === -1 ? arg : arg.slice(0, separator);
-    const inline = separator === -1 ? undefined : arg.slice(separator + 1);
-
-    if (flagOptions.has(name)) {
+  const options = parseOptions(argv, {
+    flags: ['--no-build', '--json'],
+    values: ['--runs', '--warm-runs', '--exe', '--timeout'],
+    usage,
+    usageOnUnknown: true,
+    defaults: {
+      runs: 20,
+      warmRuns: 20,
+      exe: defaultExe,
+      timeout: 20_000,
+      build: true,
+      json: false,
+    },
+    onFlag(opts, name) {
       if (name === '--no-build') {
-        options.build = false;
+        opts.build = false;
       } else {
-        options.json = true;
+        opts.json = true;
       }
-      continue;
-    }
-
-    if (name === '--help' || name === '-h') {
-      console.log(usage());
-      process.exit(0);
-    }
-
-    if (!valueOptions.has(name)) {
-      throw new Error(`unknown option: ${arg}\n\n${usage()}`);
-    }
-
-    const value = inline ?? argv[++index];
-    if (value === undefined) {
-      throw new Error(`${name} needs a value`);
-    }
-
-    switch (name) {
-      case '--runs':
-        options.runs = Number(value);
-        break;
-      case '--warm-runs':
-        options.warmRuns = Number(value);
-        break;
-      case '--exe':
-        options.exe = path.resolve(value);
-        break;
-      case '--timeout':
-        options.timeout = Number(value);
-        break;
-    }
-  }
+    },
+    onValue(opts, name, value) {
+      switch (name) {
+        case '--runs':
+          opts.runs = Number(value);
+          break;
+        case '--warm-runs':
+          opts.warmRuns = Number(value);
+          break;
+        case '--exe':
+          opts.exe = path.resolve(value);
+          break;
+        case '--timeout':
+          opts.timeout = Number(value);
+          break;
+      }
+    },
+  });
 
   for (const name of ['runs', 'warmRuns']) {
     if (!Number.isInteger(options[name]) || options[name] < 0) {
@@ -439,11 +419,11 @@ async function runBatch(label, count, options, profileFactory, traceDir) {
 }
 
 async function main() {
+  const options = parseArgs(process.argv.slice(2));
+
   if (process.platform !== 'win32') {
     throw new Error('startup measurement targets the Windows WebView2 app');
   }
-
-  const options = parseArgs(process.argv.slice(2));
   if (!existsSync(options.exe)) {
     if (!options.build) {
       throw new Error(
@@ -614,7 +594,4 @@ function describe(label, summary, budget) {
   );
 }
 
-main().catch((error) => {
-  console.error(error.message);
-  process.exitCode = 1;
-});
+runMain('measure-startup', main);

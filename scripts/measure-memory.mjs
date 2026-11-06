@@ -23,6 +23,8 @@ import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { parseOptions, runMain } from './lib/cli.mjs';
+
 import {
   connectWebView,
   createFixture,
@@ -60,44 +62,36 @@ function usage() {
 }
 
 function parseArgs(argv) {
-  const options = { runs: 5, exe: defaultExe, port: 1434, json: false, keep: false, issues: 1000 };
-  for (let index = 0; index < argv.length; index += 1) {
-    const arg = argv[index];
-    const separator = arg.indexOf('=');
-    const name = separator === -1 ? arg : arg.slice(0, separator);
-    const inline = separator === -1 ? undefined : arg.slice(separator + 1);
-    if (name === '--json') {
-      options.json = true;
-    } else if (name === '--keep') {
-      options.keep = true;
-    } else if (name === '--help' || name === '-h') {
-      console.log(usage());
-      process.exit(0);
-    } else if (name === '--runs' || name === '--port' || name === '--exe' || name === '--issues') {
-      const value = inline ?? argv[(index += 1)];
-      if (value === undefined || value === '') {
-        throw new Error(`${name} needs a value`);
+  return parseOptions(argv, {
+    flags: ['--json', '--keep'],
+    values: ['--runs', '--port', '--exe', '--issues'],
+    usage,
+    defaults: { runs: 5, exe: defaultExe, port: 1434, json: false, keep: false, issues: 1000 },
+    onFlag(opts, name) {
+      if (name === '--json') {
+        opts.json = true;
+      } else if (name === '--keep') {
+        opts.keep = true;
       }
+    },
+    onValue(opts, name, value) {
       if (name === '--exe') {
-        options.exe = path.resolve(value);
-        continue;
+        opts.exe = path.resolve(value);
+        return;
       }
       const parsed = Number(value);
       if (!Number.isInteger(parsed) || parsed < 1) {
         throw new Error(`${name} needs a positive integer`);
       }
       if (name === '--runs') {
-        options.runs = parsed;
+        opts.runs = parsed;
       } else if (name === '--issues') {
-        options.issues = parsed;
+        opts.issues = parsed;
       } else {
-        options.port = parsed;
+        opts.port = parsed;
       }
-    } else {
-      throw new Error(`unknown option: ${arg}`);
-    }
-  }
-  return options;
+    },
+  });
 }
 
 function median(values) {
@@ -237,7 +231,4 @@ async function main() {
   }
 }
 
-main().catch((error) => {
-  console.error(`measure:memory failed: ${error.message}`);
-  process.exitCode = 1;
-});
+runMain('measure:memory failed', main);

@@ -8,12 +8,13 @@
 // This is a text scan, not a compiler: string concatenation, macro expansion or
 // wrapper crates (duct, xshell, ...) can still slip through. It catches the
 // conventional forms so review only has to cover the unusual ones.
-import { readdirSync, readFileSync, statSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { parseRootArg, runCheck } from './lib/paths.mjs';
+
 const scriptPath = fileURLToPath(import.meta.url);
-const defaultRoot = path.resolve(path.dirname(scriptPath), '..');
 
 const SKIPPED_DIRECTORIES = new Set([
   'node_modules',
@@ -172,24 +173,8 @@ function scan(root) {
   return { violations, scannedFiles };
 }
 
-function parseRoot(argv) {
-  const flagIndex = argv.indexOf('--root');
-  if (flagIndex === -1) {
-    return defaultRoot;
-  }
-  const value = argv[flagIndex + 1];
-  if (!value) {
-    throw new Error('--root requires a directory argument');
-  }
-  const resolved = path.resolve(value);
-  if (!statSync(resolved).isDirectory()) {
-    throw new Error(`--root is not a directory: ${resolved}`);
-  }
-  return resolved;
-}
-
-try {
-  const root = parseRoot(process.argv.slice(2));
+runCheck('check-boundaries', () => {
+  const root = parseRootArg(process.argv.slice(2), { requireDirectory: true });
   const { violations, scannedFiles } = scan(root);
 
   if (violations.length === 0) {
@@ -201,7 +186,4 @@ try {
     console.log(`check-boundaries: ${violations.length} violation(s) found`);
     process.exitCode = 1;
   }
-} catch (error) {
-  console.error(`check-boundaries: ${error instanceof Error ? error.message : String(error)}`);
-  process.exitCode = 1;
-}
+});

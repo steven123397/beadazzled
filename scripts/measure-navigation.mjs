@@ -33,6 +33,8 @@ import { rm } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { parseOptions, runMain } from './lib/cli.mjs';
+
 import { chromium } from '@playwright/test';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -57,25 +59,26 @@ function resolvePort(raw) {
 }
 
 function parseArgs(argv) {
-  const options = { runs: 5, json: false };
-  for (let index = 0; index < argv.length; index += 1) {
-    const arg = argv[index];
-    const separator = arg.indexOf('=');
-    const name = separator === -1 ? arg : arg.slice(0, separator);
-    const inline = separator === -1 ? undefined : arg.slice(separator + 1);
-    if (name === '--json') {
-      options.json = true;
-    } else if (name === '--runs') {
-      const value = Number(inline ?? argv[(index += 1)]);
-      if (!Number.isInteger(value) || value < 1) {
-        throw new Error('--runs needs a positive integer');
+  return parseOptions(argv, {
+    flags: ['--json'],
+    values: ['--runs'],
+    usage: () => 'Usage: node scripts/measure-navigation.mjs [--runs=N] [--json]',
+    defaults: { runs: 5, json: false },
+    onFlag(opts, name) {
+      if (name === '--json') {
+        opts.json = true;
       }
-      options.runs = value;
-    } else {
-      throw new Error(`unknown option: ${arg}`);
-    }
-  }
-  return options;
+    },
+    onValue(opts, name, value) {
+      if (name === '--runs') {
+        const parsed = Number(value);
+        if (!Number.isInteger(parsed) || parsed < 1) {
+          throw new Error('--runs needs a positive integer');
+        }
+        opts.runs = parsed;
+      }
+    },
+  });
 }
 
 function issue(id, overrides = {}) {
@@ -454,7 +457,4 @@ async function main() {
   }
 }
 
-main().catch((error) => {
-  console.error(`measure:navigation failed: ${error.message}`);
-  process.exitCode = 1;
-});
+runMain('measure:navigation failed', main);

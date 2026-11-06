@@ -4,28 +4,13 @@
 // frontend and bridge thresholds are measured separately (ADR-0003).
 import { spawnSync } from 'node:child_process';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
-
 import { evaluateBridgeCoverage, listBridgeSourceFiles } from './lib/bridge-coverage.mjs';
+import { parseRootArg, runCheck } from './lib/paths.mjs';
 
-const scriptPath = fileURLToPath(import.meta.url);
-const defaultRoot = path.resolve(path.dirname(scriptPath), '..');
 const MAX_BUFFER_BYTES = 512 * 1024 * 1024;
 
-function parseRoot(argv) {
-  const flagIndex = argv.indexOf('--root');
-  if (flagIndex === -1) {
-    return defaultRoot;
-  }
-  const value = argv[flagIndex + 1];
-  if (!value) {
-    throw new Error('--root requires a directory argument');
-  }
-  return path.resolve(value);
-}
-
-try {
-  const root = parseRoot(process.argv.slice(2));
+runCheck('check-bridge-coverage', () => {
+  const root = parseRootArg(process.argv.slice(2));
 
   if (listBridgeSourceFiles(root).length === 0) {
     console.log(
@@ -57,10 +42,7 @@ try {
       process.exitCode = 1;
     }
   }
-} catch (error) {
-  console.error(`check-bridge-coverage: ${error instanceof Error ? error.message : String(error)}`);
-  process.exitCode = 1;
-}
+});
 
 function runCargo(args, label, options = {}) {
   const result = spawnSync('cargo', args, {
