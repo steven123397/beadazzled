@@ -64,12 +64,14 @@ impl Default for OutputLimits {
 
 /// One `bd` invocation.
 ///
-/// Workspace-scoped calls always prepend `-C <workspace>`. Global probes such
-/// as `bd --version` use [`ProcessRequest::global`] and omit `-C`, because bd
-/// 1.3.2 rejects `-C` on a directory that is not a beads workspace.
+/// `label` is a diagnostics tag (it appears in the call log and timeout
+/// errors); the command that actually runs is `args`. Workspace-scoped calls
+/// always prepend `-C <workspace>`. Global probes such as `bd --version` use
+/// [`ProcessRequest::global`] and omit `-C`, because bd 1.3.2 rejects `-C` on
+/// a directory that is not a beads workspace.
 #[derive(Debug, Clone)]
 pub struct ProcessRequest {
-    pub command: String,
+    pub label: String,
     pub workspace: Option<PathBuf>,
     pub args: Vec<OsString>,
     pub stdin: Option<Vec<u8>>,
@@ -81,12 +83,12 @@ pub struct ProcessRequest {
 
 impl ProcessRequest {
     pub fn new(
-        command: impl Into<String>,
+        label: impl Into<String>,
         workspace: impl Into<PathBuf>,
         args: Vec<OsString>,
     ) -> Self {
         Self {
-            command: command.into(),
+            label: label.into(),
             workspace: Some(workspace.into()),
             args,
             stdin: None,
@@ -97,9 +99,9 @@ impl ProcessRequest {
     }
 
     /// A workspace-less call (for example `bd --version`).
-    pub fn global(command: impl Into<String>, args: Vec<OsString>) -> Self {
+    pub fn global(label: impl Into<String>, args: Vec<OsString>) -> Self {
         Self {
-            command: command.into(),
+            label: label.into(),
             workspace: None,
             args,
             stdin: None,
@@ -196,23 +198,34 @@ impl ProcessRunner {
         }
     }
 
-    /// Runs a short call. The workspace lock is held for the whole call, so a
-    /// refresh and a write on the same workspace never overlap. The timeout
-    /// starts after the lock is acquired: queueing behind another call must not
-    /// consume this call's budget.
-    pub fn run(&self, request: &ProcessRequest) -> Result<ProcessOutput, BridgeError> {
-        let (result, started) = match &request.workspace {
+    /// Acquires the per-workspace semaphore (when the call is workspace-scoped)
+    /// and timestamps the call only after the lock is held: queueing behind
+    /// another call must not consume this call's timeout budget.
+    fn with_workspace_lock<T>(
+        &self,
+        request: &ProcessRequest,
+        f: impl FnOnce(&Self, Instant) -> T,
+    ) -> (T, Instant) {
+        match &request.workspace {
             Some(workspace) => {
                 let workspace_mutex = workspace_lock(workspace);
                 let _guard = lock(&workspace_mutex);
                 let started = Instant::now();
-                (self.run_locked(request, started), started)
+                (f(self, started), started)
             }
             None => {
                 let started = Instant::now();
-                (self.run_locked(request, started), started)
+                (f(self, started), started)
             }
-        };
+        }
+    }
+
+    /// Runs a short call. The workspace lock is held for the whole call, so a
+    /// refresh and a write on the same workspace never overlap.
+    pub fn run(&self, request: &ProcessRequest) -> Result<ProcessOutput, BridgeError> {
+        let (result, started) = self.with_workspace_lock(request, |runner, started| {
+            runner.run_locked(request, started)
+        });
 
         match result {
             Ok(output) => {
@@ -235,18 +248,11 @@ impl ProcessRunner {
     ) -> Result<ScannedOutput, BridgeError> {
         // A backfill is a short read: it joins the same workspace semaphore as
         // `run`, so it cannot overlap a write on that workspace.
-        let (result, started) = match &request.workspace {
-            Some(workspace) => {
-                let workspace_mutex = workspace_lock(workspace);
-                let _guard = lock(&workspace_mutex);
-                let started = Instant::now();
-                (self.run_scan_locked(request, bounds, started), started)
-            }
-            None => {
-                let started = Instant::now();
-                (self.run_scan_locked(request, bounds, started), started)
-            }
-        };
+        let (result, started) = self.with_workspace_lock(request, |runner, started| {
+            runner.run_scan_locked(request, bounds, started)
+        });
+        // `ScannedOutput.exit_code` is optional; do not fold this dispatch into
+        // `run`'s, which records a plain i32 exit code.
         match &result {
             Ok(output) => self.record(request, started, output.exit_code, None),
             Err(error) => self.record(request, started, None, Some(error.code)),
@@ -322,7 +328,7 @@ impl ProcessRunner {
             stdout,
             stderr: stderr_buffer,
             log: Arc::clone(&self.calls),
-            command: request.command.clone(),
+            command: request.label.clone(),
             argv_summary: argv_summary(&request.args),
             started,
             finished: false,
@@ -428,7 +434,7 @@ impl ProcessRunner {
         push_record(
             &self.calls,
             CallRecord {
-                command: request.command.clone(),
+                command: request.label.clone(),
                 argv_summary: argv_summary(&request.args),
                 duration: started.elapsed(),
                 exit_code,
@@ -883,11 +889,11 @@ fn timeout_error(request: &ProcessRequest) -> BridgeError {
         BridgeErrorCode::BdTimeout,
         format!(
             "bd {} timed out after {} ms",
-            request.command,
+            request.label,
             timeout.as_millis()
         ),
         [
-            ("command", Value::String(request.command.clone())),
+            ("command", Value::String(request.label.clone())),
             ("timeout_ms", Value::from(timeout.as_millis() as u64)),
         ],
     )

@@ -25,8 +25,8 @@ use ts_rs::TS;
 use self::error::version_unsupported;
 use self::parse::{journal_disabled, journal_truncated, parse_export, JournalStream};
 use self::process::{
-    FollowProcess, FollowStop, ProcessRequest, ProcessRunner, ScanBounds, ScanStop, READ_TIMEOUT,
-    VERSION_TIMEOUT, WRITE_TIMEOUT,
+    FollowProcess, FollowStop, ProcessOutput, ProcessRequest, ProcessRunner, ScanBounds, ScanStop,
+    READ_TIMEOUT, VERSION_TIMEOUT, WRITE_TIMEOUT,
 };
 use crate::util::lock;
 
@@ -76,14 +76,7 @@ impl BdBridge {
     pub fn version(&self) -> Result<BdVersion, BridgeError> {
         let mut request = ProcessRequest::global("version", vec![OsString::from("--version")]);
         request.timeout = VERSION_TIMEOUT;
-        let output = self.runner.run(&request)?;
-        if output.exit_code != 0 {
-            return Err(map_exit_with_output(
-                output.exit_code,
-                &output.stderr,
-                &output.stdout,
-            ));
-        }
+        let output = self.run_checked(&request)?;
         parse_bd_version(&output.stdout)
     }
 
@@ -93,14 +86,7 @@ impl BdBridge {
             vec![OsString::from("context"), OsString::from("--json")],
             READ_TIMEOUT,
         );
-        let output = self.runner.run(&request)?;
-        if output.exit_code != 0 {
-            return Err(map_exit_with_output(
-                output.exit_code,
-                &output.stderr,
-                &output.stdout,
-            ));
-        }
+        let output = self.run_checked(&request)?;
         serde_json::from_str(&output.stdout).map_err(|error| {
             BridgeError::new(
                 BridgeErrorCode::BdParseFailed,
@@ -111,14 +97,7 @@ impl BdBridge {
 
     pub fn export(&self) -> Result<Vec<Issue>, BridgeError> {
         let request = self.request("export", vec![OsString::from("export")], READ_TIMEOUT);
-        let output = self.runner.run(&request)?;
-        if output.exit_code != 0 {
-            return Err(map_exit_with_output(
-                output.exit_code,
-                &output.stderr,
-                &output.stdout,
-            ));
-        }
+        let output = self.run_checked(&request)?;
         parse_export(output.stdout.as_bytes())
     }
 
@@ -149,13 +128,7 @@ impl BdBridge {
             {
                 return Err(error);
             }
-            if output.exit_code != 0 {
-                return Err(map_exit_with_output(
-                    output.exit_code,
-                    &output.stderr,
-                    &output.stdout,
-                ));
-            }
+            require_success(output.exit_code, &output.stderr, &output.stdout)?;
             let mut stream = JournalStream::new();
             let records = stream.push(output.stdout.as_bytes())?;
             if stream.has_partial() {
@@ -197,11 +170,11 @@ impl BdBridge {
         {
             return Err(error);
         }
+        // `ScannedOutput.exit_code` is optional: a bounded scan may stop before
+        // the child exits, in which case there is no status to check.
         if let Some(code) = scanned.exit_code {
-            if code != 0 {
-                let stdout = String::from_utf8_lossy(&scanned.stdout);
-                return Err(map_exit_with_output(code, &stderr, &stdout));
-            }
+            let stdout = String::from_utf8_lossy(&scanned.stdout);
+            require_success(code, &stderr, &stdout)?;
         }
 
         let mut stream = JournalStream::new();
@@ -221,14 +194,7 @@ impl BdBridge {
         let mut request = self.request("write", argv.args, WRITE_TIMEOUT);
         request.stdin = argv.stdin;
 
-        let output = self.runner.run(&request)?;
-        if output.exit_code != 0 {
-            return Err(map_exit_with_output(
-                output.exit_code,
-                &output.stderr,
-                &output.stdout,
-            ));
-        }
+        let output = self.run_checked(&request)?;
 
         let created_id = match command {
             WriteCommand::Create(_) => {
@@ -264,14 +230,7 @@ impl BdBridge {
             ],
             READ_TIMEOUT,
         );
-        let output = self.runner.run(&request)?;
-        if output.exit_code != 0 {
-            return Err(map_exit_with_output(
-                output.exit_code,
-                &output.stderr,
-                &output.stdout,
-            ));
-        }
+        let output = self.run_checked(&request)?;
         Ok(output.stdout.trim().to_owned())
     }
 
@@ -280,11 +239,28 @@ impl BdBridge {
         self.runner.recent_calls()
     }
 
-    fn request(&self, command: &str, args: Vec<OsString>, timeout: Duration) -> ProcessRequest {
-        let mut request = ProcessRequest::new(command, self.workspace.clone(), args);
+    /// Runs a short call and applies the shared nonzero-exit check.
+    fn run_checked(&self, request: &ProcessRequest) -> Result<ProcessOutput, BridgeError> {
+        let output = self.runner.run(request)?;
+        require_success(output.exit_code, &output.stderr, &output.stdout)?;
+        Ok(output)
+    }
+
+    fn request(&self, label: &str, args: Vec<OsString>, timeout: Duration) -> ProcessRequest {
+        let mut request = ProcessRequest::new(label, self.workspace.clone(), args);
         request.timeout = timeout;
         request
     }
+}
+
+/// Maps a nonzero exit to the shared error contract. A bounded scan carries an
+/// optional exit code, so `journal_backfill` only calls this with the `Some`
+/// code it actually has.
+fn require_success(exit_code: i32, stderr: &str, stdout: &str) -> Result<(), BridgeError> {
+    if exit_code != 0 {
+        return Err(map_exit_with_output(exit_code, stderr, stdout));
+    }
+    Ok(())
 }
 
 /// A bounded journal backfill.
