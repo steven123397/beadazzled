@@ -21,7 +21,7 @@ use crate::workspace::discovery::{BdDiscovery, BdStatus};
 use crate::workspace::registry::{
     load, AddOutcome, AppConfig, Checkpoint, Language, Theme, WorkspaceEntry,
 };
-use crate::workspace::validate::validate_workspace;
+use crate::workspace::validate::{validate_workspace, ValidatedWorkspace};
 
 /// What the workspace UI needs in one call.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
@@ -124,7 +124,7 @@ impl WorkspaceService {
             state.config.bd_path = None;
             let discovery = std::sync::Arc::new(BdDiscovery::from_env(None));
             state.discovery = std::sync::Arc::clone(&discovery);
-            self.writer.queue(state.config.clone());
+            self.commit(&state);
             drop(state);
             return discovery.refresh(probe);
         };
@@ -147,7 +147,7 @@ impl WorkspaceService {
         // bd again for the cached read that follows this command.
         discovery.prime(status.clone());
         state.discovery = std::sync::Arc::clone(&discovery);
-        self.writer.queue(state.config.clone());
+        self.commit(&state);
         status
     }
 
@@ -166,8 +166,7 @@ impl WorkspaceService {
             let mut state = lock(&self.state);
             state.config.language = language;
             state.config.theme = theme;
-            self.writer.queue(state.config.clone());
-            state.config.clone()
+            self.commit(&state)
         };
         self.writer.flush().map_err(|error| {
             BridgeError::new(
@@ -179,11 +178,7 @@ impl WorkspaceService {
     }
 
     pub fn add_workspace(&self, directory: &str) -> Result<WorkspaceEntry, BridgeError> {
-        let bd_path = self.ready_bd_path()?;
-        if !Path::new(directory).is_dir() {
-            return Err(ws_inaccessible(directory));
-        }
-        let validated = validate_workspace(Path::new(&bd_path), Path::new(directory))?;
+        let (_, validated) = self.validate(directory)?;
         let now = now_iso();
         let entry = validated.into_entry(now.clone());
 
@@ -201,9 +196,8 @@ impl WorkspaceService {
         };
         let canonical = state.config.workspaces[index].path.clone();
         state.config.switch_workspace(&canonical, now);
-        let saved = state.config.clone();
         let result = state.config.workspaces[index].clone();
-        self.writer.queue(saved);
+        self.commit(&state);
         Ok(result)
     }
 
@@ -216,11 +210,7 @@ impl WorkspaceService {
                 .ok_or_else(|| not_registered(path))?;
             state.config.workspaces[index].path.clone()
         };
-        if !Path::new(&canonical).is_dir() {
-            return Err(ws_inaccessible(&canonical));
-        }
-        let bd_path = self.ready_bd_path()?;
-        let validated = validate_workspace(Path::new(&bd_path), Path::new(&canonical))?;
+        let (_, validated) = self.validate(&canonical)?;
 
         let mut state = lock(&self.state);
         let index = state
@@ -229,9 +219,8 @@ impl WorkspaceService {
             .ok_or_else(|| not_registered(&canonical))?;
         state.config.workspaces[index].apply_identity(&validated.project_id, validated.is_worktree);
         state.config.switch_workspace(&canonical, now_iso());
-        let saved = state.config.clone();
         let result = state.config.workspaces[index].clone();
-        self.writer.queue(saved);
+        self.commit(&state);
         Ok(result)
     }
 
@@ -240,8 +229,7 @@ impl WorkspaceService {
         if state.config.remove_workspace(path).is_none() {
             return false;
         }
-        let saved = state.config.clone();
-        self.writer.queue(saved);
+        self.commit(&state);
         true
     }
 
@@ -250,11 +238,7 @@ impl WorkspaceService {
         old_path: &str,
         new_path: &str,
     ) -> Result<WorkspaceEntry, BridgeError> {
-        let bd_path = self.ready_bd_path()?;
-        if !Path::new(new_path).is_dir() {
-            return Err(ws_inaccessible(new_path));
-        }
-        let validated = validate_workspace(Path::new(&bd_path), Path::new(new_path))?;
+        let (_, validated) = self.validate(new_path)?;
         let entry = validated.into_entry(now_iso());
 
         let mut state = lock(&self.state);
@@ -263,8 +247,7 @@ impl WorkspaceService {
             .relocate_workspace(old_path, entry)
             .ok_or_else(|| not_registered(old_path))?;
         let result = state.config.workspaces[index].clone();
-        let saved = state.config.clone();
-        self.writer.queue(saved);
+        self.commit(&state);
         Ok(result)
     }
 
@@ -278,8 +261,7 @@ impl WorkspaceService {
         if !state.config.set_checkpoint(path, checkpoint) {
             return false;
         }
-        let saved = state.config.clone();
-        self.writer.queue(saved);
+        self.commit(&state);
         true
     }
 
@@ -306,14 +288,36 @@ impl WorkspaceService {
         if !registered {
             return Err(not_registered(workspace));
         }
-        if !Path::new(workspace).is_dir() {
-            return Err(ws_inaccessible(workspace));
-        }
+        ensure_dir(workspace)?;
         BdBridge::new(bd_path, workspace).write(command)
     }
 
     pub fn flush(&self) -> std::io::Result<()> {
         self.writer.flush()
+    }
+
+    /// Queues the current config snapshot for persistence and returns it.
+    ///
+    /// Convention: call while the state lock is still held. The writer numbers
+    /// snapshots in queue order, so queueing after dropping the lock would let
+    /// a concurrent command store an older snapshot last. Returning the
+    /// snapshot lets `set_preferences` serve both the queue and its result from
+    /// the same clone.
+    fn commit(&self, state: &State) -> AppConfig {
+        let saved = state.config.clone();
+        self.writer.queue(saved.clone());
+        saved
+    }
+
+    /// Shared preflight for a workspace mutation: resolve bd, check the
+    /// directory and validate it, in the existing order so the surfaced error
+    /// code never changes. The bd path is returned for callers that build a
+    /// bridge from it.
+    fn validate(&self, path: &str) -> Result<(String, ValidatedWorkspace), BridgeError> {
+        let bd_path = self.ready_bd_path()?;
+        ensure_dir(path)?;
+        let validated = validate_workspace(Path::new(&bd_path), Path::new(path))?;
+        Ok((bd_path, validated))
     }
 
     pub(crate) fn ready_bd_path(&self) -> Result<String, BridgeError> {
@@ -322,6 +326,13 @@ impl WorkspaceService {
             status => Err(bd_status_error(&status)),
         }
     }
+}
+
+fn ensure_dir(path: &str) -> Result<(), BridgeError> {
+    if !Path::new(path).is_dir() {
+        return Err(ws_inaccessible(path));
+    }
+    Ok(())
 }
 
 // ---- Tauri commands -------------------------------------------------------

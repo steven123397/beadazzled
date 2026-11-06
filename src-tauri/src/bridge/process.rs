@@ -158,15 +158,16 @@ fn workspace_lock(workspace: &Path) -> Arc<Mutex<()>> {
 
 fn normalize_workspace(workspace: &Path) -> PathBuf {
     // Windows treats these as the same directory, but PathBuf equality does
-    // not: normalize before using the path as a mutex key.
+    // not: normalize before using the path as a mutex key. canonicalize adds
+    // the `\\?\` prefix; the shared core strips it and folds the case.
     let trimmed = workspace
         .to_string_lossy()
         .trim_end_matches(['\\', '/'])
         .to_owned();
     let canonical = std::fs::canonicalize(&trimmed).unwrap_or_else(|_| PathBuf::from(&trimmed));
-    let text = canonical.to_string_lossy();
-    let stripped = text.strip_prefix(r"\\?\").unwrap_or(&text);
-    PathBuf::from(stripped.to_lowercase())
+    PathBuf::from(crate::util::normalize_path_key(
+        &canonical.to_string_lossy(),
+    ))
 }
 
 /// Runs short bd calls serially per workspace and records diagnostics.

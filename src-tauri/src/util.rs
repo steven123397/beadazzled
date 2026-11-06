@@ -10,6 +10,20 @@ pub(crate) fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
         .unwrap_or_else(|poisoned| poisoned.into_inner())
 }
 
+/// Normalization core shared by registry keys and workspace-lock keys: drop
+/// the Win32 `\\?\` prefix `canonicalize` adds, then fold case on Windows.
+/// Each caller keeps its own separator trimming and canonicalization on
+/// purpose — the two keys must keep their distinct granularity, and trimming
+/// the canonical string again would change a drive-root key.
+pub(crate) fn normalize_path_key(text: &str) -> String {
+    let stripped = text.strip_prefix(r"\\?\").unwrap_or(text);
+    if cfg!(windows) {
+        stripped.to_lowercase()
+    } else {
+        stripped.to_owned()
+    }
+}
+
 fn unix_now() -> Duration {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)

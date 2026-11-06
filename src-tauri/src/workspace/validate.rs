@@ -6,8 +6,6 @@
 
 use std::path::Path;
 
-use serde_json::Value;
-
 use super::registry::{workspace_name, WorkspaceEntry};
 use crate::bridge::{BdBridge, BridgeError, WorkspaceContext};
 
@@ -50,19 +48,12 @@ pub fn validate_workspace(
 fn from_context(context: &WorkspaceContext, directory: &Path) -> ValidatedWorkspace {
     let repo_root = context
         .extra
-        .0
-        .get("repo_root")
-        .and_then(Value::as_str)
+        .get_str("repo_root")
         .map(str::trim)
         .filter(|root| !root.is_empty())
         .map(str::to_owned)
         .unwrap_or_else(|| directory.to_string_lossy().into_owned());
-    let is_worktree = context
-        .extra
-        .0
-        .get("is_worktree")
-        .and_then(Value::as_bool)
-        .unwrap_or(false);
+    let is_worktree = context.extra.get_bool("is_worktree").unwrap_or(false);
 
     ValidatedWorkspace {
         repo_root,
