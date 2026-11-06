@@ -3,6 +3,8 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
+import { UPDATER_PLATFORM } from '../../scripts/lib/release-meta.mjs';
+
 export const keyPair = generateKeyPairSync('ed25519');
 export const rawPublicKey = keyPair.publicKey.export({ format: 'der', type: 'spki' }).subarray(-32);
 export const keyId = randomBytes(8);
@@ -62,7 +64,7 @@ export function writeFixture(root, overrides = {}) {
       notes: 'Release notes',
       pub_date: '2026-11-04T00:00:00Z',
       platforms: {
-        'windows-x86_64': {
+        [UPDATER_PLATFORM]: {
           signature,
           url: `https://github.com/steven123397/beadazzled/releases/download/v${manifestVersion}/${installerName}`,
           ...(overrides.entrySha256 === undefined ? {} : { sha256: overrides.entrySha256 }),

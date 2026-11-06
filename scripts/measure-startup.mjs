@@ -25,17 +25,18 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { parseOptions, runMain } from './lib/cli.mjs';
-import { summarize } from './lib/startup-stats.mjs';
+import { sleep } from './lib/desktop-harness.mjs';
+import { DEFAULT_RELEASE_EXE_REL, releaseExe } from './lib/paths.mjs';
+import { round, summarize } from './lib/startup-stats.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const defaultExe = path.join(root, 'src-tauri/target/release/beadazzled.exe');
+const defaultExe = releaseExe(root);
 const budgets = { coldP95: 2000, warmP95: 800 };
 const TRACE_PREFIX = 'page-load-finished';
 // Inputs whose change makes an existing binary unrepresentative. `dist` is
 // included because `tauri build` copies it into the exe.
 const SOURCE_DIRECTORIES = ['src', 'src-tauri/src', 'dist'];
 const SOURCE_FILES = ['index.html', 'vite.config.ts', 'src-tauri/tauri.conf.json'];
-const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 function usage() {
   return [
@@ -43,7 +44,7 @@ function usage() {
     '',
     '  --runs <n>        cold launches to measure (default 20)',
     '  --warm-runs <n>   warm launches to measure (default 20)',
-    '  --exe <path>      application binary (default src-tauri/target/release/beadazzled.exe)',
+    `  --exe <path>      application binary (default ${DEFAULT_RELEASE_EXE_REL})`,
     '  --timeout <ms>    per-launch timeout (default 20000)',
     '  --no-build        fail instead of building a missing release binary',
     '  --json            print the machine-readable result instead of a report',
@@ -516,9 +517,6 @@ async function main() {
   }
 }
 
-function round(value) {
-  return Math.round(value * 10) / 10;
-}
 
 /**
  * Everything a reader must know before treating the numbers as a budget

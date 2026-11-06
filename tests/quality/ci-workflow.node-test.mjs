@@ -4,10 +4,12 @@ import path from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 
+import { readJson } from '../../scripts/lib/paths.mjs';
+
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const workflowPath = path.join(root, '.github', 'workflows', 'ci.yml');
 const workflow = readFileSync(workflowPath, 'utf8');
-const packageJson = JSON.parse(readFileSync(path.join(root, 'package.json'), 'utf8'));
+const packageJson = readJson(root, 'package.json');
 
 test('CI runs on pull requests and pushes to main on Windows', () => {
   assert.match(workflow, /^on:/m);

@@ -15,12 +15,12 @@ import { existsSync, readFileSync, statSync } from 'node:fs';
 import path from 'node:path';
 
 import { decodeSignature, verifyMinisign } from './lib/minisign.mjs';
-import { readReleaseVersions, readUpdaterPublicKey } from './lib/release-meta.mjs';
+import { UPDATER_PLATFORM, readReleaseMeta } from './lib/release-meta.mjs';
 import { parseOptions, runMain } from './lib/cli.mjs';
 import { projectRoot } from './lib/paths.mjs';
 
 const defaultRoot = projectRoot(import.meta.url);
-const PLATFORM = 'windows-x86_64';
+const PLATFORM = UPDATER_PLATFORM;
 
 function usage() {
   return [
@@ -78,19 +78,18 @@ function parseArgs(argv) {
   return options;
 }
 
-function readPublicKey(options) {
+function readPublicKey(options, configKey) {
   if (options.publicKey !== null) {
     return existsSync(options.publicKey)
       ? readFileSync(options.publicKey, 'utf8')
       : options.publicKey;
   }
-  const fromConfig = readUpdaterPublicKey(options.root);
-  if (fromConfig === null) {
+  if (configKey === null) {
     throw new Error(
       'no updater public key: set plugins.updater.pubkey in tauri.conf.json or pass --public-key'
     );
   }
-  return fromConfig;
+  return configKey;
 }
 
 function fail(errors) {
@@ -114,7 +113,7 @@ runMain('verify-release', () => {
     const installerName = path.basename(options.installer);
     const signatureFile = readFileSync(options.signature, 'utf8').trim();
     const manifest = JSON.parse(readFileSync(options.manifest, 'utf8'));
-    const versions = readReleaseVersions(options.root);
+    const { versions, publicKey: configKey } = readReleaseMeta(options.root);
     const manifestVersion = manifest.version;
 
     // Versions: the three sources and the manifest must agree.
@@ -151,7 +150,7 @@ runMain('verify-release', () => {
     let signatureOk = false;
     try {
       const result = verifyMinisign({
-        publicKey: readPublicKey(options),
+        publicKey: readPublicKey(options, configKey),
         signature: signatureFile,
         data: installerBytes,
       });

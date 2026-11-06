@@ -23,6 +23,7 @@
 import { parseOptions, runMain } from './lib/cli.mjs';
 import { resolvePort, withPreview } from './lib/prod-preview.mjs';
 import { installSeam, makeIssue, makeIssues } from './lib/seam.mjs';
+import { median } from './lib/startup-stats.mjs';
 
 // 60Hz ticks at 16.7ms: a p50 near one frame keeps 60fps, p95 allows one
 // extra frame, and max absorbs a single GC/compile pause.
@@ -106,11 +107,6 @@ function parseArgs(argv) {
       }
     },
   });
-}
-
-function median(values) {
-  const sorted = [...values].sort((left, right) => left - right);
-  return sorted[Math.floor(sorted.length / 2)] ?? 0;
 }
 
 /** A deterministic 1000-issue fixture close to a real workspace. */

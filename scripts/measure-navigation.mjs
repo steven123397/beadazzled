@@ -30,6 +30,7 @@
 import { parseOptions, runMain } from './lib/cli.mjs';
 import { resolvePort, withPreview } from './lib/prod-preview.mjs';
 import { installSeam, makeIssue, makeIssues } from './lib/seam.mjs';
+import { percentile, round } from './lib/startup-stats.mjs';
 
 const budgets = { openP95: 50, markdownFirstRenderP50: 100, markdownSteadyStateP50: 100 };
 const TS = '2026-11-01T00:00:00Z';
@@ -215,11 +216,6 @@ async function measureRun(browser, run, port) {
   }
 }
 
-function percentile(values, fraction) {
-  const sorted = [...values].sort((left, right) => left - right);
-  return sorted[Math.min(sorted.length - 1, Math.ceil(sorted.length * fraction) - 1)] ?? 0;
-}
-
 function summary(values) {
   return {
     count: values.length,
@@ -227,10 +223,6 @@ function summary(values) {
     p95: percentile(values, 0.95),
     max: Math.max(...values),
   };
-}
-
-function round(value) {
-  return Math.round(value * 10) / 10;
 }
 
 async function main() {

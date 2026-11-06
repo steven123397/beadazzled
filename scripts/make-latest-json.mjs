@@ -13,9 +13,10 @@ import path from 'node:path';
 
 import { parseOptions, runMain } from './lib/cli.mjs';
 import { projectRoot } from './lib/paths.mjs';
+import { UPDATER_PLATFORM, readReleaseVersions } from './lib/release-meta.mjs';
 
 const defaultRoot = projectRoot(import.meta.url);
-const PLATFORM = 'windows-x86_64';
+const PLATFORM = UPDATER_PLATFORM;
 
 function usage() {
   return [
@@ -45,9 +46,7 @@ function parseArgs(argv) {
   if (options.installer === null) {
     throw new Error('--installer is required');
   }
-  options.version ??= JSON.parse(
-    readFileSync(path.join(options.root, 'package.json'), 'utf8')
-  ).version;
+  options.version ??= readReleaseVersions(options.root)[0][1];
   return options;
 }
 

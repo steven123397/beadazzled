@@ -6,6 +6,7 @@ import path from 'node:path';
 import { afterEach, test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 
+import { UPDATER_PLATFORM } from '../../scripts/lib/release-meta.mjs';
 import { createTempRoots, writeFixture } from './release-fixtures.mjs';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
@@ -49,7 +50,10 @@ test('the platform sha256 in latest.json is checked against the installer', () =
   const result = run(badRoot, bad.installer);
 
   assert.equal(result.status, 1);
-  assert.match(result.stderr, /platforms\.windows-x86_64 sha256 does not match the installer/);
+  assert.match(
+    result.stderr,
+    new RegExp(`platforms\\.${UPDATER_PLATFORM} sha256 does not match the installer`)
+  );
 });
 
 test('tampered installer bytes fail the signature check', () => {
@@ -81,7 +85,7 @@ test('a manifest URL that names another file fails', () => {
   const { installer } = writeFixture(root);
   const manifestPath = path.join(path.dirname(installer), 'latest.json');
   const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
-  manifest.platforms['windows-x86_64'].url =
+  manifest.platforms[UPDATER_PLATFORM].url =
     'https://github.com/steven123397/beadazzled/releases/download/v0.1.0/other.exe';
   writeFileSync(manifestPath, JSON.stringify(manifest));
 
@@ -96,7 +100,7 @@ test('a signature that differs from the .sig file fails', () => {
   const { installer } = writeFixture(root);
   const manifestPath = path.join(path.dirname(installer), 'latest.json');
   const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
-  manifest.platforms['windows-x86_64'].signature = 'AAAA';
+  manifest.platforms[UPDATER_PLATFORM].signature = 'AAAA';
   writeFileSync(manifestPath, JSON.stringify(manifest));
 
   const result = run(root, installer);

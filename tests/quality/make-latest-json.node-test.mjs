@@ -5,6 +5,7 @@ import path from 'node:path';
 import { afterEach, test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 
+import { UPDATER_PLATFORM } from '../../scripts/lib/release-meta.mjs';
 import { createTempRoots, signatureBlob, writeInstaller, writeRepo } from './release-fixtures.mjs';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
@@ -30,7 +31,7 @@ test('the generated manifest passes verify-release', () => {
   const manifest = JSON.parse(readFileSync(path.join(dir, 'latest.json'), 'utf8'));
   assert.equal(manifest.version, '0.1.0');
   assert.equal(manifest.notes, 'First release');
-  assert.equal(manifest.platforms['windows-x86_64'].signature, signatureBlob(bytes));
+  assert.equal(manifest.platforms[UPDATER_PLATFORM].signature, signatureBlob(bytes));
 
   const verified = spawnSync(
     process.execPath,

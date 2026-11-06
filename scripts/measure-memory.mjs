@@ -24,6 +24,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { parseOptions, runMain } from './lib/cli.mjs';
+import { DEFAULT_RELEASE_EXE_REL, releaseExe } from './lib/paths.mjs';
+import { median } from './lib/startup-stats.mjs';
 
 import {
   connectWebView,
@@ -39,7 +41,7 @@ import {
 } from './lib/desktop-harness.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const defaultExe = path.join(root, 'src-tauri/target/release/beadazzled.exe');
+const defaultExe = releaseExe(root);
 // Budgets are recorded in ADR-0011. WebView2's process tree is ~430 MB before
 // any ticket is loaded on the reference machine; the data-growth budget is what
 // catches a regression in the app itself.
@@ -54,7 +56,7 @@ function usage() {
     '',
     '  --runs <n>     samples at the target size (default 5, median reported)',
     '  --issues <n>   fixture size (default 1000)',
-    '  --exe <path>   application binary (default src-tauri/target/release/beadazzled.exe)',
+    `  --exe <path>   application binary (default ${DEFAULT_RELEASE_EXE_REL})`,
     '  --port <n>     DevTools port for the WebView2 instance (default 1434)',
     '  --json         print the machine-readable result instead of a report',
     '  --keep         keep the temporary workspaces and profiles for inspection',
@@ -92,11 +94,6 @@ function parseArgs(argv) {
       }
     },
   });
-}
-
-function median(values) {
-  const sorted = [...values].sort((left, right) => left - right);
-  return sorted[Math.floor(sorted.length / 2)] ?? 0;
 }
 
 async function sampleFixture({ exe, base, port, count, prefix, runs }) {

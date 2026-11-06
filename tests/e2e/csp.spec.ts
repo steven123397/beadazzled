@@ -4,12 +4,12 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
+const tauriConfig = JSON.parse(readFileSync(path.join(root, 'src-tauri/tauri.conf.json'), 'utf8'));
 
 type CspDirectives = Record<string, string | string[]>;
 
 function productionCsp(): CspDirectives {
-  const config = JSON.parse(readFileSync(path.join(root, 'src-tauri/tauri.conf.json'), 'utf8'));
-  const csp = config.app?.security?.csp;
+  const csp = tauriConfig.app?.security?.csp;
 
   if (typeof csp === 'string') {
     return Object.fromEntries(
@@ -28,8 +28,7 @@ function productionCsp(): CspDirectives {
 }
 
 function devCsp(): CspDirectives {
-  const config = JSON.parse(readFileSync(path.join(root, 'src-tauri/tauri.conf.json'), 'utf8'));
-  return config.app?.security?.devCsp;
+  return tauriConfig.app?.security?.devCsp;
 }
 
 function policyString(directives: CspDirectives): string {

@@ -1,8 +1,19 @@
-import { statSync } from 'node:fs';
+import { readFileSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
+
+export const DEFAULT_RELEASE_EXE_REL = 'src-tauri/target/release/beadazzled.exe';
+
+export function releaseExe(root = REPO_ROOT) {
+  return path.join(root, DEFAULT_RELEASE_EXE_REL);
+}
+
+export function readJson(root, rel) {
+  const filePath = rel ? path.join(root, rel) : root;
+  return JSON.parse(readFileSync(filePath, 'utf8'));
+}
 
 export function projectRoot(importMetaUrl) {
   if (importMetaUrl) {
