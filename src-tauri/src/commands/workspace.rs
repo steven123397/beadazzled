@@ -210,6 +210,11 @@ impl WorkspaceService {
                 .ok_or_else(|| not_registered(path))?;
             state.config.workspaces[index].path.clone()
         };
+        // This caller checked the directory before resolving bd; the other
+        // mutation callers do it the other way round. Keep that order so a
+        // missing directory still surfaces WS_INACCESSIBLE when bd is also
+        // unavailable, instead of masking it behind a bd error.
+        ensure_dir(&canonical)?;
         let (_, validated) = self.validate(&canonical)?;
 
         let mut state = lock(&self.state);
@@ -309,10 +314,11 @@ impl WorkspaceService {
         saved
     }
 
-    /// Shared preflight for a workspace mutation: resolve bd, check the
-    /// directory and validate it, in the existing order so the surfaced error
-    /// code never changes. The bd path is returned for callers that build a
-    /// bridge from it.
+    /// Shared bd-first preflight for `add_workspace` / `relocate_workspace`:
+    /// resolve bd, check the directory, then validate it. `switch_workspace`
+    /// used the opposite order, so it runs `ensure_dir` before calling this;
+    /// that keeps every caller's surfaced error code unchanged. The bd path is
+    /// returned for callers that build a bridge from it.
     fn validate(&self, path: &str) -> Result<(String, ValidatedWorkspace), BridgeError> {
         let bd_path = self.ready_bd_path()?;
         ensure_dir(path)?;
