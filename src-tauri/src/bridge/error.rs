@@ -11,6 +11,39 @@ use ts_rs::TS;
 
 use crate::bridge::types::ExtraFields;
 
+/// Wire detail keys shared by error constructors and readers across modules.
+/// Only the identifiers are centralised; the strings on the wire do not change.
+pub(crate) mod detail_keys {
+    pub const FOUND: &str = "found";
+    pub const MIN: &str = "min";
+    pub const SEARCHED: &str = "searched";
+    pub const FLOOR: &str = "floor";
+    pub const HEAD: &str = "head";
+    pub const SINCE: &str = "since";
+}
+
+/// Builds a detail map from key/value pairs. Equivalent to inserting each key
+/// by hand, with the wire shape unchanged.
+pub(crate) fn fields<const N: usize>(pairs: [(&str, Value); N]) -> Map<String, Value> {
+    pairs
+        .into_iter()
+        .map(|(key, value)| (key.to_owned(), value))
+        .collect()
+}
+
+/// The single constructor for an unsupported bd version. The version parser,
+/// discovery and the command layer all surface the same detail and text.
+pub(crate) fn version_unsupported(found: &str, min: &str) -> BridgeError {
+    BridgeError::with_fields(
+        BridgeErrorCode::BdVersionUnsupported,
+        format!("bd {found} is older than the required {min}"),
+        [
+            (detail_keys::FOUND, Value::String(found.to_owned())),
+            (detail_keys::MIN, Value::String(min.to_owned())),
+        ],
+    )
+}
+
 /// The 15 codes from `SPEC-bridge.md`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, TS)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
@@ -97,6 +130,15 @@ impl BridgeError {
     pub fn with_detail(mut self, detail: Map<String, Value>) -> Self {
         self.detail = Some(ExtraFields(detail));
         self
+    }
+
+    /// Constructs an error whose detail map is built from `pairs`.
+    pub(crate) fn with_fields<const N: usize>(
+        code: BridgeErrorCode,
+        message: impl Into<String>,
+        pairs: [(&str, Value); N],
+    ) -> Self {
+        Self::new(code, message).with_detail(fields(pairs))
     }
 }
 
@@ -238,8 +280,7 @@ fn stderr_excerpt(stderr: &str) -> String {
 }
 
 fn exit_detail(exit_code: i32, excerpt: &str) -> Map<String, Value> {
-    let mut detail = Map::new();
-    detail.insert("exit_code".to_owned(), json!(exit_code));
+    let mut detail = fields([("exit_code", json!(exit_code))]);
     if !excerpt.is_empty() {
         detail.insert("stderr".to_owned(), Value::String(excerpt.to_owned()));
     }

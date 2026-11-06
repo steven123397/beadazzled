@@ -9,6 +9,7 @@ use std::time::Duration;
 
 use super::follow::{Backoff, FollowOutcome};
 use super::state::{LoadingStep, SyncSink, SyncState};
+use crate::bridge::error::detail_keys;
 use crate::bridge::{BridgeError, BridgeErrorCode, Issue, JournalRecord};
 
 /// One-shot backfill cap; the rest of a large backlog arrives through follow.
@@ -480,8 +481,8 @@ enum Consume {
 
 fn truncation_bounds(error: &BridgeError) -> Option<(i64, i64)> {
     let detail = &error.detail.as_ref()?.0;
-    let floor = detail.get("floor")?.as_i64()?;
-    let head = detail.get("head")?.as_i64()?;
+    let floor = detail.get(detail_keys::FLOOR)?.as_i64()?;
+    let head = detail.get(detail_keys::HEAD)?.as_i64()?;
     Some((floor, head))
 }
 
@@ -491,7 +492,7 @@ mod tests {
     use crate::bridge::types::ExtraFields;
     use crate::bridge::{BridgeError, BridgeErrorCode, Issue, JournalRecord};
     use crate::sync::state::{LoadingStep, RecordingSink};
-    use serde_json::{Map, Value};
+    use serde_json::Value;
     use std::cell::{Cell, RefCell};
     use std::collections::VecDeque;
     use std::rc::Rc;
@@ -553,14 +554,14 @@ mod tests {
     }
 
     fn truncated(floor: i64, head: i64) -> BridgeError {
-        let mut detail = Map::new();
-        detail.insert("floor".to_owned(), Value::from(floor));
-        detail.insert("head".to_owned(), Value::from(head));
-        BridgeError::new(
+        BridgeError::with_fields(
             BridgeErrorCode::JournalTruncated,
             "the events journal was pruned",
+            [
+                (detail_keys::FLOOR, Value::from(floor)),
+                (detail_keys::HEAD, Value::from(head)),
+            ],
         )
-        .with_detail(detail)
     }
 
     fn failed() -> BridgeError {

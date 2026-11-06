@@ -878,56 +878,44 @@ fn build_output(
 
 fn timeout_error(request: &ProcessRequest) -> BridgeError {
     let timeout = request.timeout;
-    let mut detail = serde_json::Map::new();
-    detail.insert("command".to_owned(), Value::String(request.command.clone()));
-    detail.insert(
-        "timeout_ms".to_owned(),
-        Value::from(timeout.as_millis() as u64),
-    );
-
-    BridgeError::new(
+    BridgeError::with_fields(
         BridgeErrorCode::BdTimeout,
         format!(
             "bd {} timed out after {} ms",
             request.command,
             timeout.as_millis()
         ),
+        [
+            ("command", Value::String(request.command.clone())),
+            ("timeout_ms", Value::from(timeout.as_millis() as u64)),
+        ],
     )
-    .with_detail(detail)
 }
 
 fn partial_stdout_error(stdout_bytes: usize, stderr_bytes: usize) -> BridgeError {
-    let mut detail = serde_json::Map::new();
-    detail.insert("stdout_bytes".to_owned(), Value::from(stdout_bytes as u64));
-    detail.insert("stderr_bytes".to_owned(), Value::from(stderr_bytes as u64));
-
-    BridgeError::new(
+    BridgeError::with_fields(
         BridgeErrorCode::BdParseFailed,
         "bd exited while stdout was still open; output may be truncated",
+        [
+            ("stdout_bytes", Value::from(stdout_bytes as u64)),
+            ("stderr_bytes", Value::from(stderr_bytes as u64)),
+        ],
     )
-    .with_detail(detail)
 }
 
 fn output_too_large(limits: OutputLimits, total: usize) -> BridgeError {
-    let mut detail = serde_json::Map::new();
-    detail.insert("limit_bytes".to_owned(), Value::from(limits.total as u64));
-    detail.insert(
-        "line_limit_bytes".to_owned(),
-        Value::from(limits.line as u64),
-    );
-    detail.insert("read_bytes".to_owned(), Value::from(total as u64));
-
-    BridgeError::new(
+    BridgeError::with_fields(
         BridgeErrorCode::BdOutputTooLarge,
         "bd produced more output than the bridge can capture",
+        [
+            ("limit_bytes", Value::from(limits.total as u64)),
+            ("line_limit_bytes", Value::from(limits.line as u64)),
+            ("read_bytes", Value::from(total as u64)),
+        ],
     )
-    .with_detail(detail)
 }
 
 fn spawn_error(path: &Path, error: io::Error) -> BridgeError {
-    let mut detail = serde_json::Map::new();
-    detail.insert("path".to_owned(), Value::String(path.display().to_string()));
-
     let raw = error.raw_os_error();
     let (code, message) = match error.kind() {
         io::ErrorKind::NotFound => (
@@ -950,7 +938,11 @@ fn spawn_error(path: &Path, error: io::Error) -> BridgeError {
         ),
     };
 
-    BridgeError::new(code, message).with_detail(detail)
+    BridgeError::with_fields(
+        code,
+        message,
+        [("path", Value::String(path.display().to_string()))],
+    )
 }
 
 fn internal_error(message: impl Into<String>) -> BridgeError {

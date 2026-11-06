@@ -20,9 +20,9 @@ use std::sync::Mutex;
 use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
-use serde_json::{Map, Value};
 use ts_rs::TS;
 
+use self::error::version_unsupported;
 use self::parse::{journal_disabled, journal_truncated, parse_export, JournalStream};
 use self::process::{
     FollowProcess, FollowStop, ProcessRequest, ProcessRunner, ScanBounds, ScanStop, READ_TIMEOUT,
@@ -38,7 +38,9 @@ pub use types::{
     WorkspaceContext,
 };
 
-const MIN_BD_VERSION: (u32, u32, u32) = (1, 3, 2);
+/// The minimum bd version the app supports (mirrors `SPEC-bridge`). The tuple
+/// is the single source; the display string is derived in `workspace::discovery`.
+pub const MIN_BD_VERSION: (u32, u32, u32) = (1, 3, 2);
 const JOURNAL_PREFIX_LIMIT: usize = 8 * 1024;
 
 /// The typed entry point for all bd access.
@@ -499,14 +501,7 @@ fn parse_bd_version(stdout: &str) -> Result<BdVersion, BridgeError> {
             "{}.{}.{}",
             MIN_BD_VERSION.0, MIN_BD_VERSION.1, MIN_BD_VERSION.2
         );
-        let mut detail = Map::new();
-        detail.insert("found".to_owned(), Value::String(token.to_owned()));
-        detail.insert("min".to_owned(), Value::String(min.clone()));
-        return Err(BridgeError::new(
-            BridgeErrorCode::BdVersionUnsupported,
-            format!("bd {token} is older than the required {min}"),
-        )
-        .with_detail(detail));
+        return Err(version_unsupported(token, &min));
     }
 
     Ok(version)

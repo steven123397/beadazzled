@@ -3,8 +3,9 @@
 //! `BD_JSON_ENVELOPE` is deliberately not used: it only wraps `bd show/list`,
 //! while `bd export` stays raw JSONL (SPEC-bridge, 解析规则).
 
-use serde_json::{json, Map, Value};
+use serde_json::{json, Value};
 
+use crate::bridge::error::{detail_keys, fields};
 use crate::bridge::types::{Issue, JournalRecord};
 use crate::bridge::{BridgeError, BridgeErrorCode};
 
@@ -228,35 +229,30 @@ fn truncation_from_line(line: &str) -> Option<BridgeError> {
     let floor = value.get("floor").and_then(Value::as_i64)?;
     let head = value.get("head").and_then(Value::as_i64)?;
 
-    let mut detail = Map::new();
-    detail.insert("since".to_owned(), json!(since));
-    detail.insert("floor".to_owned(), json!(floor));
-    detail.insert("head".to_owned(), json!(head));
-
-    Some(
-        BridgeError::new(
-            BridgeErrorCode::JournalTruncated,
-            "the events journal has been truncated; re-baseline from a full export",
-        )
-        .with_detail(detail),
-    )
+    Some(BridgeError::with_fields(
+        BridgeErrorCode::JournalTruncated,
+        "the events journal has been truncated; re-baseline from a full export",
+        [
+            (detail_keys::SINCE, json!(since)),
+            (detail_keys::FLOOR, json!(floor)),
+            (detail_keys::HEAD, json!(head)),
+        ],
+    ))
 }
 
 fn journal_line_too_large(bytes: usize, limit: usize) -> BridgeError {
-    let mut detail = Map::new();
-    detail.insert("line_bytes".to_owned(), json!(bytes));
-    detail.insert("line_limit_bytes".to_owned(), json!(limit));
-
-    BridgeError::new(
+    BridgeError::with_fields(
         BridgeErrorCode::BdOutputTooLarge,
         "bd journal line exceeded the capture limit",
+        [
+            ("line_bytes", json!(bytes)),
+            ("line_limit_bytes", json!(limit)),
+        ],
     )
-    .with_detail(detail)
 }
 
 fn parse_error(message: String, line: usize, source: Option<String>) -> BridgeError {
-    let mut detail = Map::new();
-    detail.insert("line".to_owned(), json!(line));
+    let mut detail = fields([("line", json!(line))]);
     if let Some(source) = source {
         detail.insert("source".to_owned(), Value::String(source));
     }
