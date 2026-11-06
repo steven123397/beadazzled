@@ -10,27 +10,23 @@
  *
  * Usage: node scripts/capture-ui.mjs [--out=docs/design/2026-11-03-list]
  */
-import { spawn, spawnSync } from 'node:child_process';
-import { existsSync } from 'node:fs';
-import { mkdir, rm } from 'node:fs/promises';
+import { mkdir } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { chromium } from '@playwright/test';
+import { runMain } from './lib/cli.mjs';
+import { resolvePort, withPreview } from './lib/prod-preview.mjs';
+import { installSeam } from './lib/seam.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const outDir = path.join(root, 'dist-e2e');
-const viteBin = path.join(root, 'node_modules', 'vite', 'bin', 'vite.js');
 const TS = '2026-11-01T00:00:00Z';
-const PORT = 1433;
+const PORT = resolvePort(process.env.CAPTURE_PORT, { envName: 'CAPTURE_PORT', defaultPort: 1433 });
 
 const outArg = process.argv.find((arg) => arg.startsWith('--out='));
 const shots = path.resolve(
   root,
   outArg?.slice('--out='.length) ?? 'docs/design/2026-11-02-foundation'
 );
-
-const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 function issue(id, overrides = {}) {
   return {
@@ -82,43 +78,6 @@ function fixture() {
   ];
 }
 
-function build() {
-  const env = Object.fromEntries(
-    Object.entries(process.env).filter(([key]) => !key.startsWith('VITE_'))
-  );
-  env.VITE_E2E = '1';
-  const result = spawnSync(process.execPath, [viteBin, 'build', '--outDir', 'dist-e2e'], {
-    cwd: root,
-    env,
-    stdio: 'inherit',
-  });
-  if (result.status !== 0) {
-    throw new Error(`production build failed (exit ${result.status ?? 'signal'})`);
-  }
-}
-
-async function serve() {
-  const child = spawn(
-    process.execPath,
-    [viteBin, 'preview', '--outDir', 'dist-e2e', '--port', String(PORT), '--strictPort'],
-    { cwd: root, stdio: 'ignore' }
-  );
-  const deadline = Date.now() + 15_000;
-  while (Date.now() < deadline) {
-    try {
-      const response = await fetch(`http://localhost:${PORT}/`);
-      if (response.ok) {
-        return child;
-      }
-    } catch {
-      // Not listening yet.
-    }
-    await sleep(150);
-  }
-  child.kill();
-  throw new Error(`preview server did not listen on ${PORT}`);
-}
-
 async function capture(
   browser,
   {
@@ -132,56 +91,23 @@ async function capture(
     collapseSidebar = false,
     openFilter,
     waitFor = '[data-testid="list-view"][data-state="ready"], article',
-  }
+  },
+  port = PORT
 ) {
   const page = await browser.newPage({
     viewport: { width, height },
     colorScheme: theme,
   });
   try {
-    await page.addInitScript(
-      ({ records, mode }) => {
-        const workspace = {
-          path: '/repo/p1',
-          name: 'alpha',
-          projectId: 'p1',
-          isWorktree: false,
-          lastOpenedAt: '2026-11-01T00:00:00Z',
-          checkpoint: null,
-        };
-        window.__TAURI_INTERNALS__ = {
-          invoke: async (command) => {
-            if (command === 'workspace_snapshot') {
-              return {
-                config: {
-                  schemaVersion: 1,
-                  bdPath: null,
-                  language: 'en',
-                  theme: mode,
-                  lastWorkspacePath: null,
-                  workspaces: [workspace],
-                },
-                missing: [],
-                active: workspace.path,
-                corruptBackup: null,
-              };
-            }
-            if (command === 'bd_status') {
-              return { kind: 'ready', path: 'bd', version: '1.3.2' };
-            }
-            throw new Error(`unexpected command: ${command}`);
-          },
-        };
-        window.__BEADAZZLED_E2E__ = {
-          issues: records,
-          syncState: { kind: 'healthy', lastSeq: 1, lastEventAt: null },
-          theme: mode,
-        };
-      },
-      { records: fixture(), mode: theme }
-    );
+    await installSeam(page, {
+      projectId: 'p1',
+      workspaceName: 'alpha',
+      issues: fixture(),
+      theme,
+      recordInvokeLog: false,
+    });
 
-    await page.goto(`http://localhost:${PORT}/#${route}`);
+    await page.goto(`http://localhost:${port}/#${route}`);
     await page.waitForSelector(waitFor, {
       state: 'visible',
       timeout: 15_000,
@@ -210,18 +136,9 @@ async function capture(
 }
 
 async function main() {
-  if (!existsSync(viteBin)) {
-    throw new Error(`vite not found at ${viteBin}; run npm install first`);
-  }
   await mkdir(shots, { recursive: true });
-  await rm(outDir, { recursive: true, force: true });
-  build();
 
-  let server;
-  let browser;
-  try {
-    server = await serve();
-    browser = await chromium.launch();
+  await withPreview({ port: PORT, envName: 'CAPTURE_PORT' }, async ({ browser }) => {
     const shotsToTake = [
       { theme: 'light', name: 'list', route: '/w/p1/list' },
       { theme: 'dark', name: 'list', route: '/w/p1/list' },
@@ -271,17 +188,10 @@ async function main() {
       { theme: 'light', name: 'settings', route: '/settings', waitFor: '#settings-title' },
     ];
     for (const shot of shotsToTake) {
-      await capture(browser, shot);
+      await capture(browser, shot, PORT);
     }
     console.log(`screenshots written to ${path.relative(root, shots)}`);
-  } finally {
-    await browser?.close();
-    server?.kill();
-    await rm(outDir, { recursive: true, force: true });
-  }
+  });
 }
 
-main().catch((error) => {
-  console.error(`capture-ui failed: ${error.message}`);
-  process.exitCode = 1;
-});
+runMain('capture-ui failed', main);

@@ -20,19 +20,10 @@
  *
  * Usage: npm run measure:scroll -- [--runs=5] [--view=list|board] [--json]
  */
-import { spawn, spawnSync } from 'node:child_process';
-import { existsSync } from 'node:fs';
-import { rm } from 'node:fs/promises';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
-
-import { chromium } from '@playwright/test';
-
 import { parseOptions, runMain } from './lib/cli.mjs';
+import { resolvePort, withPreview } from './lib/prod-preview.mjs';
+import { installSeam } from './lib/seam.mjs';
 
-const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const outDir = path.join(root, 'dist-e2e');
-const viteBin = path.join(root, 'node_modules', 'vite', 'bin', 'vite.js');
 // 60Hz ticks at 16.7ms: a p50 near one frame keeps 60fps, p95 allows one
 // extra frame, and max absorbs a single GC/compile pause.
 const budgets = { p50: 18, p95: 22, max: 50 };
@@ -88,20 +79,6 @@ const boardScenarios = [
     minDistance: 3_000,
   },
 ];
-let port = 1431;
-
-function resolvePort(raw) {
-  if (raw === undefined || raw === '') {
-    return 1431;
-  }
-  const value = Number(raw);
-  if (!Number.isInteger(value) || value < 1024 || value > 65535) {
-    throw new Error('SCROLL_PORT must be an integer between 1024 and 65535');
-  }
-  return value;
-}
-
-const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 function parseArgs(argv) {
   return parseOptions(argv, {
@@ -175,107 +152,14 @@ function issues() {
   }));
 }
 
-function build() {
-  // Do not bake unrelated VITE_* values from the developer shell into the
-  // benchmark bundle; only the seam flag is intentional.
-  const env = Object.fromEntries(
-    Object.entries(process.env).filter(([key]) => !key.startsWith('VITE_'))
-  );
-  env.VITE_E2E = '1';
-  const result = spawnSync(process.execPath, [viteBin, 'build', '--outDir', 'dist-e2e'], {
-    cwd: root,
-    env,
-    stdio: 'inherit',
-  });
-  if (result.status !== 0) {
-    throw new Error(`production build failed (exit ${result.status ?? 'signal'})`);
-  }
-}
-
-async function serve() {
-  // Fail before spawning if something else already answers on the port; a
-  // later 200 from a foreign server must never be mistaken for our preview.
-  try {
-    await fetch(`http://localhost:${port}/`, { signal: AbortSignal.timeout(500) });
-    throw new Error(`port ${port} is already serving; set SCROLL_PORT to a free port`);
-  } catch (error) {
-    if (error instanceof Error && error.message.includes('already serving')) {
-      throw error;
-    }
-    // Nothing listening: expected.
-  }
-
-  const child = spawn(
-    process.execPath,
-    [viteBin, 'preview', '--outDir', 'dist-e2e', '--port', String(port), '--strictPort'],
-    { cwd: root, stdio: 'ignore' }
-  );
-
-  const deadline = Date.now() + 15_000;
-  while (Date.now() < deadline) {
-    // A foreign service on this port would answer the probe; --strictPort
-    // makes our own preview exit in that case. Detect that first.
-    if (child.exitCode !== null) {
-      throw new Error(`preview server exited with code ${child.exitCode}`);
-    }
-    try {
-      const response = await fetch(`http://localhost:${port}/`);
-      if (response.ok) {
-        return child;
-      }
-    } catch {
-      // Not listening yet.
-    }
-    await sleep(150);
-  }
-
-  child.kill();
-  throw new Error(`preview server did not listen on ${port}`);
-}
-
-async function measureRun(browser, scenario, run) {
+async function measureRun(browser, scenario, run, port) {
   const page = await browser.newPage();
   try {
-    await page.addInitScript(
-      ({ projectId, tickets }) => {
-        const workspace = {
-          path: `/repo/${projectId}`,
-          name: 'alpha',
-          projectId,
-          isWorktree: false,
-          lastOpenedAt: '2026-11-01T00:00:00Z',
-          checkpoint: null,
-        };
-        const snapshot = {
-          config: {
-            schemaVersion: 1,
-            bdPath: null,
-            language: 'en',
-            theme: 'system',
-            lastWorkspacePath: null,
-            workspaces: [workspace],
-          },
-          missing: [],
-          active: workspace.path,
-          corruptBackup: null,
-        };
-
-        window.__invokeLog = [];
-        window.__TAURI_INTERNALS__ = {
-          invoke: async (command) => {
-            window.__invokeLog.push(command);
-            if (command === 'workspace_snapshot') return snapshot;
-            if (command === 'bd_status') return { kind: 'ready', path: 'bd', version: '1.3.2' };
-            throw new Error(`unexpected command: ${command}`);
-          },
-        };
-        window.__BEADAZZLED_E2E__ = {
-          issues: tickets,
-          syncState: { kind: 'healthy', lastSeq: 1, lastEventAt: null },
-        };
-      },
-      { projectId: 'p1', tickets: issues() }
-    );
+    await installSeam(page, {
+      projectId: 'p1',
+      workspaceName: 'alpha',
+      issues: issues(),
+    });
 
     const isBoard = scenario.view === 'board';
     const selector = isBoard
@@ -340,25 +224,15 @@ async function measureRun(browser, scenario, run) {
 
 async function main() {
   const options = parseArgs(process.argv.slice(2));
-  port = resolvePort(process.env.SCROLL_PORT);
-  if (!existsSync(viteBin)) {
-    throw new Error(`vite not found at ${viteBin}; run npm install first`);
-  }
+  const port = resolvePort(process.env.SCROLL_PORT, { envName: 'SCROLL_PORT', defaultPort: 1431 });
 
-  await rm(outDir, { recursive: true, force: true });
-  build();
-
-  let server;
-  let browser;
-  try {
-    server = await serve();
-    browser = await chromium.launch();
+  await withPreview({ port, envName: 'SCROLL_PORT' }, async ({ browser }) => {
     const results = [];
     const selected = options.view === 'board' ? boardScenarios : scenarios;
     for (const scenario of selected) {
       const runs = [];
       for (let run = 1; run <= options.runs; run += 1) {
-        runs.push(await measureRun(browser, scenario, run));
+        runs.push(await measureRun(browser, scenario, run, port));
       }
       const summary = {
         scenario: scenario.name,
@@ -431,11 +305,7 @@ async function main() {
     }
 
     process.exitCode = passed ? 0 : 1;
-  } finally {
-    await browser?.close();
-    server?.kill();
-    await rm(outDir, { recursive: true, force: true });
-  }
+  });
 }
 
 runMain('measure:scroll failed', main);

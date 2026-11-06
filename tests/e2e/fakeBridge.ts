@@ -1,4 +1,11 @@
 import type { Page } from '@playwright/test';
+import {
+  COMMANDS,
+  INVOKE_LOG,
+  TAURI_INTERNALS,
+  BEADAZZLED_E2E,
+  makeWorkspaceSnapshot,
+} from '../../scripts/lib/seam.mjs';
 
 export type FakeBridgeOptions = {
   projectId?: string;
@@ -60,80 +67,52 @@ export async function installFakeBridge(
     bdStatus,
   } = options;
 
+  const snapshot = makeWorkspaceSnapshot({
+    projectId,
+    name,
+    theme: theme ?? 'system',
+    language: language ?? 'en',
+    active,
+    extraWorkspaces: workspaces,
+  });
+
   await page.addInitScript(
     ({
-      projectId: id,
-      name: workspaceName,
+      id,
+      snapshot,
       issues: tickets,
       syncState: sync,
       theme: pref,
       language: lang,
-      active,
-      extraWorkspaces,
       picked,
       bd,
+      INVOKE_LOG: logKey,
+      TAURI_INTERNALS: tauriKey,
+      BEADAZZLED_E2E: e2eKey,
+      COMMANDS: cmds,
     }) => {
-      const path = `/repo/${id}`;
-      const workspace = {
-        path,
-        name: workspaceName,
-        projectId: id,
-        isWorktree: false,
-        lastOpenedAt: '2026-11-01T00:00:00Z',
-        checkpoint: null,
-      };
-      const entryFor = (candidate: {
-        path: string;
-        name: string;
-        projectId: string;
-        isWorktree?: boolean;
-      }) => ({
-        path: candidate.path,
-        name: candidate.name,
-        projectId: candidate.projectId,
-        isWorktree: candidate.isWorktree ?? false,
-        lastOpenedAt: '2026-11-01T00:00:00Z',
-        checkpoint: null,
-      });
-      const registered = active
-        ? [workspace, ...extraWorkspaces.map(entryFor)]
-        : extraWorkspaces.map(entryFor);
+      const registered = snapshot.config.workspaces;
       // Picking a directory that is already registered switches to it.
       const entryAt = (value: string) => registered.find((item) => item.path === value);
-      const snapshot = {
-        config: {
-          schemaVersion: 1,
-          bdPath: null as string | null,
-          // The registry is the source of truth for language/theme, so the
-          // options have to live here as well as on the e2e seam.
-          language: lang ?? 'en',
-          theme: pref ?? 'system',
-          lastWorkspacePath: null,
-          workspaces: registered,
-        },
-        missing: [],
-        active: active ? path : null,
-        corruptBackup: null,
-      };
 
       const log: string[] = [];
       // `bd_set_path` replaces what later cached reads resolve to.
       let currentBd = bd;
-      (window as unknown as { __invokeLog: string[] }).__invokeLog = log;
-      (window as unknown as { __TAURI_INTERNALS__: unknown }).__TAURI_INTERNALS__ = {
+      (window as unknown as Record<string, unknown>)[logKey] = log;
+      (window as unknown as Record<string, unknown>)[tauriKey] = {
         invoke: async (command: string, args?: Record<string, unknown>) => {
           // Distinguish a cached read from an actual probe: only `refresh`
           // spawns bd in the real backend.
           log.push(
-            command === 'bd_status' && args?.refresh === true ? 'bd_status:refresh' : command
+            command === cmds.BD_STATUS && args?.refresh === true ? 'bd_status:refresh' : command
           );
-          if (command === 'workspace_snapshot') {
+          if (command === cmds.WORKSPACE_SNAPSHOT) {
             return snapshot;
           }
-          if (command === 'bd_status') {
+          if (command === cmds.BD_STATUS) {
             return currentBd;
           }
-          if (command === 'bd_set_path') {
+          if (command === cmds.BD_SET_PATH) {
             const next = args?.path;
             if (typeof next === 'string' && next.trim() !== '') {
               snapshot.config.bdPath = next;
@@ -144,13 +123,13 @@ export async function installFakeBridge(
             }
             return currentBd;
           }
-          if (command === 'app_set_preferences') {
+          if (command === cmds.APP_SET_PREFERENCES) {
             return snapshot.config;
           }
-          if (command === 'plugin:app|version') {
+          if (command === cmds.PLUGIN_APP_VERSION) {
             return '0.1.0';
           }
-          if (command === 'settings_diagnostics') {
+          if (command === cmds.SETTINGS_DIAGNOSTICS) {
             return {
               bd: { kind: 'ready', path: 'bd', version: '1.3.2' },
               workspace: snapshot.active,
@@ -174,10 +153,10 @@ export async function installFakeBridge(
               ],
             };
           }
-          if (command === 'plugin:dialog|open') {
+          if (command === cmds.PLUGIN_DIALOG_OPEN) {
             return picked;
           }
-          if (command === 'workspace_add') {
+          if (command === cmds.WORKSPACE_ADD) {
             const requested = String(args?.path ?? '');
             const existing = entryAt(requested);
             if (existing !== undefined) {
@@ -198,7 +177,7 @@ export async function installFakeBridge(
             snapshot.active = added.path;
             return added;
           }
-          if (command === 'workspace_switch') {
+          if (command === cmds.WORKSPACE_SWITCH) {
             const target = entryAt(String(args?.path ?? ''));
             if (target === undefined) {
               throw { code: 'WS_INACCESSIBLE', message: 'workspace is not registered' };
@@ -206,7 +185,7 @@ export async function installFakeBridge(
             snapshot.active = target.path;
             return target;
           }
-          if (command === 'workspace_remove') {
+          if (command === cmds.WORKSPACE_REMOVE) {
             const target = String(args?.path ?? '');
             const index = registered.findIndex((item) => item.path === target);
             if (index >= 0) {
@@ -217,7 +196,7 @@ export async function installFakeBridge(
             }
             return true;
           }
-          if (command === 'workspace_relocate') {
+          if (command === cmds.WORKSPACE_RELOCATE) {
             const from = String(args?.oldPath ?? '');
             const to = String(args?.newPath ?? '');
             const target = entryAt(from);
@@ -233,7 +212,7 @@ export async function installFakeBridge(
           throw new Error(`unexpected command: ${command}`);
         },
       };
-      (window as unknown as { __BEADAZZLED_E2E__: unknown }).__BEADAZZLED_E2E__ = {
+      (window as unknown as Record<string, unknown>)[e2eKey] = {
         issues: tickets,
         syncState: sync,
         theme: pref,
@@ -241,27 +220,32 @@ export async function installFakeBridge(
       };
     },
     {
-      projectId,
-      name,
+      id: projectId,
+      snapshot,
       issues,
       syncState,
       theme,
       language,
-      active,
-      extraWorkspaces: workspaces,
       picked: dialogPath,
       bd: bdStatus ?? { kind: 'ready', path: 'bd', version: '1.3.2' },
+      INVOKE_LOG,
+      TAURI_INTERNALS,
+      BEADAZZLED_E2E,
+      COMMANDS,
     }
   );
 }
 
 /** Commands recorded since the page loaded (or since the last reset). */
 export function invokeLog(page: Page): Promise<string[]> {
-  return page.evaluate(() => (window as unknown as { __invokeLog: string[] }).__invokeLog);
+  return page.evaluate(
+    (key) => (window as unknown as Record<string, string[]>)[key],
+    INVOKE_LOG
+  );
 }
 
 export async function clearInvokeLog(page: Page): Promise<void> {
-  await page.evaluate(() => {
-    (window as unknown as { __invokeLog: string[] }).__invokeLog.length = 0;
-  });
+  await page.evaluate((key) => {
+    (window as unknown as Record<string, string[]>)[key].length = 0;
+  }, INVOKE_LOG);
 }

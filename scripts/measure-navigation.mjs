@@ -27,36 +27,13 @@
  *
  * Usage: npm run measure:navigation -- [--runs=5] [--json]
  */
-import { spawn, spawnSync } from 'node:child_process';
-import { existsSync } from 'node:fs';
-import { rm } from 'node:fs/promises';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
-
 import { parseOptions, runMain } from './lib/cli.mjs';
+import { resolvePort, withPreview } from './lib/prod-preview.mjs';
+import { installSeam } from './lib/seam.mjs';
 
-import { chromium } from '@playwright/test';
-
-const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const outDir = path.join(root, 'dist-e2e');
-const viteBin = path.join(root, 'node_modules', 'vite', 'bin', 'vite.js');
 const budgets = { openP95: 50, markdownFirstRenderP50: 100, markdownSteadyStateP50: 100 };
 const TS = '2026-11-01T00:00:00Z';
 const SENTINEL = '64KIB-SENTINEL';
-let port = 1432;
-
-const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-
-function resolvePort(raw) {
-  if (raw === undefined || raw === '') {
-    return 1432;
-  }
-  const value = Number(raw);
-  if (!Number.isInteger(value) || value < 1024 || value > 65535) {
-    throw new Error('NAV_PORT must be an integer between 1024 and 65535');
-  }
-  return value;
-}
 
 function parseArgs(argv) {
   return parseOptions(argv, {
@@ -138,56 +115,6 @@ function tickets() {
   return list;
 }
 
-function build() {
-  const env = Object.fromEntries(
-    Object.entries(process.env).filter(([key]) => !key.startsWith('VITE_'))
-  );
-  env.VITE_E2E = '1';
-  const result = spawnSync(process.execPath, [viteBin, 'build', '--outDir', 'dist-e2e'], {
-    cwd: root,
-    env,
-    stdio: 'inherit',
-  });
-  if (result.status !== 0) {
-    throw new Error(`production build failed (exit ${result.status ?? 'signal'})`);
-  }
-}
-
-async function serve() {
-  try {
-    await fetch(`http://localhost:${port}/`, { signal: AbortSignal.timeout(500) });
-    throw new Error(`port ${port} is already serving; set NAV_PORT to a free port`);
-  } catch (error) {
-    if (error instanceof Error && error.message.includes('already serving')) {
-      throw error;
-    }
-  }
-
-  const child = spawn(
-    process.execPath,
-    [viteBin, 'preview', '--outDir', 'dist-e2e', '--port', String(port), '--strictPort'],
-    { cwd: root, stdio: 'ignore' }
-  );
-
-  const deadline = Date.now() + 15_000;
-  while (Date.now() < deadline) {
-    if (child.exitCode !== null) {
-      throw new Error(`preview server exited with code ${child.exitCode}`);
-    }
-    try {
-      const response = await fetch(`http://localhost:${port}/`);
-      if (response.ok) {
-        return child;
-      }
-    } catch {
-      // Not listening yet.
-    }
-    await sleep(150);
-  }
-
-  child.kill();
-  throw new Error(`preview server did not listen on ${port}`);
-}
 
 async function waitForList(page) {
   await page.waitForSelector('[data-testid="list-view"][data-state="ready"]', {
@@ -252,48 +179,14 @@ async function openTicket(page, issueId, sentinel = null) {
   );
 }
 
-async function measureRun(browser, run) {
+async function measureRun(browser, run, port) {
   const page = await browser.newPage();
   try {
-    await page.addInitScript(
-      ({ projectId, workspaceName, records }) => {
-        const workspace = {
-          path: `/repo/${projectId}`,
-          name: workspaceName,
-          projectId,
-          isWorktree: false,
-          lastOpenedAt: '2026-11-01T00:00:00Z',
-          checkpoint: null,
-        };
-        const snapshot = {
-          config: {
-            schemaVersion: 1,
-            bdPath: null,
-            language: 'en',
-            theme: 'system',
-            lastWorkspacePath: null,
-            workspaces: [workspace],
-          },
-          missing: [],
-          active: workspace.path,
-          corruptBackup: null,
-        };
-        window.__invokeLog = [];
-        window.__TAURI_INTERNALS__ = {
-          invoke: async (command) => {
-            window.__invokeLog.push(command);
-            if (command === 'workspace_snapshot') return snapshot;
-            if (command === 'bd_status') return { kind: 'ready', path: 'bd', version: '1.3.2' };
-            throw new Error(`unexpected command: ${command}`);
-          },
-        };
-        window.__BEADAZZLED_E2E__ = {
-          issues: records,
-          syncState: { kind: 'healthy', lastSeq: 1, lastEventAt: null },
-        };
-      },
-      { projectId: 'p1', workspaceName: 'alpha', records: tickets() }
-    );
+    await installSeam(page, {
+      projectId: 'p1',
+      workspaceName: 'alpha',
+      issues: tickets(),
+    });
 
     await page.goto(`http://localhost:${port}/#/w/p1/list`);
     await waitForList(page);
@@ -351,22 +244,12 @@ function round(value) {
 
 async function main() {
   const options = parseArgs(process.argv.slice(2));
-  port = resolvePort(process.env.NAV_PORT);
-  if (!existsSync(viteBin)) {
-    throw new Error(`vite not found at ${viteBin}; run npm install first`);
-  }
+  const port = resolvePort(process.env.NAV_PORT, { envName: 'NAV_PORT', defaultPort: 1432 });
 
-  await rm(outDir, { recursive: true, force: true });
-  build();
-
-  let server;
-  let browser;
-  try {
-    server = await serve();
-    browser = await chromium.launch();
+  await withPreview({ port, envName: 'NAV_PORT' }, async ({ browser }) => {
     const runs = [];
     for (let run = 1; run <= options.runs; run += 1) {
-      runs.push(await measureRun(browser, run));
+      runs.push(await measureRun(browser, run, port));
     }
 
     const open = summary(runs.flatMap((entry) => entry.openSamples));
@@ -450,11 +333,7 @@ async function main() {
 
     // Over-budget numbers are warn-level (see CONSTRAINTS); a bd call is not.
     process.exitCode = result.passed ? 0 : 1;
-  } finally {
-    await browser?.close();
-    server?.kill();
-    await rm(outDir, { recursive: true, force: true });
-  }
+  });
 }
 
 runMain('measure:navigation failed', main);
