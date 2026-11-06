@@ -148,6 +148,54 @@ async function sampleFixture({ exe, base, port, count, prefix, runs }) {
   }
 }
 
+function summarizeMemory(options, baseline, target) {
+  const baselineBytes = median(baseline.samples.map((sample) => sample.processBytes));
+  const targetBytes = median(target.samples.map((sample) => sample.processBytes));
+  const growthBytes = targetBytes - baselineBytes;
+  const heapBytes = median(target.samples.map((sample) => sample.heapBytes));
+  const nodes = median(target.samples.map((sample) => sample.nodes));
+
+  const result = {
+    issues: options.issues,
+    rows: target.rows,
+    baseline: { issues: BASELINE_ISSUES, bytes: baselineBytes },
+    target: { bytes: targetBytes, heapBytes, nodes },
+    growthBytes,
+    budgets: { totalBytes: TOTAL_BUDGET_BYTES, growthBytes: GROWTH_BUDGET_BYTES },
+    runs: target.samples,
+    breakdown: target.breakdown,
+  };
+  result.passed = targetBytes <= TOTAL_BUDGET_BYTES && growthBytes <= GROWTH_BUDGET_BYTES;
+  return result;
+}
+
+function printReport(result) {
+  console.log(
+    `baseline (${result.baseline.issues} issue): ${(result.baseline.bytes / 1024 / 1024).toFixed(1)} MB`
+  );
+  console.log(
+    `${result.issues} issues: ${(result.target.bytes / 1024 / 1024).toFixed(1)} MB ` +
+      `(budget ${(TOTAL_BUDGET_BYTES / 1024 / 1024).toFixed(0)} MB), ` +
+      `JS heap ${(result.target.heapBytes / 1024 / 1024).toFixed(1)} MB, ${Math.round(result.target.nodes)} DOM nodes`
+  );
+  console.log(
+    `data growth: ${result.growthBytes >= 0 ? '+' : ''}${(result.growthBytes / 1024 / 1024).toFixed(1)} MB ` +
+      `(budget +${(GROWTH_BUDGET_BYTES / 1024 / 1024).toFixed(0)} MB) — ` +
+      `${result.passed ? 'PASS' : 'OVER'}`
+  );
+  const byType = new Map();
+  for (const entry of result.breakdown) {
+    byType.set(entry.type, (byType.get(entry.type) ?? 0) + entry.bytes);
+  }
+  console.log(
+    'breakdown: ' +
+      [...byType.entries()]
+        .sort((left, right) => right[1] - left[1])
+        .map(([type, bytes]) => `${type} ${(bytes / 1024 / 1024).toFixed(1)} MB`)
+        .join(' · ')
+  );
+}
+
 async function main() {
   const options = parseArgs(process.argv.slice(2));
   if (!existsSync(options.exe)) {
@@ -173,51 +221,12 @@ async function main() {
       runs: options.runs,
     });
 
-    const baselineBytes = median(baseline.samples.map((sample) => sample.processBytes));
-    const targetBytes = median(target.samples.map((sample) => sample.processBytes));
-    const growthBytes = targetBytes - baselineBytes;
-    const heapBytes = median(target.samples.map((sample) => sample.heapBytes));
-    const nodes = median(target.samples.map((sample) => sample.nodes));
-
-    const result = {
-      issues: options.issues,
-      rows: target.rows,
-      baseline: { issues: BASELINE_ISSUES, bytes: baselineBytes },
-      target: { bytes: targetBytes, heapBytes, nodes },
-      growthBytes,
-      budgets: { totalBytes: TOTAL_BUDGET_BYTES, growthBytes: GROWTH_BUDGET_BYTES },
-      runs: target.samples,
-      breakdown: target.breakdown,
-    };
-    result.passed = targetBytes <= TOTAL_BUDGET_BYTES && growthBytes <= GROWTH_BUDGET_BYTES;
+    const result = summarizeMemory(options, baseline, target);
 
     if (options.json) {
       console.log(JSON.stringify(result, null, 2));
     } else {
-      console.log(
-        `baseline (${BASELINE_ISSUES} issue): ${(baselineBytes / 1024 / 1024).toFixed(1)} MB`
-      );
-      console.log(
-        `${options.issues} issues: ${(targetBytes / 1024 / 1024).toFixed(1)} MB ` +
-          `(budget ${(TOTAL_BUDGET_BYTES / 1024 / 1024).toFixed(0)} MB), ` +
-          `JS heap ${(heapBytes / 1024 / 1024).toFixed(1)} MB, ${Math.round(nodes)} DOM nodes`
-      );
-      console.log(
-        `data growth: ${growthBytes >= 0 ? '+' : ''}${(growthBytes / 1024 / 1024).toFixed(1)} MB ` +
-          `(budget +${(GROWTH_BUDGET_BYTES / 1024 / 1024).toFixed(0)} MB) — ` +
-          `${result.passed ? 'PASS' : 'OVER'}`
-      );
-      const byType = new Map();
-      for (const entry of target.breakdown) {
-        byType.set(entry.type, (byType.get(entry.type) ?? 0) + entry.bytes);
-      }
-      console.log(
-        'breakdown: ' +
-          [...byType.entries()]
-            .sort((left, right) => right[1] - left[1])
-            .map(([type, bytes]) => `${type} ${(bytes / 1024 / 1024).toFixed(1)} MB`)
-            .join(' · ')
-      );
+      printReport(result);
     }
     process.exitCode = result.passed ? 0 : 1;
   } finally {

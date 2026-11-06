@@ -40,14 +40,7 @@ function usage() {
 function parseArgs(argv) {
   const options = parseOptions(argv, {
     flags: ['--json'],
-    values: [
-      '--installer',
-      '--signature',
-      '--manifest',
-      '--public-key',
-      '--sha256',
-      '--root',
-    ],
+    values: ['--installer', '--signature', '--manifest', '--public-key', '--sha256', '--root'],
     usage,
     defaults: {
       installer: null,
@@ -101,6 +94,92 @@ function fail(errors) {
   process.exitCode = 1;
 }
 
+function checkVersions(versions, manifestVersion, installerName, errors) {
+  for (const [source, version] of versions) {
+    if (version !== manifestVersion) {
+      errors.push(`${source} is ${version}, latest.json is ${manifestVersion}`);
+    }
+  }
+  if (!installerName.includes(manifestVersion)) {
+    errors.push(`installer ${installerName} does not name version ${manifestVersion}`);
+  }
+}
+
+function checkManifest(entry, installerName, signatureFile, errors) {
+  if (entry === undefined) {
+    errors.push(`latest.json has no platforms.${PLATFORM} entry`);
+  } else {
+    let urlName = '';
+    try {
+      urlName = decodeURIComponent(new URL(entry.url).pathname.split('/').pop() ?? '');
+    } catch {
+      errors.push(`latest.json url is not a URL: ${entry.url}`);
+    }
+    if (urlName !== installerName) {
+      errors.push(`latest.json url names ${urlName || '(none)'}, not ${installerName}`);
+    }
+    if (typeof entry.signature !== 'string' || entry.signature.trim() !== signatureFile) {
+      errors.push('latest.json signature does not match the .sig file');
+    }
+  }
+}
+
+function checkSignature(options, configKey, signatureFile, installerBytes, errors) {
+  let keyId = null;
+  let signatureOk = false;
+  try {
+    const result = verifyMinisign({
+      publicKey: readPublicKey(options, configKey),
+      signature: signatureFile,
+      data: installerBytes,
+    });
+    signatureOk = result.ok;
+    if (!result.ok) {
+      errors.push(result.reason);
+    }
+    keyId = decodeSignature(signatureFile).keyId.toString('hex');
+  } catch (error) {
+    errors.push(`signature check failed: ${error.message}`);
+  }
+  return { signatureOk, keyId };
+}
+
+function checkHash(installerBytes, optionsSha256, manifest, entry, errors) {
+  const sha256 = createHash('sha256').update(installerBytes).digest('hex');
+  if (optionsSha256 !== null && optionsSha256 !== sha256) {
+    errors.push(`SHA-256 is ${sha256}, expected ${optionsSha256}`);
+  }
+  // make-latest-json records the hash per platform; older manifests may carry
+  // it at the top level. Either one must match when present.
+  for (const [where, recorded] of [
+    ['latest.json', manifest.sha256],
+    [`latest.json platforms.${PLATFORM}`, entry?.sha256],
+  ]) {
+    if (typeof recorded === 'string' && recorded.toLowerCase() !== sha256) {
+      errors.push(`${where} sha256 does not match the installer`);
+    }
+  }
+  return sha256;
+}
+
+function printJson(summary, errors) {
+  console.log(JSON.stringify(summary, null, 2));
+  for (const error of errors) {
+    console.error(`verify-release: ${error}`);
+  }
+}
+
+function printPassReport(summary) {
+  console.log('verify-release: PASS');
+  console.log(
+    `  version    ${summary.version} (package.json, Cargo.toml, tauri.conf.json, latest.json)`
+  );
+  console.log(`  artifact   ${summary.installer} (${summary.bytes.toLocaleString('en-US')} bytes)`);
+  console.log(`  sha256     ${summary.sha256}`);
+  console.log(`  signature  OK (key id ${summary.signature.keyId})`);
+  console.log(`  manifest   ${PLATFORM} -> ${summary.url}`);
+}
+
 runMain('verify-release', () => {
   const options = parseArgs(process.argv.slice(2));
   const errors = [];
@@ -110,107 +189,45 @@ runMain('verify-release', () => {
   );
   if (missing.length > 0) {
     fail(missing.map((file) => `missing ${file}`));
-  } else {
-    const installerBytes = readFileSync(options.installer);
-    const installerName = path.basename(options.installer);
-    const signatureFile = readFileSync(options.signature, 'utf8').trim();
-    const manifest = JSON.parse(readFileSync(options.manifest, 'utf8'));
-    const { versions, publicKey: configKey } = readReleaseMeta(options.root);
-    const manifestVersion = manifest.version;
-
-    // Versions: the three sources and the manifest must agree.
-    for (const [source, version] of versions) {
-      if (version !== manifestVersion) {
-        errors.push(`${source} is ${version}, latest.json is ${manifestVersion}`);
-      }
-    }
-    if (!installerName.includes(manifestVersion)) {
-      errors.push(`installer ${installerName} does not name version ${manifestVersion}`);
-    }
-
-    // Manifest: the platform entry must describe this exact file and signature.
-    const entry = manifest.platforms?.[PLATFORM];
-    if (entry === undefined) {
-      errors.push(`latest.json has no platforms.${PLATFORM} entry`);
-    } else {
-      let urlName = '';
-      try {
-        urlName = decodeURIComponent(new URL(entry.url).pathname.split('/').pop() ?? '');
-      } catch {
-        errors.push(`latest.json url is not a URL: ${entry.url}`);
-      }
-      if (urlName !== installerName) {
-        errors.push(`latest.json url names ${urlName || '(none)'}, not ${installerName}`);
-      }
-      if (typeof entry.signature !== 'string' || entry.signature.trim() !== signatureFile) {
-        errors.push('latest.json signature does not match the .sig file');
-      }
-    }
-
-    // Signature: verify the bytes with the embedded public key.
-    let keyId = null;
-    let signatureOk = false;
-    try {
-      const result = verifyMinisign({
-        publicKey: readPublicKey(options, configKey),
-        signature: signatureFile,
-        data: installerBytes,
-      });
-      signatureOk = result.ok;
-      if (!result.ok) {
-        errors.push(result.reason);
-      }
-      keyId = decodeSignature(signatureFile).keyId.toString('hex');
-    } catch (error) {
-      errors.push(`signature check failed: ${error.message}`);
-    }
-
-    // Bytes: hash the installer and compare with whatever we were given.
-    const sha256 = createHash('sha256').update(installerBytes).digest('hex');
-    if (options.sha256 !== null && options.sha256 !== sha256) {
-      errors.push(`SHA-256 is ${sha256}, expected ${options.sha256}`);
-    }
-    // make-latest-json records the hash per platform; older manifests may carry
-    // it at the top level. Either one must match when present.
-    for (const [where, recorded] of [
-      ['latest.json', manifest.sha256],
-      [`latest.json platforms.${PLATFORM}`, entry?.sha256],
-    ]) {
-      if (typeof recorded === 'string' && recorded.toLowerCase() !== sha256) {
-        errors.push(`${where} sha256 does not match the installer`);
-      }
-    }
-
-    const summary = {
-      passed: errors.length === 0,
-      version: manifestVersion,
-      installer: installerName,
-      bytes: installerBytes.length,
-      sha256,
-      signature: { verified: signatureOk, keyId },
-      url: entry?.url ?? null,
-      errors,
-    };
-
-    if (options.json) {
-      console.log(JSON.stringify(summary, null, 2));
-      for (const error of errors) {
-        console.error(`verify-release: ${error}`);
-      }
-    } else if (summary.passed) {
-      console.log('verify-release: PASS');
-      console.log(
-        `  version    ${summary.version} (package.json, Cargo.toml, tauri.conf.json, latest.json)`
-      );
-      console.log(
-        `  artifact   ${summary.installer} (${summary.bytes.toLocaleString('en-US')} bytes)`
-      );
-      console.log(`  sha256     ${summary.sha256}`);
-      console.log(`  signature  OK (key id ${summary.signature.keyId})`);
-      console.log(`  manifest   ${PLATFORM} -> ${summary.url}`);
-    } else {
-      fail(errors);
-    }
-    process.exitCode = summary.passed ? 0 : 1;
+    return;
   }
+
+  const installerBytes = readFileSync(options.installer);
+  const installerName = path.basename(options.installer);
+  const signatureFile = readFileSync(options.signature, 'utf8').trim();
+  const manifest = JSON.parse(readFileSync(options.manifest, 'utf8'));
+  const { versions, publicKey: configKey } = readReleaseMeta(options.root);
+  const manifestVersion = manifest.version;
+  const entry = manifest.platforms?.[PLATFORM];
+
+  checkVersions(versions, manifestVersion, installerName, errors);
+  checkManifest(entry, installerName, signatureFile, errors);
+  const { signatureOk, keyId } = checkSignature(
+    options,
+    configKey,
+    signatureFile,
+    installerBytes,
+    errors
+  );
+  const sha256 = checkHash(installerBytes, options.sha256, manifest, entry, errors);
+
+  const summary = {
+    passed: errors.length === 0,
+    version: manifestVersion,
+    installer: installerName,
+    bytes: installerBytes.length,
+    sha256,
+    signature: { verified: signatureOk, keyId },
+    url: entry?.url ?? null,
+    errors,
+  };
+
+  if (options.json) {
+    printJson(summary, errors);
+  } else if (summary.passed) {
+    printPassReport(summary);
+  } else {
+    fail(errors);
+  }
+  process.exitCode = summary.passed ? 0 : 1;
 });

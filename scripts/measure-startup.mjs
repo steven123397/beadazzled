@@ -396,7 +396,7 @@ async function removeProfile(profile) {
   console.warn(`could not remove ${profile}; it will be left in the temp directory`);
 }
 
-async function runBatch(label, count, options, profileFactory, traceDir) {
+async function runBatch(label, count, options, profileFactory, traceDir, disposeProfile = false) {
   const samples = [];
 
   for (let index = 0; index < count; index += 1) {
@@ -415,7 +415,7 @@ async function runBatch(label, count, options, profileFactory, traceDir) {
       }
     } finally {
       await sleep(350);
-      if (label === 'cold') {
+      if (disposeProfile) {
         await removeProfile(profile);
       }
     }
@@ -465,7 +465,7 @@ async function main() {
     const cold =
       options.runs === 0
         ? null
-        : await runBatch('cold', options.runs, options, async () => freshProfile(), traceDir);
+        : await runBatch('cold', options.runs, options, async () => freshProfile(), traceDir, true);
 
     // Prime one profile so warm runs start from the same WebView2 state a user
     // has after the app has opened at least once.
@@ -482,7 +482,14 @@ async function main() {
         if (!options.json) {
           console.log(`warm-up run: ${Math.round(priming.elapsedMs)}ms (not counted)`);
         }
-        warm = await runBatch('warm', options.warmRuns, options, async () => warmProfile, traceDir);
+        warm = await runBatch(
+          'warm',
+          options.warmRuns,
+          options,
+          async () => warmProfile,
+          traceDir,
+          false
+        );
       }
 
       const coldSummary = cold === null ? null : summarize(cold);
@@ -522,7 +529,6 @@ async function main() {
   }
 }
 
-
 /**
  * Everything a reader must know before treating the numbers as a budget
  * measurement. Warnings are informational: startup budgets are warn-level.
@@ -561,10 +567,10 @@ function printReport(result) {
   console.log(`probe: ${result.probe}`);
   console.log(`p95: ${result.p95Method}`);
   if (result.cold !== null) {
-    console.log(describe('cold', result.cold, budgets.coldP95));
+    console.log(formatBudgetLine('cold', result.cold, budgets.coldP95));
   }
   if (result.warm !== null) {
-    console.log(describe('warm', result.warm, budgets.warmP95));
+    console.log(formatBudgetLine('warm', result.warm, budgets.warmP95));
   }
   console.log('');
   console.log(`git: ${result.freshness.gitHead ?? 'unknown'}`);
@@ -588,7 +594,7 @@ function printReport(result) {
   }
 }
 
-function describe(label, summary, budget) {
+function formatBudgetLine(label, summary, budget) {
   return (
     `${label}: n=${summary.count} p50=${Math.round(summary.p50)}ms ` +
     `p95=${Math.round(summary.p95)}ms min=${Math.round(summary.min)}ms ` +

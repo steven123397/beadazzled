@@ -107,7 +107,6 @@ function tickets() {
 
 const TICKETS = tickets();
 
-
 async function waitForList(page) {
   await page.waitForSelector('[data-testid="list-view"][data-state="ready"]', {
     state: 'visible',
@@ -225,6 +224,85 @@ function summary(values) {
   };
 }
 
+function summarizeNavigation(runs) {
+  const open = summary(runs.flatMap((entry) => entry.openSamples));
+  const steadyState = summary(runs.flatMap((entry) => entry.markdownSamples));
+  const firstRender = summary(runs.map((entry) => entry.coldMarkdown));
+  const ipcCalls = runs.flatMap((entry) => entry.ipcCalls);
+  const verdict = {
+    open: open.p95 <= budgets.openP95 ? 'PASS' : 'OVER',
+    firstRender: firstRender.p50 <= budgets.markdownFirstRenderP50 ? 'PASS' : 'OVER',
+    steadyState: steadyState.p50 <= budgets.markdownSteadyStateP50 ? 'PASS' : 'OVER',
+  };
+  return {
+    measuredAt: new Date().toISOString(),
+    fixture: { issues: 1000, markdownBytes: 64 * 1024 },
+    method: 'click -> first animation frame after the detail content is painted',
+    budgets,
+    criteria: {
+      open: 'P95 of opening a ticket from the list',
+      firstRender: 'P50 of the first 64 KiB render in a fresh page (AC10)',
+      steadyState: 'P50 of reopening the 64 KiB body after its warm-up (reference)',
+    },
+    runs: runs.map((entry) => ({
+      run: entry.run,
+      open: entry.openSamples.map(round),
+      firstRender: round(entry.coldMarkdown),
+      steadyState: entry.markdownSamples.map(round),
+    })),
+    open: { ...open, p50: round(open.p50), p95: round(open.p95), max: round(open.max) },
+    firstRender: {
+      ...firstRender,
+      p50: round(firstRender.p50),
+      p95: round(firstRender.p95),
+      max: round(firstRender.max),
+    },
+    steadyState: {
+      ...steadyState,
+      p50: round(steadyState.p50),
+      p95: round(steadyState.p95),
+      max: round(steadyState.max),
+    },
+    verdict,
+    ipcCalls,
+    passed: ipcCalls.length === 0,
+  };
+}
+
+function printReport(result) {
+  console.log('detail navigation (production bundle, 1000 issues)\n');
+  for (const run of result.runs) {
+    console.log(
+      `  run ${run.run}: open ${run.open.map((value) => value.toFixed(1)).join(', ')}ms; ` +
+        `64 KiB first render ${run.firstRender.toFixed(1)}ms, ` +
+        `steady state ${run.steadyState.map((value) => value.toFixed(1)).join(', ')}ms`
+    );
+  }
+  console.log(
+    `  open: n=${result.open.count} p50=${result.open.p50.toFixed(1)}ms ` +
+      `p95=${result.open.p95.toFixed(1)}ms max=${result.open.max.toFixed(
+        1
+      )}ms budget=${budgets.openP95}ms (p95) ${result.verdict.open}`
+  );
+  console.log(
+    `  64 KiB first render (AC10): n=${result.firstRender.count} p50=${result.firstRender.p50.toFixed(
+      1
+    )}ms p95=${result.firstRender.p95.toFixed(1)}ms max=${result.firstRender.max.toFixed(
+      1
+    )}ms budget=${budgets.markdownFirstRenderP50}ms (p50) ${result.verdict.firstRender}`
+  );
+  console.log(
+    `  64 KiB steady state: n=${result.steadyState.count} p50=${result.steadyState.p50.toFixed(
+      1
+    )}ms p95=${result.steadyState.p95.toFixed(1)}ms max=${result.steadyState.max.toFixed(
+      1
+    )}ms budget=${budgets.markdownSteadyStateP50}ms (p50, reference) ${result.verdict.steadyState}`
+  );
+  console.log(
+    `  bd calls while opening: ${result.ipcCalls.length === 0 ? '0 (PASS)' : result.ipcCalls.join(', ')}`
+  );
+}
+
 async function main() {
   const options = parseArgs(process.argv.slice(2));
   const port = resolvePort(process.env.NAV_PORT, { envName: 'NAV_PORT', defaultPort: 1432 });
@@ -235,83 +313,12 @@ async function main() {
       runs.push(await measureRun(browser, run, port));
     }
 
-    const open = summary(runs.flatMap((entry) => entry.openSamples));
-    const steadyState = summary(runs.flatMap((entry) => entry.markdownSamples));
-    const firstRender = summary(runs.map((entry) => entry.coldMarkdown));
-    const ipcCalls = runs.flatMap((entry) => entry.ipcCalls);
-    const verdict = {
-      open: open.p95 <= budgets.openP95 ? 'PASS' : 'OVER',
-      firstRender: firstRender.p50 <= budgets.markdownFirstRenderP50 ? 'PASS' : 'OVER',
-      steadyState: steadyState.p50 <= budgets.markdownSteadyStateP50 ? 'PASS' : 'OVER',
-    };
-    const result = {
-      measuredAt: new Date().toISOString(),
-      fixture: { issues: 1000, markdownBytes: 64 * 1024 },
-      method: 'click -> first animation frame after the detail content is painted',
-      budgets,
-      criteria: {
-        open: 'P95 of opening a ticket from the list',
-        firstRender: 'P50 of the first 64 KiB render in a fresh page (AC10)',
-        steadyState: 'P50 of reopening the 64 KiB body after its warm-up (reference)',
-      },
-      runs: runs.map((entry) => ({
-        run: entry.run,
-        open: entry.openSamples.map(round),
-        firstRender: round(entry.coldMarkdown),
-        steadyState: entry.markdownSamples.map(round),
-      })),
-      open: { ...open, p50: round(open.p50), p95: round(open.p95), max: round(open.max) },
-      firstRender: {
-        ...firstRender,
-        p50: round(firstRender.p50),
-        p95: round(firstRender.p95),
-        max: round(firstRender.max),
-      },
-      steadyState: {
-        ...steadyState,
-        p50: round(steadyState.p50),
-        p95: round(steadyState.p95),
-        max: round(steadyState.max),
-      },
-      verdict,
-      ipcCalls,
-      passed: ipcCalls.length === 0,
-    };
+    const result = summarizeNavigation(runs);
 
     if (options.json) {
       console.log(JSON.stringify(result, null, 2));
     } else {
-      console.log('detail navigation (production bundle, 1000 issues)\n');
-      for (const run of result.runs) {
-        console.log(
-          `  run ${run.run}: open ${run.open.map((value) => value.toFixed(1)).join(', ')}ms; ` +
-            `64 KiB first render ${run.firstRender.toFixed(1)}ms, ` +
-            `steady state ${run.steadyState.map((value) => value.toFixed(1)).join(', ')}ms`
-        );
-      }
-      console.log(
-        `  open: n=${open.count} p50=${result.open.p50.toFixed(1)}ms ` +
-          `p95=${result.open.p95.toFixed(1)}ms max=${result.open.max.toFixed(
-            1
-          )}ms budget=${budgets.openP95}ms (p95) ${verdict.open}`
-      );
-      console.log(
-        `  64 KiB first render (AC10): n=${firstRender.count} p50=${result.firstRender.p50.toFixed(
-          1
-        )}ms p95=${result.firstRender.p95.toFixed(1)}ms max=${result.firstRender.max.toFixed(
-          1
-        )}ms budget=${budgets.markdownFirstRenderP50}ms (p50) ${verdict.firstRender}`
-      );
-      console.log(
-        `  64 KiB steady state: n=${steadyState.count} p50=${result.steadyState.p50.toFixed(
-          1
-        )}ms p95=${result.steadyState.p95.toFixed(1)}ms max=${result.steadyState.max.toFixed(
-          1
-        )}ms budget=${budgets.markdownSteadyStateP50}ms (p50, reference) ${verdict.steadyState}`
-      );
-      console.log(
-        `  bd calls while opening: ${ipcCalls.length === 0 ? '0 (PASS)' : ipcCalls.join(', ')}`
-      );
+      printReport(result);
     }
 
     // Over-budget numbers are warn-level (see CONSTRAINTS); a bd call is not.

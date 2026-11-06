@@ -217,6 +217,73 @@ async function measureRun(browser, scenario, run, port) {
   }
 }
 
+function summarizeScenario(scenario, runs) {
+  const summary = {
+    scenario: scenario.name,
+    view: scenario.view ?? 'list',
+    delta: scenario.delta,
+    steps: scenario.steps,
+    group: scenario.group ?? null,
+    column: scenario.column ?? null,
+    from: scenario.from,
+    runs,
+    distance: runs[0]?.distance ?? 0,
+    minDistance: scenario.minDistance,
+    // A scenario that claims to cover the tail has to actually arrive
+    // there, or the distance gate alone can pass in the middle of a group.
+    reachedBottom:
+      scenario.reachBottom !== true ||
+      runs.every((entry) => entry.maxScroll - entry.endScroll <= 1),
+    median: {
+      p50: median(runs.map((entry) => entry.p50)),
+      p95: median(runs.map((entry) => entry.p95)),
+    },
+    // Median-of-runs hides a single long GC or compile pause; gate the
+    // worst frame actually observed as well.
+    worstMax: Math.max(...runs.map((entry) => entry.max)),
+  };
+  summary.passed =
+    summary.median.p50 < budgets.p50 &&
+    summary.median.p95 < budgets.p95 &&
+    summary.worstMax < budgets.max &&
+    summary.distance >= summary.minDistance &&
+    summary.reachedBottom;
+  return summary;
+}
+
+function printReport(results, passed) {
+  console.log('scroll frame pacing (production bundle, 1000 issues)\n');
+  for (const result of results) {
+    console.log(
+      `  ${result.scenario}: ${result.delta}px/frame, ${
+        result.view === 'board' ? `column=${result.column}` : `group=${result.group}`
+      }, ${result.steps} frames, from ${result.from}px`
+    );
+    console.log('  run    p50      p95      max');
+    for (const entry of result.runs) {
+      console.log(
+        `  ${String(entry.run).padStart(3)}  ${entry.p50.toFixed(1).padStart(6)}ms  ${entry.p95
+          .toFixed(1)
+          .padStart(6)}ms  ${entry.max.toFixed(1).padStart(6)}ms`
+      );
+    }
+    console.log(
+      `  median p50 ${result.median.p50.toFixed(1)}ms, p95 ${result.median.p95.toFixed(
+        1
+      )}ms; worst max ${result.worstMax.toFixed(
+        1
+      )}ms; travelled ${result.distance}px (min ${result.minDistance}px)${
+        result.reachedBottom ? '' : '; stopped short of the tail'
+      } — ${result.passed ? 'PASS' : 'FAIL'}\n`
+    );
+  }
+  console.log(
+    `  budget p50 < ${budgets.p50}ms, p95 < ${budgets.p95}ms, max < ${budgets.max}ms — ${
+      passed ? 'PASS' : 'FAIL'
+    }`
+  );
+}
+
 async function main() {
   const options = parseArgs(process.argv.slice(2));
   const port = resolvePort(process.env.SCROLL_PORT, { envName: 'SCROLL_PORT', defaultPort: 1431 });
@@ -229,37 +296,7 @@ async function main() {
       for (let run = 1; run <= options.runs; run += 1) {
         runs.push(await measureRun(browser, scenario, run, port));
       }
-      const summary = {
-        scenario: scenario.name,
-        view: scenario.view ?? 'list',
-        delta: scenario.delta,
-        steps: scenario.steps,
-        group: scenario.group ?? null,
-        column: scenario.column ?? null,
-        from: scenario.from,
-        runs,
-        distance: runs[0]?.distance ?? 0,
-        minDistance: scenario.minDistance,
-        // A scenario that claims to cover the tail has to actually arrive
-        // there, or the distance gate alone can pass in the middle of a group.
-        reachedBottom:
-          scenario.reachBottom !== true ||
-          runs.every((entry) => entry.maxScroll - entry.endScroll <= 1),
-        median: {
-          p50: median(runs.map((entry) => entry.p50)),
-          p95: median(runs.map((entry) => entry.p95)),
-        },
-        // Median-of-runs hides a single long GC or compile pause; gate the
-        // worst frame actually observed as well.
-        worstMax: Math.max(...runs.map((entry) => entry.max)),
-      };
-      summary.passed =
-        summary.median.p50 < budgets.p50 &&
-        summary.median.p95 < budgets.p95 &&
-        summary.worstMax < budgets.max &&
-        summary.distance >= summary.minDistance &&
-        summary.reachedBottom;
-      results.push(summary);
+      results.push(summarizeScenario(scenario, runs));
     }
 
     const passed = results.every((result) => result.passed);
@@ -267,36 +304,7 @@ async function main() {
     if (options.json) {
       console.log(JSON.stringify({ scenarios: results, budgets, passed }));
     } else {
-      console.log('scroll frame pacing (production bundle, 1000 issues)\n');
-      for (const result of results) {
-        console.log(
-          `  ${result.scenario}: ${result.delta}px/frame, ${
-            result.view === 'board' ? `column=${result.column}` : `group=${result.group}`
-          }, ${result.steps} frames, from ${result.from}px`
-        );
-        console.log('  run    p50      p95      max');
-        for (const entry of result.runs) {
-          console.log(
-            `  ${String(entry.run).padStart(3)}  ${entry.p50.toFixed(1).padStart(6)}ms  ${entry.p95
-              .toFixed(1)
-              .padStart(6)}ms  ${entry.max.toFixed(1).padStart(6)}ms`
-          );
-        }
-        console.log(
-          `  median p50 ${result.median.p50.toFixed(1)}ms, p95 ${result.median.p95.toFixed(
-            1
-          )}ms; worst max ${result.worstMax.toFixed(
-            1
-          )}ms; travelled ${result.distance}px (min ${result.minDistance}px)${
-            result.reachedBottom ? '' : '; stopped short of the tail'
-          } — ${result.passed ? 'PASS' : 'FAIL'}\n`
-        );
-      }
-      console.log(
-        `  budget p50 < ${budgets.p50}ms, p95 < ${budgets.p95}ms, max < ${budgets.max}ms — ${
-          passed ? 'PASS' : 'FAIL'
-        }`
-      );
+      printReport(results, passed);
     }
 
     process.exitCode = passed ? 0 : 1;
