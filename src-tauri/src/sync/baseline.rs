@@ -240,13 +240,7 @@ impl<S: SyncSource> SyncEngine<S> {
                         return self.unavailable(sink, &error);
                     }
                     self.backoff.reset();
-                    self.set_state(
-                        sink,
-                        SyncState::Healthy {
-                            last_seq: self.last_seq,
-                            last_event_at: self.last_event_at.clone(),
-                        },
-                    );
+                    self.set_state(sink, self.healthy_state());
                     return BaselineOutcome::Healthy { applied };
                 }
                 Err(error) => match self.baseline_failure(
@@ -294,6 +288,8 @@ impl<S: SyncSource> SyncEngine<S> {
                         recovered: false,
                     });
                 }
+                // The retry/abandon strategy is baseline-only: reseed the
+                // cursor at the floor and report the rebuild as recovered.
                 *retried = true;
                 self.last_seq = floor - 1;
                 *journal_since = floor - 1;
@@ -306,11 +302,13 @@ impl<S: SyncSource> SyncEngine<S> {
                 );
                 FailureAction::Retry
             }
-            BridgeErrorCode::JournalDisabled => {
-                self.set_state(sink, SyncState::JournalDisabled);
-                FailureAction::Done(BaselineOutcome::JournalDisabled)
+            _ => {
+                if let Some(state @ SyncState::JournalDisabled) = self.terminal_state(error) {
+                    self.set_state(sink, state);
+                    return FailureAction::Done(BaselineOutcome::JournalDisabled);
+                }
+                FailureAction::Done(self.unavailable(sink, error))
             }
-            _ => FailureAction::Done(self.unavailable(sink, error)),
         }
     }
 
@@ -348,13 +346,7 @@ impl<S: SyncSource> SyncEngine<S> {
                             got: gap.got,
                         });
                     }
-                    self.set_state(
-                        sink,
-                        SyncState::Healthy {
-                            last_seq: self.last_seq,
-                            last_event_at: self.last_event_at.clone(),
-                        },
-                    );
+                    self.set_state(sink, self.healthy_state());
                 }
                 Err(error) => {
                     if let Some(outcome) = self.follow_terminal(sink, &error) {
@@ -371,26 +363,50 @@ impl<S: SyncSource> SyncEngine<S> {
         sink: &mut K,
         error: &BridgeError,
     ) -> Option<FollowOutcome> {
+        let state = self.terminal_state(error)?;
+        let outcome = match &state {
+            SyncState::JournalDisabled => FollowOutcome::JournalDisabled,
+            SyncState::JournalTruncated { floor, .. } => {
+                FollowOutcome::JournalTruncated { floor: *floor }
+            }
+            _ => return None,
+        };
+        self.set_state(sink, state);
+        Some(outcome)
+    }
+
+    /// The visible state for a healthy connection, shared by the baseline and
+    /// follow success paths.
+    fn healthy_state(&self) -> SyncState {
+        SyncState::Healthy {
+            last_seq: self.last_seq,
+            last_event_at: self.last_event_at.clone(),
+        }
+    }
+
+    /// Maps a terminal bridge error to the state shared by the baseline and
+    /// follow paths. `None` means the error is not terminal and the caller
+    /// keeps its own failure strategy.
+    fn terminal_state(&self, error: &BridgeError) -> Option<SyncState> {
         match error.code {
-            BridgeErrorCode::JournalDisabled => {
-                self.set_state(sink, SyncState::JournalDisabled);
-                Some(FollowOutcome::JournalDisabled)
-            }
-            BridgeErrorCode::JournalTruncated => {
-                let floor = truncation_bounds(error)
+            BridgeErrorCode::JournalDisabled => Some(SyncState::JournalDisabled),
+            BridgeErrorCode::JournalTruncated => Some(SyncState::JournalTruncated {
+                floor: truncation_bounds(error)
                     .map(|(floor, _head)| floor)
-                    .unwrap_or(self.last_seq);
-                self.set_state(
-                    sink,
-                    SyncState::JournalTruncated {
-                        floor,
-                        recovered: false,
-                    },
-                );
-                Some(FollowOutcome::JournalTruncated { floor })
-            }
+                    .unwrap_or(self.last_seq),
+                recovered: false,
+            }),
             _ => None,
         }
+    }
+
+    fn mark_unavailable<K: SyncSink>(&mut self, sink: &mut K, error: &BridgeError) {
+        self.set_state(
+            sink,
+            SyncState::BdUnavailable {
+                error: error.clone(),
+            },
+        );
     }
 
     /// Applies records in order, dropping already-seen seqs and stopping at the
@@ -438,12 +454,7 @@ impl<S: SyncSource> SyncEngine<S> {
     }
 
     fn unavailable<K: SyncSink>(&mut self, sink: &mut K, error: &BridgeError) -> BaselineOutcome {
-        self.set_state(
-            sink,
-            SyncState::BdUnavailable {
-                error: error.clone(),
-            },
-        );
+        self.mark_unavailable(sink, error);
         BaselineOutcome::BdUnavailable(error.clone())
     }
 
@@ -452,12 +463,7 @@ impl<S: SyncSource> SyncEngine<S> {
         sink: &mut K,
         error: BridgeError,
     ) -> FollowOutcome {
-        self.set_state(
-            sink,
-            SyncState::BdUnavailable {
-                error: error.clone(),
-            },
-        );
+        self.mark_unavailable(sink, &error);
         FollowOutcome::BdUnavailable(error)
     }
 
