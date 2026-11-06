@@ -79,8 +79,7 @@ const RULES = [
   {
     id: 'rust-process-spawn',
     applies: (relPath) => isRustSource(relPath) && !isBridgeSource(relPath),
-    matches: (line) => {
-      const normalized = normalizeRustLine(line);
+    matches: (line, normalized = normalizeRustLine(line)) => {
       return (
         /\bprocess::Command\b/.test(normalized) ||
         /\buse\s+(?:std|tokio|async_std)::process::\{[^}]*\bCommand\b/.test(normalized)
@@ -91,7 +90,8 @@ const RULES = [
   {
     id: 'bridge-internal-api',
     applies: (relPath) => isRustSource(relPath) && !isBridgeSource(relPath),
-    matches: (line) => /\bbridge::(?:process|argv|parse)::/.test(normalizeRustLine(line)),
+    matches: (line, normalized = normalizeRustLine(line)) =>
+      /\bbridge::(?:process|argv|parse)::/.test(normalized),
     message: 'use bridge::BdBridge instead of the bridge process/argv/parse internals',
   },
   {
@@ -156,10 +156,16 @@ function scan(root) {
     }
     const relPath = toPosix(path.relative(root, absolutePath));
     scannedFiles += 1;
+    const applicable = RULES.filter((rule) => rule.applies(relPath));
+    if (applicable.length === 0) {
+      continue;
+    }
+    const isRust = isRustSource(relPath);
     const lines = readFileSync(absolutePath, 'utf8').split(/\r?\n/);
     lines.forEach((line, index) => {
-      for (const rule of RULES) {
-        if (rule.applies(relPath) && rule.matches(line)) {
+      const normalized = isRust ? normalizeRustLine(line) : null;
+      for (const rule of applicable) {
+        if (rule.matches(line, normalized)) {
           violations.push({
             location: `${relPath}:${index + 1}`,
             rule: rule.id,

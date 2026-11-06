@@ -8,7 +8,7 @@
 // Usage: node scripts/make-latest-json.mjs --installer <exe> [--version <v>]
 //          [--url <download url>] [--notes <text>] [--root <repo>]
 import { createHash } from 'node:crypto';
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { createReadStream, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 
 import { parseOptions, runMain } from './lib/cli.mjs';
@@ -50,19 +50,39 @@ function parseArgs(argv) {
   return options;
 }
 
-runMain('make-latest-json', () => {
+async function computeSha256(filePath) {
+  const hash = createHash('sha256');
+  for await (const chunk of createReadStream(filePath)) {
+    hash.update(chunk);
+  }
+  return hash.digest('hex');
+}
+
+runMain('make-latest-json', async () => {
   const options = parseArgs(process.argv.slice(2));
   const signaturePath = `${options.installer}.sig`;
-  if (!existsSync(options.installer)) {
-    throw new Error(`missing installer ${options.installer}`);
+
+  let sha256;
+  try {
+    sha256 = await computeSha256(options.installer);
+  } catch (error) {
+    if (error.code === 'ENOENT') {
+      throw new Error(`missing installer ${options.installer}`);
+    }
+    throw error;
   }
-  if (!existsSync(signaturePath)) {
-    throw new Error(`missing signature ${signaturePath}; build with TAURI_SIGNING_PRIVATE_KEY set`);
+
+  let signature;
+  try {
+    signature = readFileSync(signaturePath, 'utf8').trim();
+  } catch (error) {
+    if (error.code === 'ENOENT') {
+      throw new Error(`missing signature ${signaturePath}; build with TAURI_SIGNING_PRIVATE_KEY set`);
+    }
+    throw error;
   }
 
   const installerName = path.basename(options.installer);
-  const signature = readFileSync(signaturePath, 'utf8').trim();
-  const sha256 = createHash('sha256').update(readFileSync(options.installer)).digest('hex');
   const url =
     options.url ??
     `https://github.com/steven123397/beadazzled/releases/download/v${options.version}/${installerName}`;

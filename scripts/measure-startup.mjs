@@ -18,8 +18,8 @@
  */
 import { spawn, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
-import { mkdtemp, readFile, rm, unlink, writeFile } from 'node:fs/promises';
+import { createReadStream, existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -33,6 +33,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const defaultExe = releaseExe(root);
 const budgets = { coldP95: 2000, warmP95: 800 };
 const TRACE_PREFIX = 'page-load-finished';
+const TRACE_PATTERN = new RegExp(`^${TRACE_PREFIX} (\\d+) (\\S+)$`, 'gm');
 // Inputs whose change makes an existing binary unrepresentative. `dist` is
 // included because `tauri build` copies it into the exe.
 const SOURCE_DIRECTORIES = ['src', 'src-tauri/src', 'dist'];
@@ -181,6 +182,14 @@ function newestSource() {
   return newest;
 }
 
+async function sha256File(filePath) {
+  const hash = createHash('sha256');
+  for await (const chunk of createReadStream(filePath)) {
+    hash.update(chunk);
+  }
+  return hash.digest('hex');
+}
+
 /**
  * Which commit and binary this run measured, and whether the binary predates
  * its inputs. Reporting a stale binary is the difference between a budget
@@ -203,9 +212,7 @@ async function describeFreshness(exe, exeStat) {
     gitHead: head,
     gitDirty: gitValue(['status', '--porcelain']) !== '',
     binaryModifiedAt: new Date(exeStat.mtimeMs).toISOString(),
-    binarySha256: createHash('sha256')
-      .update(await readFile(exe))
-      .digest('hex'),
+    binarySha256: await sha256File(exe),
     stale: reasons.length > 0,
     reasons,
   };
@@ -254,8 +261,7 @@ function describeAppConfig() {
 async function readTrace(traceFile) {
   try {
     const contents = await readFile(traceFile, 'utf8');
-    const pattern = new RegExp(`^${TRACE_PREFIX} (\\d+) (\\S+)$`, 'gm');
-    for (const match of contents.matchAll(pattern)) {
+    for (const match of contents.matchAll(TRACE_PATTERN)) {
       if (!match[2].startsWith('about:')) {
         return Number(match[1]);
       }
@@ -273,7 +279,6 @@ async function measureOnce({ exe, profile, traceFile, timeout }) {
   let child = null;
 
   try {
-    await unlink(traceFile).catch(() => undefined);
     await writeFile(traceFile, '', 'utf8');
 
     child = spawn(exe, [], {

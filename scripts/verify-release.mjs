@@ -11,7 +11,7 @@
 //     [--manifest <latest.json>] [--public-key <base64|path>] [--sha256 <hex>]
 //     [--root <repo>] [--json]
 import { createHash } from 'node:crypto';
-import { existsSync, readFileSync, statSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 
 import { decodeSignature, verifyMinisign } from './lib/minisign.mjs';
@@ -80,9 +80,11 @@ function parseArgs(argv) {
 
 function readPublicKey(options, configKey) {
   if (options.publicKey !== null) {
-    return existsSync(options.publicKey)
-      ? readFileSync(options.publicKey, 'utf8')
-      : options.publicKey;
+    try {
+      return readFileSync(options.publicKey, 'utf8');
+    } catch {
+      return options.publicKey;
+    }
   }
   if (configKey === null) {
     throw new Error(
@@ -183,7 +185,7 @@ runMain('verify-release', () => {
       passed: errors.length === 0,
       version: manifestVersion,
       installer: installerName,
-      bytes: statSync(options.installer).size,
+      bytes: installerBytes.length,
       sha256,
       signature: { verified: signatureOk, keyId },
       url: entry?.url ?? null,

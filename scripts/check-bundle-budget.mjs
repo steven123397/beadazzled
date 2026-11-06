@@ -8,7 +8,7 @@
 // a future screen being imported eagerly into the shell.
 //
 // Sizes are gzip -6 of each file, the same measure the budget is written in.
-import { existsSync, readFileSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { gzipSync } from 'node:zlib';
 
@@ -45,11 +45,17 @@ runCheck('check-bundle-budget', () => {
   const dist = path.join(root, 'dist');
   const indexHtml = path.join(dist, 'index.html');
 
-  if (!existsSync(indexHtml)) {
-    throw new Error('no dist/index.html; run `npm run build` first');
+  let indexHtmlContent;
+  try {
+    indexHtmlContent = readFileSync(indexHtml, 'utf8');
+  } catch (error) {
+    if (error.code === 'ENOENT') {
+      throw new Error('no dist/index.html; run `npm run build` first');
+    }
+    throw error;
   }
 
-  const urls = firstScreenUrls(readFileSync(indexHtml, 'utf8'));
+  const urls = firstScreenUrls(indexHtmlContent);
   if (urls.length === 0) {
     throw new Error('dist/index.html loads no scripts; run `npm run build` first');
   }
@@ -62,10 +68,16 @@ runCheck('check-bundle-budget', () => {
     if (!absolute.startsWith(dist + path.sep)) {
       throw new Error(`index.html references a file outside dist: ${url}`);
     }
-    if (!existsSync(absolute)) {
-      throw new Error(`index.html references a missing file: ${relative}`);
+    let content;
+    try {
+      content = readFileSync(absolute);
+    } catch (error) {
+      if (error.code === 'ENOENT') {
+        throw new Error(`index.html references a missing file: ${relative}`);
+      }
+      throw error;
     }
-    const gzip = gzipSync(readFileSync(absolute)).length;
+    const gzip = gzipSync(content).length;
     total += gzip;
     files.push({ relative, gzip });
   }
