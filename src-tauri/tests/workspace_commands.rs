@@ -380,6 +380,47 @@ fn switching_to_a_missing_workspace_fails_without_mutating_the_registry() {
 }
 
 #[test]
+fn a_missing_workspace_still_wins_over_an_unavailable_bd() {
+    let dir = common::temp_dir("cmd-switch-missing-no-bd");
+    let first = common::workspace(&dir);
+    let second = workspace_named(&dir, "second");
+    let config_path = dir.join("config.json");
+
+    let service = service(&config_path);
+    service
+        .add_workspace(&path_string(&first))
+        .expect("add first");
+    service
+        .add_workspace(&path_string(&second))
+        .expect("add second");
+    service.flush().expect("flush config");
+
+    // Point bd at a plain text file. Discovery probes the configured path
+    // first and reports Broken instead of falling back to PATH, so bd is
+    // unavailable without touching process-global environment state.
+    let decoy = dir.join("not-bd.txt");
+    fs::write(&decoy, b"not an executable").expect("write decoy");
+    let mut config = registry::load(&config_path).expect("load config").config;
+    config.bd_path = Some(decoy.display().to_string());
+    registry::save_atomic(&config_path, &config).expect("save config");
+
+    let reopened = WorkspaceService::open(&config_path).expect("reopen service");
+    assert!(
+        !matches!(reopened.bd_status(false), BdStatus::Ready { .. }),
+        "bd must be unavailable for this test"
+    );
+    fs::remove_dir_all(&first).expect("remove first");
+
+    // The directory check must come first: a missing workspace is reported as
+    // WS_INACCESSIBLE even when bd itself would fail to resolve.
+    let error = reopened
+        .switch_workspace(&path_string(&first))
+        .expect_err("missing workspace is refused");
+
+    assert_eq!(error.code, BridgeErrorCode::WsInaccessible);
+}
+
+#[test]
 fn the_bd_path_is_persisted_for_the_next_run() {
     let dir = common::temp_dir("cmd-bd-path");
     let config_path = dir.join("config.json");

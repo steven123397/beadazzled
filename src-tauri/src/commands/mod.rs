@@ -3,10 +3,11 @@
 //! Commands stay thin: the logic lives in the services so it can be tested
 //! without a running webview.
 
-use serde_json::{Map, Value};
+use serde_json::Value;
 
+use crate::bridge::error::{detail_keys, version_unsupported};
 use crate::bridge::{BridgeError, BridgeErrorCode};
-use crate::workspace::discovery::{BdStatus, MIN_BD_VERSION};
+use crate::workspace::discovery::{min_bd_version, BdStatus};
 
 pub mod config_writer;
 pub mod diagnostics;
@@ -24,13 +25,11 @@ pub(crate) fn not_registered(path: &str) -> BridgeError {
 }
 
 pub(crate) fn ws_inaccessible(path: &str) -> BridgeError {
-    let mut detail = Map::new();
-    detail.insert("path".to_owned(), Value::String(path.to_owned()));
-    BridgeError::new(
+    BridgeError::with_fields(
         BridgeErrorCode::WsInaccessible,
         format!("the workspace directory is missing: {path}"),
+        [("path", Value::String(path.to_owned()))],
     )
-    .with_detail(detail)
 }
 
 pub(crate) fn not_active(path: &str) -> BridgeError {
@@ -42,31 +41,19 @@ pub(crate) fn not_active(path: &str) -> BridgeError {
 
 pub(crate) fn bd_status_error(status: &BdStatus) -> BridgeError {
     match status {
-        BdStatus::Unsupported { found, min, .. } => {
-            let mut detail = Map::new();
-            detail.insert("found".to_owned(), Value::String(found.clone()));
-            detail.insert("min".to_owned(), Value::String(min.clone()));
-            BridgeError::new(
-                BridgeErrorCode::BdVersionUnsupported,
-                format!("bd {found} is older than the required {min}"),
-            )
-            .with_detail(detail)
-        }
+        BdStatus::Unsupported { found, min, .. } => version_unsupported(found, min),
         BdStatus::Broken { error, .. } => error.clone(),
-        BdStatus::NotFound { searched } => {
-            let mut detail = Map::new();
-            detail.insert(
-                "searched".to_owned(),
+        BdStatus::NotFound { searched } => BridgeError::with_fields(
+            BridgeErrorCode::BdNotFound,
+            format!(
+                "bd was not found; install it or set its path in Settings (requires {})",
+                min_bd_version()
+            ),
+            [(
+                detail_keys::SEARCHED,
                 Value::Array(searched.iter().cloned().map(Value::String).collect()),
-            );
-            BridgeError::new(
-                BridgeErrorCode::BdNotFound,
-                format!(
-                    "bd was not found; install it or set its path in Settings (requires {MIN_BD_VERSION})"
-                ),
-            )
-            .with_detail(detail)
-        }
+            )],
+        ),
         BdStatus::Ready { .. } => BridgeError::new(
             BridgeErrorCode::Internal,
             "bd status error was requested for a ready bd",

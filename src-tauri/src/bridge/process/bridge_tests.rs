@@ -652,7 +652,7 @@ fn recent_calls_record_command_argv_duration_and_exit() {
     let workspace = workspace(&dir);
     let runner = runner();
     let mut request = request(&workspace, "ok");
-    request.command = "version".to_owned();
+    request.label = "version".to_owned();
     request.args = vec!["--version".into()];
 
     runner.run(&request).expect("fake_bd succeeds");
