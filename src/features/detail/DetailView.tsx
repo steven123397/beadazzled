@@ -1,25 +1,24 @@
 import { ChevronRight } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useLocation, useNavigate, useParams } from 'react-router-dom';
+import { useCallback, useMemo } from 'react';
 
-import { isEditableTarget, isOverlayOpen } from '@/app/keyboard/resolve';
-import { listPath } from '@/app/paths';
 import { Button } from '@/components/ui/button';
 import type { Issue } from '@/bindings/bd';
-import { confirmLeaveDraft, setDraftGuard } from '@/lib/draft-guard';
-import { describeError } from '@/lib/errors';
+import { confirmLeaveDraft } from '@/lib/draft-guard';
 import { useI18n } from '@/lib/i18n/I18nProvider';
 import { openExternal } from '@/lib/links';
 import { getIssue, indexIssues } from '@/lib/store/selectors';
-import { commentIssue, updateIssue, type UpdateInput } from '@/lib/writes/commands';
 import type { UseWrite } from '@/lib/writes/useWrite';
 
 import { Comments } from './Comments';
-import { changedFields, type DraftField } from './changes';
+import { textField } from './changes';
 import { Editor } from './Editor';
 import { DetailToolbar, Header } from './Header';
 import { Markdown } from './Markdown';
 import { MetadataRail } from './MetadataRail';
+import { useDetailShortcuts } from './useDetailShortcuts';
+import { useDetailWrites, type EditableField } from './useDetailWrites';
+
+export { DetailRoute } from './DetailRoute';
 
 export type DetailViewProps = {
   issueId: string;
@@ -32,7 +31,16 @@ export type DetailViewProps = {
   writes?: UseWrite;
 };
 
-type EditableField = 'title' | 'description' | 'acceptance';
+type EditableSectionConfig = {
+  field: EditableField;
+  label: string;
+  value: string;
+  headingId?: string;
+  emptyText?: string;
+  multiline?: boolean;
+  previewable?: boolean;
+  className?: string;
+};
 
 /**
  * The reading surface. It reads only the in-memory snapshot, so opening a
@@ -49,52 +57,39 @@ export function DetailView({
   const { t } = useI18n();
   const index = useMemo(() => indexIssues(issues), [issues]);
   const issue = getIssue(index, issueId);
-  const [editing, setEditing] = useState<EditableField | null>(null);
-  // Every local draft on the page reports up, so navigation asks once no
-  // matter which surface holds unsaved input.
-  const [fieldDirty, setFieldDirty] = useState(false);
-  const [commentDirty, setCommentDirty] = useState(false);
-  const [railDirty, setRailDirty] = useState(false);
-  const [validationError, setValidationError] = useState<string | null>(null);
-  const [commentError, setCommentError] = useState<string | null>(null);
-  // Set when the ticket changes while a draft is open and the change was not
-  // caused by this page.
-  const [externalUpdate, setExternalUpdate] = useState(false);
-  const [deleted, setDeleted] = useState(false);
-  const [notice, setNotice] = useState<string | null>(null);
-  const lastSeen = useRef<Issue | null>(null);
-  // Fields this page has written since the current draft opened; their echo is
-  // the page's own doing, not someone else's edit.
-  const selfFields = useRef(new Set<DraftField>());
-  const canEdit = writes?.canWrite === true;
-  const hasDraft = fieldDirty || commentDirty || railDirty;
 
-  const noteSelfWrite = useCallback((fields: readonly DraftField[]) => {
-    for (const field of fields) {
-      selfFields.current.add(field);
-    }
-  }, []);
+  const {
+    editing,
+    canEdit,
+    pending,
+    deleted,
+    notice,
+    setNotice,
+    validationError,
+    commentError,
+    updatedElsewhere,
+    setFieldDirty,
+    setCommentDirty,
+    setRailDirty,
+    noteSelfWrite,
+    beginEdit,
+    cancelEdit,
+    saveField,
+    submitComment,
+  } = useDetailWrites({
+    issue,
+    writes,
+    loading,
+    onBack,
+  });
 
-  const beginEdit = useCallback(
-    (field: EditableField) => {
-      writes?.clearError();
-      setValidationError(null);
-      setNotice(null);
-      setFieldDirty(false);
-      setExternalUpdate(false);
-      selfFields.current.clear();
-      setEditing(field);
-    },
-    [writes]
-  );
-
-  const cancelEdit = useCallback(() => {
-    writes?.clearError();
-    setValidationError(null);
-    setFieldDirty(false);
-    setExternalUpdate(false);
-    setEditing(null);
-  }, [writes]);
+  useDetailShortcuts({
+    issue,
+    canEdit,
+    editing,
+    beginEdit,
+    cancelEdit,
+  });
 
   // The OS has no default browser for the scheme, the plugin is missing, or
   // the shell refused the call: none of that may look like a dead click.
@@ -106,7 +101,7 @@ export function DetailView({
         setNotice(t('detail.link.failed'));
       }
     },
-    [t]
+    [setNotice, t]
   );
 
   const requestBack = useCallback(() => {
@@ -115,120 +110,6 @@ export function DetailView({
     }
     onBack();
   }, [onBack]);
-
-  // Shell navigation (sidebar, palette, workspace switch) consults the same
-  // guard before it unmounts this page.
-  useEffect(() => {
-    if (!hasDraft) {
-      setDraftGuard(null);
-      return undefined;
-    }
-    setDraftGuard(() => window.confirm(t('detail.edit.discard')));
-    return () => setDraftGuard(null);
-  }, [hasDraft, t]);
-
-  // A browser reload or window close is the one navigation React Router
-  // cannot intercept; ask the platform to confirm while a draft is open.
-  useEffect(() => {
-    if (!hasDraft) {
-      return undefined;
-    }
-    const handler = (event: BeforeUnloadEvent) => {
-      event.preventDefault();
-      event.returnValue = '';
-    };
-    window.addEventListener('beforeunload', handler);
-    return () => window.removeEventListener('beforeunload', handler);
-  }, [hasDraft]);
-
-  // A ticket that was on screen and then vanished was deleted; one that never
-  // appeared may simply still be deep-linked from another workspace. An edit
-  // that is not this page's own write means someone else changed the ticket.
-  useEffect(() => {
-    const previous = lastSeen.current;
-    if (issue !== undefined) {
-      lastSeen.current = issue;
-      setDeleted(false);
-      if (
-        previous !== null &&
-        previous.id === issue.id &&
-        previous.updated_at !== issue.updated_at
-      ) {
-        const changed = changedFields(previous, issue);
-        const own = changed.length > 0 && changed.every((field) => selfFields.current.has(field));
-        for (const field of changed) {
-          selfFields.current.delete(field);
-        }
-        if (!own && editing !== null) {
-          setExternalUpdate(true);
-        }
-      }
-      return undefined;
-    }
-    if (previous === null || loading === true) {
-      return undefined;
-    }
-    setDeleted(true);
-    const timer = setTimeout(onBack, 3_000);
-    return () => clearTimeout(timer);
-  }, [editing, issue, loading, onBack]);
-
-  // Detail single-key shortcuts. Inputs and open overlays are excluded by the
-  // same helpers the shell uses, so typing never triggers them.
-  useEffect(() => {
-    if (issue === undefined || !canEdit) {
-      return undefined;
-    }
-    const handler = (event: KeyboardEvent) => {
-      if (event.defaultPrevented || event.ctrlKey || event.metaKey || event.altKey) {
-        return;
-      }
-      // A modal above the page owns Escape, even while a draft is open behind
-      // it: otherwise the palette would stay up and the draft would vanish.
-      if (isOverlayOpen()) {
-        return;
-      }
-      if (editing !== null) {
-        // Escape leaves the editor instead of the page; the input itself also
-        // handles this when focused and stops propagation.
-        if (event.key === 'Escape') {
-          event.preventDefault();
-          event.stopPropagation();
-          cancelEdit();
-        }
-        return;
-      }
-      if (isEditableTarget(event.target)) {
-        return;
-      }
-      switch (event.key.toLowerCase()) {
-        case 'e':
-          event.preventDefault();
-          beginEdit('title');
-          break;
-        case 'a':
-          event.preventDefault();
-          beginEdit('acceptance');
-          break;
-        case 'c':
-          event.preventDefault();
-          document.getElementById('detail-comment-input')?.focus();
-          break;
-        case 's':
-          event.preventDefault();
-          document.getElementById('detail-status')?.focus();
-          break;
-        case 'p':
-          event.preventDefault();
-          document.getElementById('detail-priority')?.focus();
-          break;
-        default:
-          break;
-      }
-    };
-    window.addEventListener('keydown', handler, true);
-    return () => window.removeEventListener('keydown', handler, true);
-  }, [beginEdit, canEdit, cancelEdit, editing, issue]);
 
   if (issue === undefined) {
     if (loading === true) {
@@ -266,87 +147,39 @@ export function DetailView({
     );
   }
 
-  const description = issue.description.trim();
-  const acceptance = issue.acceptance_criteria?.trim() ?? '';
   const design = textField(issue, 'design');
   const notes = textField(issue, 'notes');
-  const pending = writes?.isPending(issue.id) ?? false;
-  const updatedElsewhere = editing !== null && externalUpdate;
 
-  const saveField = async (field: EditableField, next: string): Promise<boolean> => {
-    if (writes === undefined) {
-      setValidationError(t('detail.write.unavailable'));
-      return false;
-    }
-    if (field === 'title' && next.trim() === '') {
-      setValidationError(t('detail.edit.titleEmpty'));
-      return false;
-    }
-    setValidationError(null);
+  const editorSections: EditableSectionConfig[] = [
+    {
+      field: 'title',
+      label: t('detail.edit.title'),
+      value: issue.title,
+    },
+    {
+      field: 'description',
+      headingId: 'detail-description',
+      label: t('detail.description'),
+      value: issue.description,
+      emptyText: t('detail.description.empty'),
+      multiline: true,
+      previewable: true,
+    },
+    {
+      field: 'acceptance',
+      headingId: 'detail-acceptance',
+      label: t('detail.acceptance'),
+      value: issue.acceptance_criteria ?? '',
+      emptyText: t('detail.acceptance.empty'),
+      multiline: true,
+      className: 'mt-6',
+    },
+  ];
 
-    const value = field === 'title' ? next.trim() : next;
-    const input: UpdateInput =
-      field === 'title'
-        ? { title: value }
-        : field === 'description'
-          ? { description: value }
-          : { acceptance: value };
-    const result = updateIssue(issue.id, input);
-    if (!result.ok) {
-      setValidationError(result.error.message);
-      return false;
-    }
-
-    noteSelfWrite([field === 'acceptance' ? 'acceptance_criteria' : field]);
-    const outcome = await writes.submit({
-      key: `detail:${issue.id}:${field}:${value}`,
-      issueId: issue.id,
-      build: () => result.command,
-    });
-    if (outcome.status === 'ok') {
-      setEditing(null);
-      setExternalUpdate(false);
-      if (outcome.echo !== undefined && outcome.echo !== 'echoed') {
-        setNotice(t('detail.write.refreshed'));
-      }
-      return true;
-    }
-    setValidationError(describeError(outcome.error).message);
-    return false;
-  };
-
-  const editButton = (field: EditableField) =>
-    canEdit && editing === null ? (
-      <Button
-        variant="ghost"
-        size="xs"
-        onClick={() => beginEdit(field)}
-        className="text-muted-foreground"
-      >
-        {t('detail.edit.edit')}
-      </Button>
-    ) : null;
-
-  const submitComment = async (text: string): Promise<boolean> => {
-    if (writes === undefined) {
-      return false;
-    }
-    setCommentError(null);
-    noteSelfWrite(['comments']);
-    const outcome = await writes.submit({
-      key: `detail:${issue.id}:comment:${text}`,
-      issueId: issue.id,
-      build: () => commentIssue(issue.id, text),
-    });
-    if (outcome.status === 'ok') {
-      if (outcome.echo !== undefined && outcome.echo !== 'echoed') {
-        setNotice(t('detail.write.refreshed'));
-      }
-      return true;
-    }
-    setCommentError(describeError(outcome.error).message);
-    return false;
-  };
+  const collapsibleFields = [
+    { key: 'design' as const, label: t('detail.design'), content: design },
+    { key: 'notes' as const, label: t('detail.notes'), content: notes },
+  ].filter((item): item is { key: 'design' | 'notes'; label: string; content: string } => item.content !== null);
 
   return (
     <div className="w-full pb-8">
@@ -360,20 +193,19 @@ export function DetailView({
           onEditTitle={canEdit ? () => beginEdit('title') : undefined}
         />
 
-        {editing === 'title' ? (
-          <div className="mt-3">
-            <Editor
-              label={t('detail.edit.title')}
-              value={issue.title}
-              pending={pending}
-              disabled={!canEdit}
-              error={validationError}
-              onDirtyChange={setFieldDirty}
-              onSave={(next) => saveField('title', next)}
-              onCancel={cancelEdit}
-            />
-          </div>
-        ) : null}
+        <EditableSection
+          config={editorSections[0]!}
+          editing={editing}
+          canEdit={canEdit}
+          pending={pending}
+          error={validationError}
+          editText={t('detail.edit.edit')}
+          onDirtyChange={setFieldDirty}
+          onOpenLink={openLink}
+          onSave={(next) => saveField('title', next)}
+          onCancel={cancelEdit}
+          onBeginEdit={() => beginEdit('title')}
+        />
 
         {writes !== undefined && !writes.canWrite ? (
           <p role="status" className="mt-3 text-xs text-muted-foreground">
@@ -395,94 +227,26 @@ export function DetailView({
 
         <div className="mt-6 grid gap-8 min-[1000px]:grid-cols-[minmax(0,1fr)_280px]">
           <div className="min-w-0">
-            <section aria-labelledby="detail-description">
-              <div className="flex items-center justify-between gap-2">
-                <h2 id="detail-description" className="text-sm font-semibold">
-                  {t('detail.description')}
-                </h2>
-                {editButton('description')}
-              </div>
-              <div className="mt-2">
-                {editing === 'description' ? (
-                  <Editor
-                    label={t('detail.description')}
-                    value={issue.description}
-                    multiline
-                    previewable
-                    pending={pending}
-                    disabled={!canEdit}
-                    error={validationError}
-                    onDirtyChange={setFieldDirty}
-                    onOpenLink={openLink}
-                    onSave={(next) => saveField('description', next)}
-                    onCancel={cancelEdit}
-                  />
-                ) : description === '' ? (
-                  <p className="text-sm text-muted-foreground">{t('detail.description.empty')}</p>
-                ) : (
-                  <Markdown onOpenLink={openLink}>{description}</Markdown>
-                )}
-              </div>
-            </section>
+            {editorSections.slice(1).map((config) => (
+              <EditableSection
+                key={config.field}
+                config={config}
+                editing={editing}
+                canEdit={canEdit}
+                pending={pending}
+                error={validationError}
+                editText={t('detail.edit.edit')}
+                onDirtyChange={setFieldDirty}
+                onOpenLink={openLink}
+                onSave={(next) => saveField(config.field, next)}
+                onCancel={cancelEdit}
+                onBeginEdit={() => beginEdit(config.field)}
+              />
+            ))}
 
-            <section aria-labelledby="detail-acceptance" className="mt-6">
-              <div className="flex items-center justify-between gap-2">
-                <h2 id="detail-acceptance" className="text-sm font-semibold">
-                  {t('detail.acceptance')}
-                </h2>
-                {editButton('acceptance')}
-              </div>
-              <div className="mt-2">
-                {editing === 'acceptance' ? (
-                  <Editor
-                    label={t('detail.acceptance')}
-                    value={issue.acceptance_criteria ?? ''}
-                    multiline
-                    pending={pending}
-                    disabled={!canEdit}
-                    error={validationError}
-                    onDirtyChange={setFieldDirty}
-                    onOpenLink={openLink}
-                    onSave={(next) => saveField('acceptance', next)}
-                    onCancel={cancelEdit}
-                  />
-                ) : acceptance === '' ? (
-                  <p className="text-sm text-muted-foreground">{t('detail.acceptance.empty')}</p>
-                ) : (
-                  <Markdown onOpenLink={openLink}>{acceptance}</Markdown>
-                )}
-              </div>
-            </section>
-
-            {design === null ? null : (
-              <details className="group mt-6">
-                <summary className="flex w-fit cursor-pointer list-none items-center gap-1.5 text-sm font-semibold">
-                  {t('detail.design')}
-                  <ChevronRight
-                    aria-hidden="true"
-                    className="size-3.5 text-muted-foreground transition-transform group-open:rotate-90"
-                  />
-                </summary>
-                <div className="mt-2">
-                  <Markdown onOpenLink={openLink}>{design}</Markdown>
-                </div>
-              </details>
-            )}
-
-            {notes === null ? null : (
-              <details className="group mt-6">
-                <summary className="flex w-fit cursor-pointer list-none items-center gap-1.5 text-sm font-semibold">
-                  {t('detail.notes')}
-                  <ChevronRight
-                    aria-hidden="true"
-                    className="size-3.5 text-muted-foreground transition-transform group-open:rotate-90"
-                  />
-                </summary>
-                <div className="mt-2">
-                  <Markdown onOpenLink={openLink}>{notes}</Markdown>
-                </div>
-              </details>
-            )}
+            {collapsibleFields.map(({ key, label, content }) => (
+              <CollapsibleField key={key} label={label} content={content} onOpenLink={openLink} />
+            ))}
 
             <Comments
               comments={issue.comments}
@@ -508,58 +272,118 @@ export function DetailView({
   );
 }
 
-/** Read the route params and remount the view when the ticket changes. */
-export function DetailRoute({
-  issues,
-  loading,
-  writes,
+function EditableSection({
+  config,
+  editing,
+  canEdit,
+  pending,
+  error,
+  editText,
+  onDirtyChange,
+  onOpenLink,
+  onSave,
+  onCancel,
+  onBeginEdit,
 }: {
-  issues: readonly Issue[];
-  loading?: boolean;
-  writes?: UseWrite;
+  config: EditableSectionConfig;
+  editing: EditableField | null;
+  canEdit: boolean;
+  pending: boolean;
+  error: string | null;
+  editText: string;
+  onDirtyChange: (dirty: boolean) => void;
+  onOpenLink: (url: string) => Promise<void>;
+  onSave: (next: string) => Promise<boolean>;
+  onCancel: () => void;
+  onBeginEdit: () => void;
 }) {
-  const { projectId = '', issueId = '' } = useParams<{ projectId: string; issueId: string }>();
-  const navigate = useNavigate();
-  const location = useLocation();
+  const isEditing = editing === config.field;
 
-  const back = useCallback(() => {
-    // A deep link has no list entry to return to; a normal open should restore
-    // the previous URL, which still carries the list filters.
-    if (location.key === 'default') {
-      navigate(listPath(projectId), { replace: true });
-      return;
+  if (config.field === 'title') {
+    if (!isEditing) {
+      return null;
     }
-    navigate(-1);
-  }, [location.key, navigate, projectId]);
+    return (
+      <div className="mt-3">
+        <Editor
+          label={config.label}
+          value={config.value}
+          pending={pending}
+          disabled={!canEdit}
+          error={error}
+          onDirtyChange={onDirtyChange}
+          onSave={onSave}
+          onCancel={onCancel}
+        />
+      </div>
+    );
+  }
 
-  const openIssue = useCallback(
-    (id: string) => {
-      if (!confirmLeaveDraft()) {
-        return;
-      }
-      navigate(`/w/${projectId}/issue/${encodeURIComponent(id)}`);
-    },
-    [navigate, projectId]
-  );
+  const trimmed = config.value.trim();
 
   return (
-    <DetailView
-      key={issueId}
-      issueId={issueId}
-      issues={issues}
-      onBack={back}
-      onOpenIssue={openIssue}
-      loading={loading}
-      writes={writes}
-    />
+    <section aria-labelledby={config.headingId} className={config.className}>
+      <div className="flex items-center justify-between gap-2">
+        <h2 id={config.headingId} className="text-sm font-semibold">
+          {config.label}
+        </h2>
+        {canEdit && editing === null ? (
+          <Button
+            variant="ghost"
+            size="xs"
+            onClick={onBeginEdit}
+            className="text-muted-foreground"
+          >
+            {editText}
+          </Button>
+        ) : null}
+      </div>
+      <div className="mt-2">
+        {isEditing ? (
+          <Editor
+            label={config.label}
+            value={config.value}
+            multiline={config.multiline}
+            previewable={config.previewable}
+            pending={pending}
+            disabled={!canEdit}
+            error={error}
+            onDirtyChange={onDirtyChange}
+            onOpenLink={onOpenLink}
+            onSave={onSave}
+            onCancel={onCancel}
+          />
+        ) : trimmed === '' ? (
+          <p className="text-sm text-muted-foreground">{config.emptyText}</p>
+        ) : (
+          <Markdown onOpenLink={onOpenLink}>{trimmed}</Markdown>
+        )}
+      </div>
+    </section>
   );
 }
 
-/**
- * `design` and `notes` are not first-class export fields; bd carries them in
- * the extra map. Only a non-empty string is rendered.
- */
-function textField(issue: Issue, key: 'design' | 'notes'): string | null {
-  const value = issue[key];
-  return typeof value === 'string' && value.trim() !== '' ? value : null;
+function CollapsibleField({
+  label,
+  content,
+  onOpenLink,
+}: {
+  label: string;
+  content: string;
+  onOpenLink: (url: string) => Promise<void>;
+}) {
+  return (
+    <details className="group mt-6">
+      <summary className="flex w-fit cursor-pointer list-none items-center gap-1.5 text-sm font-semibold">
+        {label}
+        <ChevronRight
+          aria-hidden="true"
+          className="size-3.5 text-muted-foreground transition-transform group-open:rotate-90"
+        />
+      </summary>
+      <div className="mt-2">
+        <Markdown onOpenLink={onOpenLink}>{content}</Markdown>
+      </div>
+    </details>
+  );
 }

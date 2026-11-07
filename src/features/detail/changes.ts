@@ -26,3 +26,13 @@ export function changedFields(before: Issue, after: Issue): DraftField[] {
     (field) => JSON.stringify(before[field]) !== JSON.stringify(after[field])
   );
 }
+
+/**
+ * `design` and `notes` are not first-class export fields; bd carries them in
+ * the extra map. Only a non-empty string is rendered.
+ */
+export function textField(issue: Issue, key: 'design' | 'notes'): string | null {
+  const value = issue[key];
+  return typeof value === 'string' && value.trim() !== '' ? value : null;
+}
+
