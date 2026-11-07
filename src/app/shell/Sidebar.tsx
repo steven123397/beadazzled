@@ -3,14 +3,10 @@ import type { ReactNode } from 'react';
 import { NavLink } from 'react-router-dom';
 
 import type { WorkspaceEntry } from '@/bindings/bd';
+import { navLinkClass } from '@/components/nav-link';
 import { confirmLeaveDraft } from '@/lib/draft-guard';
 import { useI18n } from '@/lib/i18n/I18nProvider';
 import { cn } from '@/lib/utils';
-
-const LINK_CLASS =
-  'flex h-control-sm w-full items-center gap-2 rounded-md px-2 text-sm transition-colors';
-const ACTIVE_CLASS = 'bg-selected font-medium text-selected-foreground';
-const IDLE_CLASS = 'text-muted-foreground hover:bg-hover hover:text-foreground';
 
 /** Never unmount an open detail draft without asking first. */
 function guardDraft(event: React.MouseEvent<HTMLAnchorElement>): void {
@@ -24,7 +20,7 @@ function ViewLink({ to, label, icon }: { to: string; label: string; icon: ReactN
     <NavLink
       to={to}
       onClick={guardDraft}
-      className={({ isActive }) => cn(LINK_CLASS, isActive ? ACTIVE_CLASS : IDLE_CLASS)}
+      className={({ isActive }) => navLinkClass(isActive, true)}
     >
       {icon}
       <span className="truncate">{label}</span>

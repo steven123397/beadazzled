@@ -1,15 +1,19 @@
 import { useState } from 'react';
 
-import type { BdStatus, DiagnosticsSnapshot } from '@/bindings/bd';
 import { useAppRefresh } from '@/app/shell/AppRefresh';
 import { useSyncState } from '@/app/shell/SyncStatus';
+import type { BdStatus, DiagnosticsSnapshot } from '@/bindings/bd';
 import { Button } from '@/components/ui/button';
+import { CopyNotice, useCopy } from '@/components/ui/copy-notice';
+import { InfoRow } from '@/components/ui/definition-row';
 import { useAppVersion } from '@/lib/app-version';
 import { copyText, type CopyResult } from '@/lib/clipboard';
-import { diagnosticsApi as defaultApi, type DiagnosticsApi } from '@/lib/diagnostics/api';
 import { formatDiagnostics } from '@/lib/diagnostics';
+import { diagnosticsApi as defaultApi, type DiagnosticsApi } from '@/lib/diagnostics/api';
 import { messageOf } from '@/lib/errors';
 import { useI18n } from '@/lib/i18n/I18nProvider';
+
+import { SettingsSection } from './SettingsSection';
 
 /** The report shows the newest calls only; the buffer keeps 200. */
 const SHOWN_CALLS = 20;
@@ -31,7 +35,7 @@ export function DiagnosticsSection({ api = defaultApi, copy = copyText }: Diagno
   const [report, setReport] = useState<DiagnosticsSnapshot | null>(null);
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [copyResult, setCopyResult] = useState<CopyResult | null>(null);
+  const { copyResult, copy: performCopy } = useCopy({ copy });
 
   async function load(): Promise<DiagnosticsSnapshot | null> {
     setLoading(true);
@@ -56,7 +60,7 @@ export function DiagnosticsSection({ api = defaultApi, copy = copyText }: Diagno
     if (current === null) {
       return;
     }
-    setCopyResult(await copy(buildText(current)));
+    await performCopy(buildText(current));
   }
 
   function buildText(snapshot: DiagnosticsSnapshot): string {
@@ -79,10 +83,7 @@ export function DiagnosticsSection({ api = defaultApi, copy = copyText }: Diagno
   }
 
   return (
-    <section aria-labelledby="settings-diagnostics" className="space-y-3">
-      <h2 id="settings-diagnostics" className="text-lg font-semibold">
-        {t('settings.diagnostics')}
-      </h2>
+    <SettingsSection id="settings-diagnostics" title={t('settings.diagnostics')}>
       <p className="text-xs text-muted-foreground">{t('settings.diagnostics.hint')}</p>
       <div className="flex flex-wrap gap-2">
         <Button size="md" onClick={() => void load()} disabled={loading}>
@@ -97,16 +98,12 @@ export function DiagnosticsSection({ api = defaultApi, copy = copyText }: Diagno
           {loadError}
         </p>
       )}
-      {copyResult === null ? null : (
-        <p role="status" aria-live="polite" className="text-xs text-muted-foreground">
-          {t(copyResult === 'copied' ? 'clipboard.copied' : 'clipboard.failed')}
-        </p>
-      )}
+      <CopyNotice result={copyResult} />
       {report === null ? null : (
         <div className="space-y-3">
           <dl className="space-y-1 rounded-md border border-border bg-raised p-3 text-xs">
-            <Row label={t('settings.diagnostics.bd')} value={describeBd(report.bd)} />
-            <Row label={t('settings.diagnostics.workspace')} value={report.workspace ?? '-'} />
+            <InfoRow label={t('settings.diagnostics.bd')} value={describeBd(report.bd)} />
+            <InfoRow label={t('settings.diagnostics.workspace')} value={report.workspace ?? '-'} />
             {report.context === null ? (
               <p className="text-muted-foreground">
                 {report.contextError === null
@@ -117,9 +114,9 @@ export function DiagnosticsSection({ api = defaultApi, copy = copyText }: Diagno
               </p>
             ) : (
               <>
-                <Row label={t('settings.diagnostics.project')} value={report.context.projectId} />
-                <Row label={t('settings.diagnostics.doltMode')} value={report.context.doltMode} />
-                <Row
+                <InfoRow label={t('settings.diagnostics.project')} value={report.context.projectId} />
+                <InfoRow label={t('settings.diagnostics.doltMode')} value={report.context.doltMode} />
+                <InfoRow
                   label={t('settings.diagnostics.schema')}
                   value={String(report.context.schemaVersion)}
                 />
@@ -170,7 +167,7 @@ export function DiagnosticsSection({ api = defaultApi, copy = copyText }: Diagno
           </div>
         </div>
       )}
-    </section>
+    </SettingsSection>
   );
 }
 
@@ -192,13 +189,4 @@ function errorText(snapshot: DiagnosticsSnapshot): string | null {
     return `${snapshot.contextError.code} — ${snapshot.contextError.message}`;
   }
   return null;
-}
-
-function Row({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex justify-between gap-3">
-      <dt className="text-muted-foreground">{label}</dt>
-      <dd className="min-w-0 break-all text-right text-foreground">{value}</dd>
-    </div>
-  );
 }

@@ -1,13 +1,14 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useParams } from 'react-router-dom';
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { Inbox, SearchX, TriangleAlert } from 'lucide-react';
+import { SearchX } from 'lucide-react';
 
 import type { Issue, SyncState } from '@/bindings/bd';
 import { isEditableTarget, isOverlayOpen } from '@/app/keyboard/resolve';
 import { Button } from '@/components/ui/button';
 import { StateBadge } from '@/components/ui/state-badge';
 import { FilterBar } from '@/components/filter-bar';
+import { EmptyState, ErrorState, HEALTHY, StaleBanner, useOpenIssue } from '@/components/view-states';
 import { useI18n } from '@/lib/i18n/I18nProvider';
 import { buildSearchIndex, hasActiveFilters } from '@/lib/view/filter';
 import { createListViewState, type GroupBy } from '@/lib/view/state';
@@ -24,7 +25,6 @@ const ROW_HEIGHT = 42;
 const OVERSCAN = 10;
 const INITIAL_RECT = { width: 0, height: 600 };
 
-const HEALTHY: SyncState = { kind: 'healthy', lastSeq: 0, lastEventAt: null };
 
 type ListItem = { kind: 'header'; key: string; count: number } | { kind: 'row'; issue: Issue };
 
@@ -59,7 +59,6 @@ export function ListRoute({ issues, syncState, onRefresh }: ListRouteProps) {
 
 export function ListView({ projectId, issues, syncState = HEALTHY, onRefresh }: ListViewProps) {
   const { t } = useI18n();
-  const navigate = useNavigate();
   const { view, updateView } = usePersistedView(projectId);
 
   const initialPosition = useMemo(() => loadListPosition(projectId), [projectId]);
@@ -155,12 +154,7 @@ export function ListView({ projectId, issues, syncState = HEALTHY, onRefresh }: 
     initialRect: INITIAL_RECT,
   });
 
-  const openIssue = useCallback(
-    (issue: Issue) => {
-      navigate(`/w/${projectId}/issue/${encodeURIComponent(issue.id)}`);
-    },
-    [navigate, projectId]
-  );
+  const openIssue = useOpenIssue(projectId);
 
   const focusRow = useCallback(
     (id: string) => {
@@ -345,31 +339,28 @@ export function ListView({ projectId, issues, syncState = HEALTHY, onRefresh }: 
         />
       ) : null}
       {syncState.kind === 'bd-unavailable' && total > 0 ? (
-        <div
-          role="alert"
-          className="flex shrink-0 items-center gap-2 border-b border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive"
-        >
-          <span className="min-w-0 flex-1">{t('list.state.stale')}</span>
-          {onRefresh === undefined ? null : (
-            <Button
-              size="xs"
-              variant="secondary"
-              onClick={onRefresh}
-              className="border-destructive/40 text-destructive hover:bg-destructive/10"
-            >
-              {t('list.state.retry')}
-            </Button>
-          )}
-        </div>
+        <StaleBanner onRefresh={onRefresh} />
       ) : null}
 
       {state === 'loading' ? (
         <LoadingRows label={t('list.state.loading')} />
       ) : state === 'empty' ? (
-        <EmptyState />
+        <EmptyState
+          footer={
+            <>
+              <Button size="md" variant="secondary" disabled className="mt-1">
+                {t('list.state.empty.create')}
+              </Button>
+              <p className="max-w-sm text-xs text-muted-foreground">
+                {t('list.state.empty.createDisabled')}
+              </p>
+            </>
+          }
+        />
       ) : syncState.kind === 'bd-unavailable' && total === 0 ? (
         <ErrorState message={syncState.error.message} onRefresh={onRefresh} />
       ) : visible.length === 0 && activeFilters ? (
+
         <NoMatchState onClear={clearFilters} />
       ) : (
         <div
@@ -446,23 +437,6 @@ function LoadingRows({ label }: { label: string }) {
   );
 }
 
-function EmptyState() {
-  const { t } = useI18n();
-  return (
-    <div className="flex flex-1 flex-col items-center justify-center gap-2.5 p-6 text-center">
-      <StateBadge icon={<Inbox aria-hidden="true" className="size-4" />} />
-      <p className="text-sm font-medium">{t('list.state.empty.title')}</p>
-      <p className="max-w-sm text-xs text-muted-foreground">{t('list.state.empty.body')}</p>
-      <Button size="md" variant="secondary" disabled className="mt-1">
-        {t('list.state.empty.create')}
-      </Button>
-      <p className="max-w-sm text-xs text-muted-foreground">
-        {t('list.state.empty.createDisabled')}
-      </p>
-    </div>
-  );
-}
-
 function NoMatchState({ onClear }: { onClear: () => void }) {
   const { t } = useI18n();
   return (
@@ -477,25 +451,6 @@ function NoMatchState({ onClear }: { onClear: () => void }) {
   );
 }
 
-function ErrorState({ message, onRefresh }: { message: string; onRefresh?: () => void }) {
-  const { t } = useI18n();
-  return (
-    <div
-      role="alert"
-      className="flex flex-1 flex-col items-center justify-center gap-2.5 p-6 text-center"
-    >
-      <StateBadge tone="danger" icon={<TriangleAlert aria-hidden="true" className="size-4" />} />
-      <p className="text-sm font-medium text-destructive">{t('list.state.error.title')}</p>
-      <p className="text-xs text-muted-foreground">{t('list.state.error.body')}</p>
-      <p className="max-w-md text-xs text-muted-foreground">{message}</p>
-      {onRefresh === undefined ? null : (
-        <Button size="md" variant="secondary" onClick={onRefresh} className="mt-1">
-          {t('list.state.retry')}
-        </Button>
-      )}
-    </div>
-  );
-}
 
 /**
  * Enter only activates the list when the event came from the list itself. A

@@ -2,10 +2,11 @@ import { useEffect, useState, type KeyboardEvent } from 'react';
 
 import { Avatar } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
+import { RelativeTime } from '@/components/ui/relative-time';
 import { Textarea } from '@/components/ui/input';
 import type { Comment } from '@/bindings/bd';
 import { useI18n } from '@/lib/i18n/I18nProvider';
-import { formatAbsoluteTime, formatRelativeTime, timeOrder } from '@/lib/time';
+import { timeOrder } from '@/lib/time';
 
 export type CommentsProps = {
   comments?: readonly Comment[];
@@ -77,12 +78,7 @@ export function Comments({
               <div className="min-w-0 flex-1">
                 <div className="flex items-baseline gap-2 text-xs text-muted-foreground">
                   <span className="font-medium text-foreground">{comment.author}</span>
-                  <time
-                    dateTime={comment.created_at}
-                    title={formatAbsoluteTime(comment.created_at, language)}
-                  >
-                    {formatRelativeTime(comment.created_at, language)}
-                  </time>
+                  <RelativeTime value={comment.created_at} language={language} />
                 </div>
                 <p className="mt-1 whitespace-pre-wrap text-sm leading-relaxed">{comment.text}</p>
               </div>

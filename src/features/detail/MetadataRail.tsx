@@ -2,16 +2,17 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { DefinitionRow } from '@/components/ui/definition-row';
 import { IconButton } from '@/components/ui/icon-button';
 import { Input } from '@/components/ui/input';
 import { PopoverSelect } from '@/components/ui/popover-select';
 import { PriorityIcon } from '@/components/ui/priority-icon';
+import { RelativeTime } from '@/components/ui/relative-time';
 import { StatusIcon } from '@/components/ui/status-icon';
 import type { Issue, WriteCommand } from '@/bindings/bd';
 import { useI18n } from '@/lib/i18n/I18nProvider';
 import type { IssueIndex } from '@/lib/store/selectors';
 import { describeError } from '@/lib/errors';
-import { formatAbsoluteTime, formatRelativeTime } from '@/lib/time';
 import { closeIssue, reopenIssue, updateIssue, type UpdateInput } from '@/lib/writes/commands';
 import { blockingDeps, canChangeStatus } from '@/lib/writes/guard';
 import type { UseWrite } from '@/lib/writes/useWrite';
@@ -395,22 +396,16 @@ export function MetadataRail({
         </PropertyRow>
 
         <PropertyRow label={t('detail.metadata.created')}>
-          <span title={formatAbsoluteTime(issue.created_at, language)}>
-            {formatRelativeTime(issue.created_at, language)}
-          </span>
+          <RelativeTime value={issue.created_at} language={language} />
         </PropertyRow>
 
         <PropertyRow label={t('detail.metadata.updated')}>
-          <span title={formatAbsoluteTime(issue.updated_at, language)}>
-            {formatRelativeTime(issue.updated_at, language)}
-          </span>
+          <RelativeTime value={issue.updated_at} language={language} />
         </PropertyRow>
 
         {issue.closed_at === undefined ? null : (
           <PropertyRow label={t('detail.metadata.closed')}>
-            <span title={formatAbsoluteTime(issue.closed_at, language)}>
-              {formatRelativeTime(issue.closed_at, language)}
-            </span>
+            <RelativeTime value={issue.closed_at} language={language} />
           </PropertyRow>
         )}
       </dl>
@@ -449,9 +444,9 @@ export function MetadataRail({
 /** Every property row shares one label column and a 32px vertical rhythm. */
 function PropertyRow({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <div className="grid min-h-8 grid-cols-[64px_minmax(0,1fr)] items-center gap-x-3">
-      <dt className="text-muted-foreground">{label}</dt>
-      <dd className="min-w-0">{children}</dd>
-    </div>
+    <DefinitionRow variant="grid" label={label}>
+      {children}
+    </DefinitionRow>
   );
 }
+

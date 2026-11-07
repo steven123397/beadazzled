@@ -7,8 +7,8 @@ import type { Shortcut, ShortcutContext } from '@/app/keyboard/types';
 import { useShortcuts } from '@/app/keyboard/useShortcuts';
 import { CommandPalette } from '@/app/palette/CommandPalette';
 import { buildCommands } from '@/app/palette/commands';
+import { CopyNotice, useCopy } from '@/components/ui/copy-notice';
 import { useI18n } from '@/lib/i18n/I18nProvider';
-import { copyText, type CopyResult } from '@/lib/clipboard';
 import { useAppVersion } from '@/lib/app-version';
 import { formatDiagnostics } from '@/lib/diagnostics';
 import { confirmLeaveDraft } from '@/lib/draft-guard';
@@ -65,7 +65,7 @@ export function Shell({
   const [sidebarCollapsed, setSidebarCollapsed] = useState(loadSidebarCollapsed);
   const appVersion = useAppVersion();
   const [lastRefreshAt, setLastRefreshAt] = useState(() => Date.now());
-  const [copyNotice, setCopyNotice] = useState<CopyResult | null>(null);
+  const { copyResult: copyNotice, copy: copyDiagnosticsText } = useCopy({ timeoutMs: 2500 });
 
   const refreshData = useMemo(() => onRefresh ?? (() => void reload()), [onRefresh, reload]);
   const refresh = useCallback(() => {
@@ -136,16 +136,8 @@ export function Shell({
   );
 
   const copyDiagnostics = useCallback(() => {
-    void copyText(diagnosticsText()).then(setCopyNotice);
-  }, [diagnosticsText]);
-
-  useEffect(() => {
-    if (copyNotice === null) {
-      return undefined;
-    }
-    const timer = setTimeout(() => setCopyNotice(null), 2500);
-    return () => clearTimeout(timer);
-  }, [copyNotice]);
+    void copyDiagnosticsText(diagnosticsText());
+  }, [copyDiagnosticsText, diagnosticsText]);
 
   const context: ShortcutContext = {
     navigate,
@@ -333,20 +325,7 @@ export function Shell({
       {/* Mounted for the lifetime of the shell: a region inserted together
           with its text is not announced. It only becomes visible when there
           is a result to show. */}
-      <p
-        role="status"
-        aria-live="polite"
-        aria-atomic="true"
-        className={
-          copyNotice === null
-            ? 'sr-only'
-            : 'pointer-events-none fixed bottom-8 left-1/2 z-40 -translate-x-1/2 rounded border border-border bg-raised px-3 py-1 text-xs text-foreground shadow'
-        }
-      >
-        {copyNotice === null
-          ? ''
-          : t(copyNotice === 'copied' ? 'clipboard.copied' : 'clipboard.failed')}
-      </p>
+      <CopyNotice result={copyNotice} variant="toast" />
     </div>
   );
 }

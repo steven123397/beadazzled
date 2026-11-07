@@ -1,7 +1,7 @@
 import { Command } from 'cmdk';
-import { useRef, useState } from 'react';
+import { useState } from 'react';
 
-import { useFocusTrap } from '@/app/keyboard/useFocusTrap';
+import { DialogSurface } from '@/components/ui/modal';
 import { useI18n } from '@/lib/i18n/I18nProvider';
 import type { MessageKey } from '@/lib/i18n';
 
@@ -18,16 +18,10 @@ export function CommandPalette({
 }) {
   const { t } = useI18n();
   const [query, setQuery] = useState('');
-  const dialogRef = useRef<HTMLDivElement>(null);
-  useFocusTrap(dialogRef);
   const results = rankCommands(commands, query, RESULT_LIMIT);
 
   return (
-    <div
-      ref={dialogRef}
-      tabIndex={-1}
-      role="dialog"
-      aria-modal="true"
+    <DialogSurface
       aria-label={t('palette.title')}
       className="fixed inset-0 z-30 flex items-start justify-center bg-black/60 p-6 outline-none"
       onKeyDown={(event) => {
@@ -93,6 +87,6 @@ export function CommandPalette({
           })}
         </Command.List>
       </Command>
-    </div>
+    </DialogSurface>
   );
 }
