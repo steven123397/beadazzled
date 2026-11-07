@@ -1,6 +1,9 @@
 export function parseOptions(argv, spec = {}) {
   const flags = new Set(spec.flags ?? []);
   const values = new Set(spec.values ?? []);
+  const allowEmpty = new Set(
+    (spec.allowEmpty ?? []).map((opt) => (opt.startsWith('--') ? opt : `--${opt}`))
+  );
   const options = { ...(spec.defaults ?? {}) };
   const usage = spec.usage;
 
@@ -31,7 +34,7 @@ export function parseOptions(argv, spec = {}) {
 
     if (values.has(name)) {
       const value = inline ?? argv[++index];
-      if (value === undefined || value === '') {
+      if (value === undefined || (value === '' && !allowEmpty.has(name))) {
         throw new Error(`${name} needs a value`);
       }
       if (spec.onValue) {
@@ -44,9 +47,7 @@ export function parseOptions(argv, spec = {}) {
     }
 
     const helpSuffix =
-      spec.usageOnUnknown && usage
-        ? `\n\n${typeof usage === 'function' ? usage() : usage}`
-        : '';
+      spec.usageOnUnknown && usage ? `\n\n${typeof usage === 'function' ? usage() : usage}` : '';
     throw new Error(`unknown option: ${arg}${helpSuffix}`);
   }
 

@@ -33,6 +33,7 @@ function usage() {
 function parseArgs(argv) {
   const options = parseOptions(argv, {
     values: ['--installer', '--version', '--url', '--notes', '--root'],
+    allowEmpty: ['--notes'],
     usage,
     defaults: { installer: null, version: null, url: null, notes: '', root: defaultRoot },
     onValue(opts, name, value) {
@@ -77,7 +78,9 @@ runMain('make-latest-json', async () => {
     signature = readFileSync(signaturePath, 'utf8').trim();
   } catch (error) {
     if (error.code === 'ENOENT') {
-      throw new Error(`missing signature ${signaturePath}; build with TAURI_SIGNING_PRIVATE_KEY set`);
+      throw new Error(
+        `missing signature ${signaturePath}; build with TAURI_SIGNING_PRIVATE_KEY set`
+      );
     }
     throw error;
   }
