@@ -8,13 +8,15 @@
 // Usage: node scripts/make-latest-json.mjs --installer <exe> [--version <v>]
 //          [--url <download url>] [--notes <text>] [--root <repo>]
 import { createHash } from 'node:crypto';
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { createReadStream, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 
-const scriptPath = fileURLToPath(import.meta.url);
-const defaultRoot = path.resolve(path.dirname(scriptPath), '..');
-const PLATFORM = 'windows-x86_64';
+import { parseOptions, runMain } from './lib/cli.mjs';
+import { projectRoot } from './lib/paths.mjs';
+import { UPDATER_PLATFORM, readReleaseVersions } from './lib/release-meta.mjs';
+
+const defaultRoot = projectRoot(import.meta.url);
+const PLATFORM = UPDATER_PLATFORM;
 
 function usage() {
   return [
@@ -29,52 +31,61 @@ function usage() {
 }
 
 function parseArgs(argv) {
-  const options = { installer: null, version: null, url: null, notes: '', root: defaultRoot };
-  const valueOptions = new Set(['--installer', '--version', '--url', '--notes', '--root']);
-  for (let index = 0; index < argv.length; index += 1) {
-    const arg = argv[index];
-    const separator = arg.indexOf('=');
-    const name = separator === -1 ? arg : arg.slice(0, separator);
-    const inline = separator === -1 ? undefined : arg.slice(separator + 1);
-    if (name === '--help' || name === '-h') {
-      console.log(usage());
-      process.exit(0);
-    }
-    if (!valueOptions.has(name)) {
-      throw new Error(`unknown option: ${arg}`);
-    }
-    const value = inline ?? argv[(index += 1)];
-    if (value === undefined) {
-      throw new Error(`${name} needs a value`);
-    }
-    if (name === '--installer') options.installer = path.resolve(value);
-    if (name === '--version') options.version = value;
-    if (name === '--url') options.url = value;
-    if (name === '--notes') options.notes = value;
-    if (name === '--root') options.root = path.resolve(value);
-  }
+  const options = parseOptions(argv, {
+    values: ['--installer', '--version', '--url', '--notes', '--root'],
+    allowEmpty: ['--notes'],
+    usage,
+    defaults: { installer: null, version: null, url: null, notes: '', root: defaultRoot },
+    onValue(opts, name, value) {
+      if (name === '--installer') opts.installer = path.resolve(value);
+      if (name === '--version') opts.version = value;
+      if (name === '--url') opts.url = value;
+      if (name === '--notes') opts.notes = value;
+      if (name === '--root') opts.root = path.resolve(value);
+    },
+  });
   if (options.installer === null) {
     throw new Error('--installer is required');
   }
-  options.version ??= JSON.parse(
-    readFileSync(path.join(options.root, 'package.json'), 'utf8')
-  ).version;
+  options.version ??= readReleaseVersions(options.root)[0][1];
   return options;
 }
 
-try {
+async function computeSha256(filePath) {
+  const hash = createHash('sha256');
+  for await (const chunk of createReadStream(filePath)) {
+    hash.update(chunk);
+  }
+  return hash.digest('hex');
+}
+
+runMain('make-latest-json', async () => {
   const options = parseArgs(process.argv.slice(2));
   const signaturePath = `${options.installer}.sig`;
-  if (!existsSync(options.installer)) {
-    throw new Error(`missing installer ${options.installer}`);
+
+  let sha256;
+  try {
+    sha256 = await computeSha256(options.installer);
+  } catch (error) {
+    if (error.code === 'ENOENT') {
+      throw new Error(`missing installer ${options.installer}`);
+    }
+    throw error;
   }
-  if (!existsSync(signaturePath)) {
-    throw new Error(`missing signature ${signaturePath}; build with TAURI_SIGNING_PRIVATE_KEY set`);
+
+  let signature;
+  try {
+    signature = readFileSync(signaturePath, 'utf8').trim();
+  } catch (error) {
+    if (error.code === 'ENOENT') {
+      throw new Error(
+        `missing signature ${signaturePath}; build with TAURI_SIGNING_PRIVATE_KEY set`
+      );
+    }
+    throw error;
   }
 
   const installerName = path.basename(options.installer);
-  const signature = readFileSync(signaturePath, 'utf8').trim();
-  const sha256 = createHash('sha256').update(readFileSync(options.installer)).digest('hex');
   const url =
     options.url ??
     `https://github.com/steven123397/beadazzled/releases/download/v${options.version}/${installerName}`;
@@ -91,7 +102,4 @@ try {
   writeFileSync(target, `${JSON.stringify(manifest, null, 2)}\n`, 'utf8');
   console.log(`make-latest-json: wrote ${target}`);
   console.log(`  version ${options.version} · ${installerName} · sha256 ${sha256.slice(0, 16)}…`);
-} catch (error) {
-  console.error(`make-latest-json: ${error.message}`);
-  process.exitCode = 1;
-}
+});

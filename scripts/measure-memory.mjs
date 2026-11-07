@@ -23,6 +23,10 @@ import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { parseOptions, runMain } from './lib/cli.mjs';
+import { DEFAULT_RELEASE_EXE_REL, releaseExe } from './lib/paths.mjs';
+import { median } from './lib/startup-stats.mjs';
+
 import {
   connectWebView,
   createFixture,
@@ -37,7 +41,7 @@ import {
 } from './lib/desktop-harness.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const defaultExe = path.join(root, 'src-tauri/target/release/beadazzled.exe');
+const defaultExe = releaseExe(root);
 // Budgets are recorded in ADR-0011. WebView2's process tree is ~430 MB before
 // any ticket is loaded on the reference machine; the data-growth budget is what
 // catches a regression in the app itself.
@@ -52,7 +56,7 @@ function usage() {
     '',
     '  --runs <n>     samples at the target size (default 5, median reported)',
     '  --issues <n>   fixture size (default 1000)',
-    '  --exe <path>   application binary (default src-tauri/target/release/beadazzled.exe)',
+    `  --exe <path>   application binary (default ${DEFAULT_RELEASE_EXE_REL})`,
     '  --port <n>     DevTools port for the WebView2 instance (default 1434)',
     '  --json         print the machine-readable result instead of a report',
     '  --keep         keep the temporary workspaces and profiles for inspection',
@@ -60,49 +64,36 @@ function usage() {
 }
 
 function parseArgs(argv) {
-  const options = { runs: 5, exe: defaultExe, port: 1434, json: false, keep: false, issues: 1000 };
-  for (let index = 0; index < argv.length; index += 1) {
-    const arg = argv[index];
-    const separator = arg.indexOf('=');
-    const name = separator === -1 ? arg : arg.slice(0, separator);
-    const inline = separator === -1 ? undefined : arg.slice(separator + 1);
-    if (name === '--json') {
-      options.json = true;
-    } else if (name === '--keep') {
-      options.keep = true;
-    } else if (name === '--help' || name === '-h') {
-      console.log(usage());
-      process.exit(0);
-    } else if (name === '--runs' || name === '--port' || name === '--exe' || name === '--issues') {
-      const value = inline ?? argv[(index += 1)];
-      if (value === undefined || value === '') {
-        throw new Error(`${name} needs a value`);
+  return parseOptions(argv, {
+    flags: ['--json', '--keep'],
+    values: ['--runs', '--port', '--exe', '--issues'],
+    usage,
+    defaults: { runs: 5, exe: defaultExe, port: 1434, json: false, keep: false, issues: 1000 },
+    onFlag(opts, name) {
+      if (name === '--json') {
+        opts.json = true;
+      } else if (name === '--keep') {
+        opts.keep = true;
       }
+    },
+    onValue(opts, name, value) {
       if (name === '--exe') {
-        options.exe = path.resolve(value);
-        continue;
+        opts.exe = path.resolve(value);
+        return;
       }
       const parsed = Number(value);
       if (!Number.isInteger(parsed) || parsed < 1) {
         throw new Error(`${name} needs a positive integer`);
       }
       if (name === '--runs') {
-        options.runs = parsed;
+        opts.runs = parsed;
       } else if (name === '--issues') {
-        options.issues = parsed;
+        opts.issues = parsed;
       } else {
-        options.port = parsed;
+        opts.port = parsed;
       }
-    } else {
-      throw new Error(`unknown option: ${arg}`);
-    }
-  }
-  return options;
-}
-
-function median(values) {
-  const sorted = [...values].sort((left, right) => left - right);
-  return sorted[Math.floor(sorted.length / 2)] ?? 0;
+    },
+  });
 }
 
 async function sampleFixture({ exe, base, port, count, prefix, runs }) {
@@ -157,6 +148,54 @@ async function sampleFixture({ exe, base, port, count, prefix, runs }) {
   }
 }
 
+function summarizeMemory(options, baseline, target) {
+  const baselineBytes = median(baseline.samples.map((sample) => sample.processBytes));
+  const targetBytes = median(target.samples.map((sample) => sample.processBytes));
+  const growthBytes = targetBytes - baselineBytes;
+  const heapBytes = median(target.samples.map((sample) => sample.heapBytes));
+  const nodes = median(target.samples.map((sample) => sample.nodes));
+
+  const result = {
+    issues: options.issues,
+    rows: target.rows,
+    baseline: { issues: BASELINE_ISSUES, bytes: baselineBytes },
+    target: { bytes: targetBytes, heapBytes, nodes },
+    growthBytes,
+    budgets: { totalBytes: TOTAL_BUDGET_BYTES, growthBytes: GROWTH_BUDGET_BYTES },
+    runs: target.samples,
+    breakdown: target.breakdown,
+  };
+  result.passed = targetBytes <= TOTAL_BUDGET_BYTES && growthBytes <= GROWTH_BUDGET_BYTES;
+  return result;
+}
+
+function printReport(result) {
+  console.log(
+    `baseline (${result.baseline.issues} issue): ${(result.baseline.bytes / 1024 / 1024).toFixed(1)} MB`
+  );
+  console.log(
+    `${result.issues} issues: ${(result.target.bytes / 1024 / 1024).toFixed(1)} MB ` +
+      `(budget ${(TOTAL_BUDGET_BYTES / 1024 / 1024).toFixed(0)} MB), ` +
+      `JS heap ${(result.target.heapBytes / 1024 / 1024).toFixed(1)} MB, ${Math.round(result.target.nodes)} DOM nodes`
+  );
+  console.log(
+    `data growth: ${result.growthBytes >= 0 ? '+' : ''}${(result.growthBytes / 1024 / 1024).toFixed(1)} MB ` +
+      `(budget +${(GROWTH_BUDGET_BYTES / 1024 / 1024).toFixed(0)} MB) — ` +
+      `${result.passed ? 'PASS' : 'OVER'}`
+  );
+  const byType = new Map();
+  for (const entry of result.breakdown) {
+    byType.set(entry.type, (byType.get(entry.type) ?? 0) + entry.bytes);
+  }
+  console.log(
+    'breakdown: ' +
+      [...byType.entries()]
+        .sort((left, right) => right[1] - left[1])
+        .map(([type, bytes]) => `${type} ${(bytes / 1024 / 1024).toFixed(1)} MB`)
+        .join(' · ')
+  );
+}
+
 async function main() {
   const options = parseArgs(process.argv.slice(2));
   if (!existsSync(options.exe)) {
@@ -182,51 +221,12 @@ async function main() {
       runs: options.runs,
     });
 
-    const baselineBytes = median(baseline.samples.map((sample) => sample.processBytes));
-    const targetBytes = median(target.samples.map((sample) => sample.processBytes));
-    const growthBytes = targetBytes - baselineBytes;
-    const heapBytes = median(target.samples.map((sample) => sample.heapBytes));
-    const nodes = median(target.samples.map((sample) => sample.nodes));
-
-    const result = {
-      issues: options.issues,
-      rows: target.rows,
-      baseline: { issues: BASELINE_ISSUES, bytes: baselineBytes },
-      target: { bytes: targetBytes, heapBytes, nodes },
-      growthBytes,
-      budgets: { totalBytes: TOTAL_BUDGET_BYTES, growthBytes: GROWTH_BUDGET_BYTES },
-      runs: target.samples,
-      breakdown: target.breakdown,
-    };
-    result.passed = targetBytes <= TOTAL_BUDGET_BYTES && growthBytes <= GROWTH_BUDGET_BYTES;
+    const result = summarizeMemory(options, baseline, target);
 
     if (options.json) {
       console.log(JSON.stringify(result, null, 2));
     } else {
-      console.log(
-        `baseline (${BASELINE_ISSUES} issue): ${(baselineBytes / 1024 / 1024).toFixed(1)} MB`
-      );
-      console.log(
-        `${options.issues} issues: ${(targetBytes / 1024 / 1024).toFixed(1)} MB ` +
-          `(budget ${(TOTAL_BUDGET_BYTES / 1024 / 1024).toFixed(0)} MB), ` +
-          `JS heap ${(heapBytes / 1024 / 1024).toFixed(1)} MB, ${Math.round(nodes)} DOM nodes`
-      );
-      console.log(
-        `data growth: ${growthBytes >= 0 ? '+' : ''}${(growthBytes / 1024 / 1024).toFixed(1)} MB ` +
-          `(budget +${(GROWTH_BUDGET_BYTES / 1024 / 1024).toFixed(0)} MB) — ` +
-          `${result.passed ? 'PASS' : 'OVER'}`
-      );
-      const byType = new Map();
-      for (const entry of target.breakdown) {
-        byType.set(entry.type, (byType.get(entry.type) ?? 0) + entry.bytes);
-      }
-      console.log(
-        'breakdown: ' +
-          [...byType.entries()]
-            .sort((left, right) => right[1] - left[1])
-            .map(([type, bytes]) => `${type} ${(bytes / 1024 / 1024).toFixed(1)} MB`)
-            .join(' · ')
-      );
+      printReport(result);
     }
     process.exitCode = result.passed ? 0 : 1;
   } finally {
@@ -237,7 +237,4 @@ async function main() {
   }
 }
 
-main().catch((error) => {
-  console.error(`measure:memory failed: ${error.message}`);
-  process.exitCode = 1;
-});
+runMain('measure:memory failed', main);

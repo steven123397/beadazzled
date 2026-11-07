@@ -1,37 +1,18 @@
 import assert from 'node:assert/strict';
-import { spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
-import os from 'node:os';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
-import { afterEach, test } from 'node:test';
-import { fileURLToPath } from 'node:url';
+import { test } from 'node:test';
 
-const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
-const scriptPath = path.join(repoRoot, 'scripts/check-bundle-seam.mjs');
+import { scriptFor, withTempRoots } from './helpers.mjs';
 
-const tempRoots = [];
-
-function makeRoot() {
-  const root = mkdtempSync(path.join(os.tmpdir(), 'beadazzled-seam-'));
-  tempRoots.push(root);
-  return root;
-}
+const scriptPath = scriptFor('check-bundle-seam');
+const { makeRoot, run } = withTempRoots({ prefix: 'beadazzled-seam-', scriptPath });
 
 function writeBundle(root, name, contents) {
   const directory = path.join(root, 'dist/assets');
   mkdirSync(directory, { recursive: true });
   writeFileSync(path.join(directory, name), contents);
 }
-
-function run(root) {
-  return spawnSync(process.execPath, [scriptPath, '--root', root], { encoding: 'utf8' });
-}
-
-afterEach(() => {
-  while (tempRoots.length > 0) {
-    rmSync(tempRoots.pop(), { recursive: true, force: true });
-  }
-});
 
 test('a production bundle without the e2e seam passes', () => {
   const root = makeRoot();

@@ -8,25 +8,13 @@
 // a future screen being imported eagerly into the shell.
 //
 // Sizes are gzip -6 of each file, the same measure the budget is written in.
-import { existsSync, readFileSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
-const BUDGET_BYTES = 150 * 1024;
-const defaultRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+import { parseRootArg, runCheck } from './lib/paths.mjs';
 
-function parseRoot(argv) {
-  const flagIndex = argv.indexOf('--root');
-  if (flagIndex === -1) {
-    return defaultRoot;
-  }
-  const value = argv[flagIndex + 1];
-  if (!value) {
-    throw new Error('--root requires a directory argument');
-  }
-  return path.resolve(value);
-}
+const BUDGET_BYTES = 150 * 1024;
 
 /** Everything index.html makes the browser fetch before the app can render. */
 function firstScreenUrls(html) {
@@ -52,16 +40,22 @@ function formatKilobytes(bytes) {
   return `${(bytes / 1024).toFixed(1)} KB`;
 }
 
-try {
-  const root = parseRoot(process.argv.slice(2));
+runCheck('check-bundle-budget', () => {
+  const root = parseRootArg(process.argv.slice(2));
   const dist = path.join(root, 'dist');
   const indexHtml = path.join(dist, 'index.html');
 
-  if (!existsSync(indexHtml)) {
-    throw new Error('no dist/index.html; run `npm run build` first');
+  let indexHtmlContent;
+  try {
+    indexHtmlContent = readFileSync(indexHtml, 'utf8');
+  } catch (error) {
+    if (error.code === 'ENOENT') {
+      throw new Error('no dist/index.html; run `npm run build` first');
+    }
+    throw error;
   }
 
-  const urls = firstScreenUrls(readFileSync(indexHtml, 'utf8'));
+  const urls = firstScreenUrls(indexHtmlContent);
   if (urls.length === 0) {
     throw new Error('dist/index.html loads no scripts; run `npm run build` first');
   }
@@ -74,10 +68,16 @@ try {
     if (!absolute.startsWith(dist + path.sep)) {
       throw new Error(`index.html references a file outside dist: ${url}`);
     }
-    if (!existsSync(absolute)) {
-      throw new Error(`index.html references a missing file: ${relative}`);
+    let content;
+    try {
+      content = readFileSync(absolute);
+    } catch (error) {
+      if (error.code === 'ENOENT') {
+        throw new Error(`index.html references a missing file: ${relative}`);
+      }
+      throw error;
     }
-    const gzip = gzipSync(readFileSync(absolute)).length;
+    const gzip = gzipSync(content).length;
     total += gzip;
     files.push({ relative, gzip });
   }
@@ -99,7 +99,4 @@ try {
         `(budget ${formatKilobytes(BUDGET_BYTES)})`
     );
   }
-} catch (error) {
-  console.error(`check-bundle-budget: ${error instanceof Error ? error.message : String(error)}`);
-  process.exitCode = 1;
-}
+});

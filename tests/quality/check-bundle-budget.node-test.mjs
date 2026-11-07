@@ -1,22 +1,13 @@
 import assert from 'node:assert/strict';
-import { spawnSync } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
-import os from 'node:os';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
-import { afterEach, test } from 'node:test';
-import { fileURLToPath } from 'node:url';
+import { test } from 'node:test';
 
-const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
-const scriptPath = path.join(repoRoot, 'scripts/check-bundle-budget.mjs');
+import { scriptFor, withTempRoots } from './helpers.mjs';
 
-const tempRoots = [];
-
-function makeRoot() {
-  const root = mkdtempSync(path.join(os.tmpdir(), 'beadazzled-budget-'));
-  tempRoots.push(root);
-  return root;
-}
+const scriptPath = scriptFor('check-bundle-budget');
+const { makeRoot, run } = withTempRoots({ prefix: 'beadazzled-budget-', scriptPath });
 
 function writeFile(root, relative, contents) {
   const absolute = path.join(root, relative);
@@ -37,16 +28,6 @@ function page(scripts, preloads = []) {
 function incompressible(bytes) {
   return randomBytes(bytes);
 }
-
-function run(root) {
-  return spawnSync(process.execPath, [scriptPath, '--root', root], { encoding: 'utf8' });
-}
-
-afterEach(() => {
-  while (tempRoots.length > 0) {
-    rmSync(tempRoots.pop(), { recursive: true, force: true });
-  }
-});
 
 test('a first screen under the budget passes and reports its size', () => {
   const root = makeRoot();
