@@ -6,7 +6,7 @@ import { HelpPanel } from '@/app/keyboard/HelpPanel';
 import type { Shortcut, ShortcutContext } from '@/app/keyboard/types';
 import { useShortcuts } from '@/app/keyboard/useShortcuts';
 import { CommandPalette } from '@/app/palette/CommandPalette';
-import { buildCommands } from '@/app/palette/commands';
+import { buildCommands, type CommandItem } from '@/app/palette/commands';
 import { CopyNotice, useCopy } from '@/components/ui/copy-notice';
 import { useI18n } from '@/lib/i18n/I18nProvider';
 import { useAppVersion } from '@/lib/app-version';
@@ -22,6 +22,8 @@ import { StatusBar } from './StatusBar';
 import { useSyncState } from './SyncStatus';
 import { TopBar } from './TopBar';
 import { activeWorkspace, useWorkspaceContext } from './WorkspaceProvider';
+
+const EMPTY_COMMANDS: readonly CommandItem[] = [];
 
 export function Shell({
   issues = [],
@@ -261,32 +263,34 @@ export function Shell({
 
   useShortcuts(shortcuts, context);
 
-  const paletteCommands = useMemo(
-    () =>
-      buildCommands(issues, {
-        navigate,
-        refresh,
-        copyDiagnostics,
-        project,
-        t,
-        theme: preference,
-        setTheme: setPreference,
-        language,
-        setLanguage,
-      }),
-    [
-      issues,
+  const paletteCommands = useMemo(() => {
+    if (!paletteOpen) {
+      return EMPTY_COMMANDS;
+    }
+    return buildCommands(issues, {
       navigate,
       refresh,
       copyDiagnostics,
       project,
       t,
-      preference,
-      setPreference,
+      theme: preference,
+      setTheme: setPreference,
       language,
       setLanguage,
-    ]
-  );
+    });
+  }, [
+    paletteOpen,
+    issues,
+    navigate,
+    refresh,
+    copyDiagnostics,
+    project,
+    t,
+    preference,
+    setPreference,
+    language,
+    setLanguage,
+  ]);
 
   return (
     <div className="flex h-screen flex-col bg-background text-foreground">

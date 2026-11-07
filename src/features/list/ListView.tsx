@@ -10,7 +10,7 @@ import { StateBadge } from '@/components/ui/state-badge';
 import { FilterBar } from '@/components/filter-bar';
 import { EmptyState, ErrorState, HEALTHY, StaleBanner, useOpenIssue } from '@/components/view-states';
 import { useI18n } from '@/lib/i18n/I18nProvider';
-import { buildSearchIndex, hasActiveFilters } from '@/lib/view/filter';
+import { buildSearchIndex, hasActiveFilters, indexById } from '@/lib/view/filter';
 import { createListViewState, type GroupBy } from '@/lib/view/state';
 import { usePersistedView } from '@/lib/view/usePersistedView';
 
@@ -62,10 +62,11 @@ export function ListView({ projectId, issues, syncState = HEALTHY, onRefresh }: 
   const { view, updateView } = usePersistedView(projectId);
 
   const initialPosition = useMemo(() => loadListPosition(projectId), [projectId]);
+  const issuesById = useMemo(() => indexById(issues), [issues]);
   const searchText = useMemo(() => buildSearchIndex(issues), [issues]);
   const visible = useMemo(
-    () => selectVisibleIssues(issues, view, { searchText }),
-    [issues, view, searchText]
+    () => selectVisibleIssues(issues, view, { searchText, issuesById }),
+    [issues, view, searchText, issuesById]
   );
   const activeFilters = hasActiveFilters(view.filter);
   const showType = useMemo(

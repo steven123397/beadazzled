@@ -3,6 +3,8 @@ import type { Issue } from '@/bindings/bd';
 import { isBlockingDependency } from '@/lib/dependencies';
 import { emptyRecord } from '@/lib/sync/reducer';
 
+export { indexById } from '@/lib/view/filter';
+
 /**
  * A dependency target. `issue` is undefined when the target is not in the
  * store (deleted, or filtered out by the journal): the detail page still shows

@@ -4,16 +4,28 @@ export type FocusKey = 'h' | 'l' | 'j' | 'k';
 
 export type FocusPosition = { columnIndex: number; cardIndex: number };
 
+export type FocusLookup = ReadonlyMap<string, FocusPosition>;
+
 /**
  * Locates the focused card in the rendered board. Columns can be empty and
  * filtered, so this is recomputed from the current model rather than stored.
  */
 export function findFocus(
   columns: readonly BoardColumn[],
-  issueId: string | null
+  issueId: string | null,
+  lookup?: FocusLookup
 ): FocusPosition | null {
   if (issueId === null) {
     return null;
+  }
+  if (lookup !== undefined) {
+    const cached = lookup.get(issueId);
+    if (cached !== undefined) {
+      const col = columns[cached.columnIndex];
+      if (col !== undefined && col.cards[cached.cardIndex]?.issue.id === issueId) {
+        return cached;
+      }
+    }
   }
   for (let columnIndex = 0; columnIndex < columns.length; columnIndex += 1) {
     const cardIndex = columns[columnIndex].cards.findIndex((card) => card.issue.id === issueId);
@@ -27,9 +39,10 @@ export function findFocus(
 /** The card currently under focus, or null when focus is stale. */
 export function focusedCard(
   columns: readonly BoardColumn[],
-  issueId: string | null
+  issueId: string | null,
+  lookup?: FocusLookup
 ): { columnId: ColumnId; card: BoardCard } | null {
-  const position = findFocus(columns, issueId);
+  const position = findFocus(columns, issueId, lookup);
   if (position === null) {
     return null;
   }
@@ -46,9 +59,10 @@ export function focusedCard(
 export function moveFocus(
   columns: readonly BoardColumn[],
   issueId: string | null,
-  key: FocusKey
+  key: FocusKey,
+  lookup?: FocusLookup
 ): string | null {
-  const position = findFocus(columns, issueId);
+  const position = findFocus(columns, issueId, lookup);
   if (position === null) {
     return firstCardId(columns);
   }

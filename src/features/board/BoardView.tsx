@@ -20,7 +20,7 @@ import { EmptyState, ErrorState, HEALTHY, StaleBanner, useOpenIssue } from '@/co
 import { describeError } from '@/lib/errors';
 import type { MessageKey } from '@/lib/i18n';
 import { useI18n } from '@/lib/i18n/I18nProvider';
-import { indexIssues } from '@/lib/store/selectors';
+import { indexById } from '@/lib/store/selectors';
 import { buildSearchIndex } from '@/lib/view/filter';
 import { createListViewState } from '@/lib/view/state';
 import { usePersistedView } from '@/lib/view/usePersistedView';
@@ -88,28 +88,33 @@ export function BoardView({
   const { t } = useI18n();
   const { view, updateView } = usePersistedView(projectId, 'board');
 
-  const index = useMemo(() => indexIssues(issues), [issues]);
+  const byId = useMemo(() => indexById(issues), [issues]);
   const searchText = useMemo(() => buildSearchIndex(issues), [issues]);
   const visible = useMemo(
     () =>
       filterForBoard(issues, view.filter, {
         searchText,
-        issuesById: index.byId,
+        issuesById: byId,
       }),
-    [index.byId, issues, searchText, view.filter]
+    [byId, issues, searchText, view.filter]
   );
-  const board = useMemo(() => buildBoard(visible, index.byId), [index.byId, visible]);
+  const board = useMemo(() => buildBoard(visible, byId), [byId, visible]);
   const activeFilters = hasBoardFilters(view.filter);
 
   // Lookup built once per board model so keyboard navigation, drag start and
   // the overlay all agree on where a card is.
   const layout = useMemo(() => {
     const cards = new Map<string, BoardCard>();
-    const positions = new Map<string, { columnId: ColumnId }>();
-    for (const column of board.columns) {
-      for (const card of column.cards) {
+    const positions = new Map<
+      string,
+      { columnId: ColumnId; columnIndex: number; cardIndex: number }
+    >();
+    for (let columnIndex = 0; columnIndex < board.columns.length; columnIndex += 1) {
+      const column = board.columns[columnIndex];
+      for (let cardIndex = 0; cardIndex < column.cards.length; cardIndex += 1) {
+        const card = column.cards[cardIndex];
         cards.set(card.issue.id, card);
-        positions.set(card.issue.id, { columnId: column.id });
+        positions.set(card.issue.id, { columnId: column.id, columnIndex, cardIndex });
       }
     }
     return { cards, positions };
@@ -314,7 +319,7 @@ export function BoardView({
         if (!isBoardTarget(event.target)) {
           return;
         }
-        const current = focusedCard(board.columns, focusedId);
+        const current = focusedCard(board.columns, focusedId, layout.positions);
         if (current === null) {
           return;
         }
@@ -338,7 +343,7 @@ export function BoardView({
       }
 
       if (event.key === 'Enter') {
-        const current = focusedCard(board.columns, focusedId);
+        const current = focusedCard(board.columns, focusedId, layout.positions);
         if (current !== null && isBoardTarget(event.target)) {
           event.preventDefault();
           openIssue(current.card.issue);
@@ -351,7 +356,7 @@ export function BoardView({
         return;
       }
       event.preventDefault();
-      const next = moveFocus(board.columns, focusedId, key as FocusKey);
+      const next = moveFocus(board.columns, focusedId, key as FocusKey, layout.positions);
       if (next !== null) {
         requestFocus(next);
       }
@@ -359,7 +364,7 @@ export function BoardView({
 
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [activeDrag, attemptMove, board.columns, focusedId, openIssue, requestFocus, t]);
+  }, [activeDrag, attemptMove, board.columns, focusedId, layout.positions, openIssue, requestFocus, t]);
 
   const total = issues.length;
   const state: BoardState =
