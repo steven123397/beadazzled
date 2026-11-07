@@ -13,6 +13,7 @@ import { useI18n } from '@/lib/i18n/I18nProvider';
 import { buildSearchIndex, hasActiveFilters, indexById } from '@/lib/view/filter';
 import { createListViewState, type GroupBy } from '@/lib/view/state';
 import { usePersistedView } from '@/lib/view/usePersistedView';
+import { useVirtualFocus } from '@/lib/view/useVirtualFocus';
 
 import { selectVisibleIssues } from './filter';
 import { GROUP_HEIGHT, GroupHeader } from './GroupHeader';
@@ -78,13 +79,6 @@ export function ListView({ projectId, issues, syncState = HEALTHY, onRefresh }: 
   const [collapsedGroups, setCollapsedGroups] = useState<ReadonlySet<string>>(new Set());
   const scrollRef = useRef<HTMLDivElement>(null);
   const focusedIdRef = useRef(focusedId);
-  // Only a visible row may request focus; the restore path sets this itself
-  // when it finds the saved row. Keeping a missing saved id here would let it
-  // steal focus later, when a filter change makes that row appear again.
-  const pendingFocusRef = useRef<string | null>(null);
-  // Bumped whenever pendingFocusRef is set, so the focus effect runs even when
-  // focusedId did not change (restoring an already-focused row).
-  const [focusRequest, setFocusRequest] = useState(0);
   const restoredRef = useRef(false);
 
   focusedIdRef.current = focusedId;
@@ -157,18 +151,17 @@ export function ListView({ projectId, issues, syncState = HEALTHY, onRefresh }: 
 
   const openIssue = useOpenIssue(projectId);
 
+  const { focusItem } = useVirtualFocus(virtualizer, items, {
+    getItemId: (item) => (item.kind === 'row' ? item.issue.id : undefined),
+    getElementId: rowId,
+  });
+
   const focusRow = useCallback(
     (id: string) => {
-      const meta = rowMetaRef.current.byId.get(id);
-      if (meta === undefined) {
-        return;
-      }
-      pendingFocusRef.current = id;
       setFocusedId(id);
-      setFocusRequest((value) => value + 1);
-      virtualizer.scrollToIndex(meta.itemIndex, { align: 'auto' });
+      focusItem(id);
     },
-    [virtualizer]
+    [focusItem]
   );
 
   const toggleGroup = useCallback((key: string) => {
@@ -231,17 +224,15 @@ export function ListView({ projectId, issues, syncState = HEALTHY, onRefresh }: 
       if (initialPosition.focusedId !== null) {
         const meta = rowMetaRef.current.byId.get(initialPosition.focusedId);
         if (meta !== undefined) {
-          pendingFocusRef.current = initialPosition.focusedId;
           setFocusedId(initialPosition.focusedId);
-          setFocusRequest((value) => value + 1);
-          virtualizer.scrollToIndex(meta.itemIndex, { align: 'auto' });
+          focusItem(initialPosition.focusedId);
         } else {
           // The saved row is filtered out or gone; do not keep a ghost focus.
           setFocusedId(null);
         }
       }
     });
-  }, [initialPosition, items.length, virtualizer]);
+  }, [focusItem, initialPosition, items.length, virtualizer]);
 
   // Save in a layout cleanup: by passive-effect cleanup time the scroll
   // container may already be detached, which would persist offset zero.
@@ -260,20 +251,7 @@ export function ListView({ projectId, issues, syncState = HEALTHY, onRefresh }: 
     };
   }, [projectId]);
 
-  // Focus the requested row after the virtualizer has rendered it.
   const virtualItems = virtualizer.getVirtualItems();
-  useEffect(() => {
-    const id = pendingFocusRef.current;
-    if (id === null) {
-      return;
-    }
-    const element = document.getElementById(rowId(id));
-    if (element === null) {
-      return;
-    }
-    pendingFocusRef.current = null;
-    element.focus({ preventScroll: true });
-  }, [focusedId, focusRequest, virtualItems]);
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent): void {

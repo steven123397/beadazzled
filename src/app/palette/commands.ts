@@ -1,4 +1,5 @@
 import type { Issue } from '@/bindings/bd';
+import { boardPath, listPath } from '@/app/paths';
 import { LANGUAGES, type Language, type MessageKey } from '@/lib/i18n';
 import { nextTheme, type Theme } from '@/lib/theme/theme';
 
@@ -66,14 +67,14 @@ export function buildCommands(issues: readonly Issue[], context: PaletteContext)
         title: t('shortcut.list'),
         group: 'Navigation',
         keywords: 'issues tickets list',
-        run: () => context.navigate(`/w/${projectId}/list`),
+        run: () => context.navigate(listPath(projectId)),
       }),
       createCommandItem({
         id: 'nav:board',
         title: t('shortcut.board'),
         group: 'Navigation',
         keywords: 'columns kanban board',
-        run: () => context.navigate(`/w/${projectId}/board`),
+        run: () => context.navigate(boardPath(projectId)),
       })
     );
   }

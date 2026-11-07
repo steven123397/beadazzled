@@ -22,6 +22,7 @@ import { Shell } from './shell/Shell';
 import { SkeletonScreen } from './shell/SkeletonScreen';
 import { recordSyncError, SyncStatusProvider, type SyncErrorRecord } from './shell/SyncStatus';
 import { Welcome } from './shell/Welcome';
+import { listPath } from './paths';
 import {
   activeWorkspace,
   isMissingWorkspace,
@@ -347,7 +348,7 @@ function RootRedirect() {
     );
   }
 
-  return <Navigate to={`/w/${project.projectId}/list`} replace />;
+  return <Navigate to={listPath(project.projectId)} replace />;
 }
 
 /** A deep link whose projectId is not registered lands on the welcome screen. */

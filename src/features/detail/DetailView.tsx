@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 
 import { isEditableTarget, isOverlayOpen } from '@/app/keyboard/resolve';
+import { listPath } from '@/app/paths';
 import { Button } from '@/components/ui/button';
 import type { Issue } from '@/bindings/bd';
 import { confirmLeaveDraft, setDraftGuard } from '@/lib/draft-guard';
@@ -525,7 +526,7 @@ export function DetailRoute({
     // A deep link has no list entry to return to; a normal open should restore
     // the previous URL, which still carries the list filters.
     if (location.key === 'default') {
-      navigate(`/w/${projectId}/list`, { replace: true });
+      navigate(listPath(projectId), { replace: true });
       return;
     }
     navigate(-1);

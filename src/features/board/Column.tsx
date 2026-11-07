@@ -5,6 +5,7 @@ import { useVirtualizer } from '@tanstack/react-virtual';
 import type { Issue } from '@/bindings/bd';
 import { StatusIcon } from '@/components/ui/status-icon';
 import { useI18n } from '@/lib/i18n/I18nProvider';
+import { useVirtualFocus } from '@/lib/view/useVirtualFocus';
 
 import { Card, cardId } from './Card';
 import { COLUMN_LABEL_KEYS, type BoardColumn, type ColumnId } from './columns';
@@ -115,7 +116,11 @@ export function Column({
 
   // Only an explicit keyboard focus request scrolls and focuses; a filter
   // change must not pull focus out of the search box.
-  const pendingFocusRef = useRef<string | null>(null);
+  const { focusItem } = useVirtualFocus(virtualizer, column.cards, {
+    getItemId: (card) => card.issue.id,
+    getElementId: cardId,
+  });
+
   const handledRequestRef = useRef(0);
   useEffect(() => {
     if (focusRequest === handledRequestRef.current) {
@@ -125,26 +130,8 @@ export function Column({
     if (focusedId === null) {
       return;
     }
-    const index = column.cards.findIndex((card) => card.issue.id === focusedId);
-    if (index === -1) {
-      return;
-    }
-    pendingFocusRef.current = focusedId;
-    virtualizer.scrollToIndex(index, { align: 'auto' });
-  }, [column.cards, focusRequest, focusedId, virtualizer]);
-
-  useEffect(() => {
-    const id = pendingFocusRef.current;
-    if (id === null) {
-      return;
-    }
-    const element = document.getElementById(cardId(id));
-    if (element === null) {
-      return;
-    }
-    pendingFocusRef.current = null;
-    element.focus({ preventScroll: true });
-  }, [focusedId, virtualItems]);
+    focusItem(focusedId);
+  }, [focusItem, focusRequest, focusedId]);
 
   return (
     <section

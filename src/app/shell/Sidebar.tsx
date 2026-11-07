@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import { NavLink } from 'react-router-dom';
 
 import type { WorkspaceEntry } from '@/bindings/bd';
+import { boardPath, listPath } from '@/app/paths';
 import { navLinkClass } from '@/components/nav-link';
 import { confirmLeaveDraft } from '@/lib/draft-guard';
 import { useI18n } from '@/lib/i18n/I18nProvider';
@@ -56,12 +57,12 @@ export function Sidebar({
       ) : (
         <nav aria-label={t('shell.views')} className="flex flex-col gap-0.5">
           <ViewLink
-            to={`/w/${project.projectId}/list`}
+            to={listPath(project.projectId)}
             label={t('nav.list')}
             icon={<List aria-hidden="true" className="size-3.5 shrink-0" />}
           />
           <ViewLink
-            to={`/w/${project.projectId}/board`}
+            to={boardPath(project.projectId)}
             label={t('nav.board')}
             icon={<LayoutGrid aria-hidden="true" className="size-3.5 shrink-0" />}
           />

@@ -7,6 +7,7 @@ import type { Shortcut, ShortcutContext } from '@/app/keyboard/types';
 import { useShortcuts } from '@/app/keyboard/useShortcuts';
 import { CommandPalette } from '@/app/palette/CommandPalette';
 import { buildCommands, type CommandItem } from '@/app/palette/commands';
+import { boardPath, isIssuePath, listPath } from '@/app/paths';
 import { CopyNotice, useCopy } from '@/components/ui/copy-notice';
 import { useI18n } from '@/lib/i18n/I18nProvider';
 import { useAppVersion } from '@/lib/app-version';
@@ -59,10 +60,9 @@ export function Shell({
   const locationRef = useRef(location);
   locationRef.current = location;
   const project = activeWorkspace(snapshot);
-  const onIssueRoute = /^\/w\/[^/]+\/issue\//.test(location.pathname);
-  const [paletteOpen, setPaletteOpen] = useState(false);
-  const [helpOpen, setHelpOpen] = useState(false);
-  const [diagnosticsOpen, setDiagnosticsOpen] = useState(false);
+  const onIssueRoute = isIssuePath(location.pathname);
+  type Overlay = 'palette' | 'help' | 'diagnostics' | null;
+  const [overlay, setOverlay] = useState<Overlay>(null);
   // Read once at mount so a restored collapse never renders expanded first.
   const [sidebarCollapsed, setSidebarCollapsed] = useState(loadSidebarCollapsed);
   const appVersion = useAppVersion();
@@ -95,13 +95,9 @@ export function Shell({
     return () => window.removeEventListener('popstate', handler);
   }, [routerNavigate]);
 
-  const closeOverlay = useCallback(() => {
-    setPaletteOpen(false);
-    setHelpOpen(false);
-    setDiagnosticsOpen(false);
-  }, []);
-  const openPalette = useCallback(() => setPaletteOpen(true), []);
-  const openDiagnostics = useCallback(() => setDiagnosticsOpen(true), []);
+  const closeOverlay = useCallback(() => setOverlay(null), []);
+  const openPalette = useCallback(() => setOverlay('palette'), []);
+  const openDiagnostics = useCallback(() => setOverlay('diagnostics'), []);
   const toggleSidebar = useCallback(() => setSidebarCollapsed((collapsed) => !collapsed), []);
 
   // A pointer switch is just navigation: ProjectGate performs (and reports) the
@@ -110,7 +106,7 @@ export function Shell({
     (path: string) => {
       const entry = snapshot?.config.workspaces.find((workspace) => workspace.path === path);
       if (entry !== undefined) {
-        navigate(`/w/${entry.projectId}/list`, { replace: true });
+        navigate(listPath(entry.projectId), { replace: true });
       }
     },
     [snapshot, navigate]
@@ -150,7 +146,7 @@ export function Shell({
   };
 
   const shortcuts = useMemo<Shortcut[]>(() => {
-    const overlayOpen = paletteOpen || helpOpen || diagnosticsOpen;
+    const overlayOpen = overlay !== null;
     const list: Shortcut[] = [
       {
         id: 'palette',
@@ -195,7 +191,7 @@ export function Shell({
         labelKey: 'shortcut.help',
         group: 'Help',
         when: () => !overlayOpen,
-        run: () => setHelpOpen(true),
+        run: () => setOverlay('help'),
       },
     ];
 
@@ -208,7 +204,7 @@ export function Shell({
           labelKey: 'shortcut.list',
           group: 'Navigation',
           when: () => !overlayOpen,
-          run: (ctx) => ctx.navigate(`/w/${projectId}/list`),
+          run: (ctx) => ctx.navigate(listPath(projectId)),
         },
         {
           id: 'go-board',
@@ -216,7 +212,7 @@ export function Shell({
           labelKey: 'shortcut.board',
           group: 'Navigation',
           when: () => !overlayOpen,
-          run: (ctx) => ctx.navigate(`/w/${projectId}/board`),
+          run: (ctx) => ctx.navigate(boardPath(projectId)),
         },
         {
           id: 'list',
@@ -224,7 +220,7 @@ export function Shell({
           labelKey: 'shortcut.list',
           group: 'Navigation',
           when: () => !overlayOpen,
-          run: (ctx) => ctx.navigate(`/w/${projectId}/list`),
+          run: (ctx) => ctx.navigate(listPath(projectId)),
         },
         {
           id: 'board',
@@ -232,7 +228,7 @@ export function Shell({
           labelKey: 'shortcut.board',
           group: 'Navigation',
           when: () => !overlayOpen,
-          run: (ctx) => ctx.navigate(`/w/${projectId}/board`),
+          run: (ctx) => ctx.navigate(boardPath(projectId)),
         }
       );
     }
@@ -254,17 +250,17 @@ export function Shell({
         labelKey: 'shortcut.back',
         group: 'Navigation',
         when: () => !overlayOpen,
-        run: (ctx) => ctx.navigate(`/w/${projectId}/list`),
+        run: (ctx) => ctx.navigate(listPath(projectId)),
       });
     }
 
     return list;
-  }, [project, paletteOpen, helpOpen, diagnosticsOpen, onIssueRoute]);
+  }, [project, overlay, onIssueRoute]);
 
   useShortcuts(shortcuts, context);
 
   const paletteCommands = useMemo(() => {
-    if (!paletteOpen) {
+    if (overlay !== 'palette') {
       return EMPTY_COMMANDS;
     }
     return buildCommands(issues, {
@@ -279,7 +275,7 @@ export function Shell({
       setLanguage,
     });
   }, [
-    paletteOpen,
+    overlay,
     issues,
     navigate,
     refresh,
@@ -314,10 +310,10 @@ export function Shell({
           </AppRefreshProvider>
         </main>
       </div>
-      <StatusBar lastRefreshAt={lastRefreshAt} open={diagnosticsOpen} onOpen={openDiagnostics} />
-      {helpOpen ? <HelpPanel shortcuts={shortcuts} onClose={closeOverlay} /> : null}
-      {paletteOpen ? <CommandPalette commands={paletteCommands} onClose={closeOverlay} /> : null}
-      {diagnosticsOpen ? (
+      <StatusBar lastRefreshAt={lastRefreshAt} open={overlay === 'diagnostics'} onOpen={openDiagnostics} />
+      {overlay === 'help' ? <HelpPanel shortcuts={shortcuts} onClose={closeOverlay} /> : null}
+      {overlay === 'palette' ? <CommandPalette commands={paletteCommands} onClose={closeOverlay} /> : null}
+      {overlay === 'diagnostics' ? (
         <Diagnostics
           lastSeq={lastSeq}
           lastRefreshAt={lastRefreshAt}
