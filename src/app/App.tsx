@@ -7,7 +7,7 @@ import { workspaceApi as defaultWorkspaceApi, type WorkspaceApi } from '@/lib/wo
 import { checkForUpdate } from '@/lib/updates';
 import { useWorkspace } from '@/lib/workspace/useWorkspace';
 import { I18nProvider, useI18n } from '@/lib/i18n/I18nProvider';
-import type { Language } from '@/lib/i18n';
+import type { Language, MessageKey } from '@/lib/i18n';
 import type { SyncApi } from '@/lib/sync/api';
 import { useSync } from '@/lib/sync/useSync';
 import { ThemeProvider } from '@/lib/theme/ThemeProvider';
@@ -22,6 +22,7 @@ import { Shell } from './shell/Shell';
 import { SkeletonScreen } from './shell/SkeletonScreen';
 import { recordSyncError, SyncStatusProvider, type SyncErrorRecord } from './shell/SyncStatus';
 import { Welcome } from './shell/Welcome';
+import { listPath } from './paths';
 import {
   activeWorkspace,
   isMissingWorkspace,
@@ -277,13 +278,7 @@ function AppFrame({
                     <Route
                       path="board"
                       element={
-                        <Suspense
-                          fallback={
-                            <p role="status" className="px-6 py-10 text-sm text-muted-foreground">
-                              {t('board.loading')}
-                            </p>
-                          }
-                        >
+                        <Suspense fallback={<RouteFallback labelKey="board.loading" />}>
                           <BoardRoute
                             issues={shellIssues}
                             syncState={shellSyncState}
@@ -296,13 +291,7 @@ function AppFrame({
                     <Route
                       path="issue/:issueId"
                       element={
-                        <Suspense
-                          fallback={
-                            <p role="status" className="px-6 py-10 text-sm text-muted-foreground">
-                              {t('detail.loading')}
-                            </p>
-                          }
-                        >
+                        <Suspense fallback={<RouteFallback labelKey="detail.loading" />}>
                           <DetailRoute
                             issues={shellIssues}
                             loading={shellSyncState.kind === 'loading'}
@@ -317,13 +306,7 @@ function AppFrame({
                     <Route
                       path=":section"
                       element={
-                        <Suspense
-                          fallback={
-                            <p role="status" className="px-6 py-10 text-sm text-muted-foreground">
-                              {t('settings.loading')}
-                            </p>
-                          }
-                        >
+                        <Suspense fallback={<RouteFallback labelKey="settings.loading" />}>
                           <SettingsRoute />
                         </Suspense>
                       }
@@ -365,7 +348,7 @@ function RootRedirect() {
     );
   }
 
-  return <Navigate to={`/w/${project.projectId}/list`} replace />;
+  return <Navigate to={listPath(project.projectId)} replace />;
 }
 
 /** A deep link whose projectId is not registered lands on the welcome screen. */
@@ -417,4 +400,13 @@ function ProjectGate() {
   }
 
   return <Outlet />;
+}
+
+function RouteFallback({ labelKey }: { labelKey: MessageKey }) {
+  const { t } = useI18n();
+  return (
+    <p role="status" className="px-6 py-10 text-sm text-muted-foreground">
+      {t(labelKey)}
+    </p>
+  );
 }

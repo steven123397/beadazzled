@@ -6,9 +6,10 @@ import { HelpPanel } from '@/app/keyboard/HelpPanel';
 import type { Shortcut, ShortcutContext } from '@/app/keyboard/types';
 import { useShortcuts } from '@/app/keyboard/useShortcuts';
 import { CommandPalette } from '@/app/palette/CommandPalette';
-import { buildCommands } from '@/app/palette/commands';
+import { buildCommands, type CommandItem } from '@/app/palette/commands';
+import { boardPath, isIssuePath, listPath } from '@/app/paths';
+import { CopyNotice, useCopy } from '@/components/ui/copy-notice';
 import { useI18n } from '@/lib/i18n/I18nProvider';
-import { copyText, type CopyResult } from '@/lib/clipboard';
 import { useAppVersion } from '@/lib/app-version';
 import { formatDiagnostics } from '@/lib/diagnostics';
 import { confirmLeaveDraft } from '@/lib/draft-guard';
@@ -22,6 +23,8 @@ import { StatusBar } from './StatusBar';
 import { useSyncState } from './SyncStatus';
 import { TopBar } from './TopBar';
 import { activeWorkspace, useWorkspaceContext } from './WorkspaceProvider';
+
+const EMPTY_COMMANDS: readonly CommandItem[] = [];
 
 export function Shell({
   issues = [],
@@ -57,15 +60,14 @@ export function Shell({
   const locationRef = useRef(location);
   locationRef.current = location;
   const project = activeWorkspace(snapshot);
-  const onIssueRoute = /^\/w\/[^/]+\/issue\//.test(location.pathname);
-  const [paletteOpen, setPaletteOpen] = useState(false);
-  const [helpOpen, setHelpOpen] = useState(false);
-  const [diagnosticsOpen, setDiagnosticsOpen] = useState(false);
+  const onIssueRoute = isIssuePath(location.pathname);
+  type Overlay = 'palette' | 'help' | 'diagnostics' | null;
+  const [overlay, setOverlay] = useState<Overlay>(null);
   // Read once at mount so a restored collapse never renders expanded first.
   const [sidebarCollapsed, setSidebarCollapsed] = useState(loadSidebarCollapsed);
   const appVersion = useAppVersion();
   const [lastRefreshAt, setLastRefreshAt] = useState(() => Date.now());
-  const [copyNotice, setCopyNotice] = useState<CopyResult | null>(null);
+  const { copyResult: copyNotice, copy: copyDiagnosticsText } = useCopy({ timeoutMs: 2500 });
 
   const refreshData = useMemo(() => onRefresh ?? (() => void reload()), [onRefresh, reload]);
   const refresh = useCallback(() => {
@@ -93,13 +95,9 @@ export function Shell({
     return () => window.removeEventListener('popstate', handler);
   }, [routerNavigate]);
 
-  const closeOverlay = useCallback(() => {
-    setPaletteOpen(false);
-    setHelpOpen(false);
-    setDiagnosticsOpen(false);
-  }, []);
-  const openPalette = useCallback(() => setPaletteOpen(true), []);
-  const openDiagnostics = useCallback(() => setDiagnosticsOpen(true), []);
+  const closeOverlay = useCallback(() => setOverlay(null), []);
+  const openPalette = useCallback(() => setOverlay('palette'), []);
+  const openDiagnostics = useCallback(() => setOverlay('diagnostics'), []);
   const toggleSidebar = useCallback(() => setSidebarCollapsed((collapsed) => !collapsed), []);
 
   // A pointer switch is just navigation: ProjectGate performs (and reports) the
@@ -108,7 +106,7 @@ export function Shell({
     (path: string) => {
       const entry = snapshot?.config.workspaces.find((workspace) => workspace.path === path);
       if (entry !== undefined) {
-        navigate(`/w/${entry.projectId}/list`, { replace: true });
+        navigate(listPath(entry.projectId), { replace: true });
       }
     },
     [snapshot, navigate]
@@ -136,16 +134,8 @@ export function Shell({
   );
 
   const copyDiagnostics = useCallback(() => {
-    void copyText(diagnosticsText()).then(setCopyNotice);
-  }, [diagnosticsText]);
-
-  useEffect(() => {
-    if (copyNotice === null) {
-      return undefined;
-    }
-    const timer = setTimeout(() => setCopyNotice(null), 2500);
-    return () => clearTimeout(timer);
-  }, [copyNotice]);
+    void copyDiagnosticsText(diagnosticsText());
+  }, [copyDiagnosticsText, diagnosticsText]);
 
   const context: ShortcutContext = {
     navigate,
@@ -156,7 +146,7 @@ export function Shell({
   };
 
   const shortcuts = useMemo<Shortcut[]>(() => {
-    const overlayOpen = paletteOpen || helpOpen || diagnosticsOpen;
+    const overlayOpen = overlay !== null;
     const list: Shortcut[] = [
       {
         id: 'palette',
@@ -201,7 +191,7 @@ export function Shell({
         labelKey: 'shortcut.help',
         group: 'Help',
         when: () => !overlayOpen,
-        run: () => setHelpOpen(true),
+        run: () => setOverlay('help'),
       },
     ];
 
@@ -214,7 +204,7 @@ export function Shell({
           labelKey: 'shortcut.list',
           group: 'Navigation',
           when: () => !overlayOpen,
-          run: (ctx) => ctx.navigate(`/w/${projectId}/list`),
+          run: (ctx) => ctx.navigate(listPath(projectId)),
         },
         {
           id: 'go-board',
@@ -222,7 +212,7 @@ export function Shell({
           labelKey: 'shortcut.board',
           group: 'Navigation',
           when: () => !overlayOpen,
-          run: (ctx) => ctx.navigate(`/w/${projectId}/board`),
+          run: (ctx) => ctx.navigate(boardPath(projectId)),
         },
         {
           id: 'list',
@@ -230,7 +220,7 @@ export function Shell({
           labelKey: 'shortcut.list',
           group: 'Navigation',
           when: () => !overlayOpen,
-          run: (ctx) => ctx.navigate(`/w/${projectId}/list`),
+          run: (ctx) => ctx.navigate(listPath(projectId)),
         },
         {
           id: 'board',
@@ -238,7 +228,7 @@ export function Shell({
           labelKey: 'shortcut.board',
           group: 'Navigation',
           when: () => !overlayOpen,
-          run: (ctx) => ctx.navigate(`/w/${projectId}/board`),
+          run: (ctx) => ctx.navigate(boardPath(projectId)),
         }
       );
     }
@@ -260,41 +250,43 @@ export function Shell({
         labelKey: 'shortcut.back',
         group: 'Navigation',
         when: () => !overlayOpen,
-        run: (ctx) => ctx.navigate(`/w/${projectId}/list`),
+        run: (ctx) => ctx.navigate(listPath(projectId)),
       });
     }
 
     return list;
-  }, [project, paletteOpen, helpOpen, diagnosticsOpen, onIssueRoute]);
+  }, [project, overlay, onIssueRoute]);
 
   useShortcuts(shortcuts, context);
 
-  const paletteCommands = useMemo(
-    () =>
-      buildCommands(issues, {
-        navigate,
-        refresh,
-        copyDiagnostics,
-        project,
-        t,
-        theme: preference,
-        setTheme: setPreference,
-        language,
-        setLanguage,
-      }),
-    [
-      issues,
+  const paletteCommands = useMemo(() => {
+    if (overlay !== 'palette') {
+      return EMPTY_COMMANDS;
+    }
+    return buildCommands(issues, {
       navigate,
       refresh,
       copyDiagnostics,
       project,
       t,
-      preference,
-      setPreference,
+      theme: preference,
+      setTheme: setPreference,
       language,
       setLanguage,
-    ]
-  );
+    });
+  }, [
+    overlay,
+    issues,
+    navigate,
+    refresh,
+    copyDiagnostics,
+    project,
+    t,
+    preference,
+    setPreference,
+    language,
+    setLanguage,
+  ]);
 
   return (
     <div className="flex h-screen flex-col bg-background text-foreground">
@@ -318,10 +310,10 @@ export function Shell({
           </AppRefreshProvider>
         </main>
       </div>
-      <StatusBar lastRefreshAt={lastRefreshAt} open={diagnosticsOpen} onOpen={openDiagnostics} />
-      {helpOpen ? <HelpPanel shortcuts={shortcuts} onClose={closeOverlay} /> : null}
-      {paletteOpen ? <CommandPalette commands={paletteCommands} onClose={closeOverlay} /> : null}
-      {diagnosticsOpen ? (
+      <StatusBar lastRefreshAt={lastRefreshAt} open={overlay === 'diagnostics'} onOpen={openDiagnostics} />
+      {overlay === 'help' ? <HelpPanel shortcuts={shortcuts} onClose={closeOverlay} /> : null}
+      {overlay === 'palette' ? <CommandPalette commands={paletteCommands} onClose={closeOverlay} /> : null}
+      {overlay === 'diagnostics' ? (
         <Diagnostics
           lastSeq={lastSeq}
           lastRefreshAt={lastRefreshAt}
@@ -333,20 +325,7 @@ export function Shell({
       {/* Mounted for the lifetime of the shell: a region inserted together
           with its text is not announced. It only becomes visible when there
           is a result to show. */}
-      <p
-        role="status"
-        aria-live="polite"
-        aria-atomic="true"
-        className={
-          copyNotice === null
-            ? 'sr-only'
-            : 'pointer-events-none fixed bottom-8 left-1/2 z-40 -translate-x-1/2 rounded border border-border bg-raised px-3 py-1 text-xs text-foreground shadow'
-        }
-      >
-        {copyNotice === null
-          ? ''
-          : t(copyNotice === 'copied' ? 'clipboard.copied' : 'clipboard.failed')}
-      </p>
+      <CopyNotice result={copyNotice} variant="toast" />
     </div>
   );
 }

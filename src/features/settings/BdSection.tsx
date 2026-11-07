@@ -3,11 +3,13 @@ import { useState } from 'react';
 import type { BdStatus } from '@/bindings/bd';
 import { useWorkspaceContext } from '@/app/shell/WorkspaceProvider';
 import { Button } from '@/components/ui/button';
+import { CopyNotice, useCopy } from '@/components/ui/copy-notice';
 import { copyText, type CopyResult } from '@/lib/clipboard';
 import { messageOf } from '@/lib/errors';
 import { useI18n } from '@/lib/i18n/I18nProvider';
 
 import { pickBdExecutable as defaultPicker } from './dialog';
+import { SettingsSection } from './SettingsSection';
 
 export type BdSectionProps = {
   /** Test seam: the native picker cannot run outside a webview. */
@@ -26,7 +28,8 @@ export function BdSection({ pickFile = defaultPicker, copy = copyText }: BdSecti
   const [attempt, setAttempt] = useState<BdStatus | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [copyResult, setCopyResult] = useState<CopyResult | null>(null);
+  const { copyResult, setCopyResult, copy: performCopy } = useCopy({ copy });
+
 
   const configured = snapshot?.config.bdPath ?? null;
   // The panel always describes what the app is actually running on. A rejected
@@ -80,7 +83,7 @@ export function BdSection({ pickFile = defaultPicker, copy = copyText }: BdSecti
   }
 
   async function copyCommand(): Promise<void> {
-    setCopyResult(await copy(installCommand));
+    await performCopy(installCommand);
   }
 
   function describeRejection(status: BdStatus): string {
@@ -97,10 +100,8 @@ export function BdSection({ pickFile = defaultPicker, copy = copyText }: BdSecti
   }
 
   return (
-    <section aria-labelledby="settings-bd" className="space-y-3">
-      <h2 id="settings-bd" className="text-lg font-semibold">
-        {t('settings.bd')}
-      </h2>
+    <SettingsSection id="settings-bd" title={t('settings.bd')}>
+
       <div className="space-y-2 rounded-md border border-border bg-raised p-3 text-xs">
         {shown === null ? (
           <p className="text-muted-foreground">{t('settings.bd.loading')}</p>
@@ -149,11 +150,7 @@ export function BdSection({ pickFile = defaultPicker, copy = copyText }: BdSecti
           {shownError}
         </p>
       )}
-      {copyResult === null ? null : (
-        <p role="status" aria-live="polite" className="text-xs text-muted-foreground">
-          {t(copyResult === 'copied' ? 'clipboard.copied' : 'clipboard.failed')}
-        </p>
-      )}
+      <CopyNotice result={copyResult} />
       <div className="flex flex-wrap gap-2">
         <Button size="md" onClick={() => void detect()} disabled={busy}>
           {t('settings.bd.redetect')}
@@ -172,6 +169,7 @@ export function BdSection({ pickFile = defaultPicker, copy = copyText }: BdSecti
           </Button>
         )}
       </div>
-    </section>
+    </SettingsSection>
+
   );
 }

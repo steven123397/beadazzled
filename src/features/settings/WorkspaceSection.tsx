@@ -11,6 +11,7 @@ import { useI18n } from '@/lib/i18n/I18nProvider';
 import { formatRelativeTime } from '@/lib/time';
 
 import { pickDirectory as defaultPicker } from './dialog';
+import { SettingsSection } from './SettingsSection';
 
 export type WorkspaceSectionProps = {
   /** Test seam: the native picker cannot run outside a webview. */
@@ -103,20 +104,25 @@ export function WorkspaceSection({ pickDirectory = defaultPicker }: WorkspaceSec
   const shownError = localError ?? error;
 
   return (
-    <section aria-labelledby="settings-workspaces" className="space-y-3">
-      <div className="flex items-center justify-between">
-        <h2 id="settings-workspaces" className="text-lg font-semibold">
+    <SettingsSection
+      id="settings-workspaces"
+      title={
+        <>
           {t('settings.workspaces')}
           {workspaces.length > 0 ? (
             <span className="ml-1.5 font-normal tabular-nums text-muted-foreground">
               {workspaces.length}
             </span>
           ) : null}
-        </h2>
+        </>
+      }
+      headerAction={
         <Button size="md" onClick={() => void addWorkspace()} disabled={busy}>
           {t('settings.workspaces.add')}
         </Button>
-      </div>
+      }
+    >
+
       {shownError === null ? null : (
         <p role="alert" className="text-xs text-destructive">
           {shownError}
@@ -193,7 +199,7 @@ export function WorkspaceSection({ pickDirectory = defaultPicker }: WorkspaceSec
           {t('settings.workspaces.confirmBody', { name: confirming.name })}
         </ConfirmDialog>
       )}
-    </section>
+    </SettingsSection>
   );
 }
 

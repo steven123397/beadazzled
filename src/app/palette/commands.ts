@@ -1,8 +1,16 @@
 import type { Issue } from '@/bindings/bd';
+import { boardPath, listPath } from '@/app/paths';
 import { LANGUAGES, type Language, type MessageKey } from '@/lib/i18n';
 import { nextTheme, type Theme } from '@/lib/theme/theme';
 
 export type CommandGroup = 'Navigation' | 'Actions' | 'Issues';
+
+export type CommandHaystack = {
+  title: string;
+  subtitle: string;
+  keywords: string;
+  full: string;
+};
 
 export type CommandItem = {
   id: string;
@@ -11,8 +19,24 @@ export type CommandItem = {
   group: CommandGroup;
   /** Extra searchable text: ids, labels, aliases. */
   keywords?: string;
+  haystack?: CommandHaystack;
   run: () => void;
 };
+
+export function createCommandItem(item: Omit<CommandItem, 'haystack'>): CommandItem {
+  const title = item.title.toLowerCase();
+  const subtitle = item.subtitle ? item.subtitle.toLowerCase() : '';
+  const keywords = item.keywords ? item.keywords.toLowerCase() : '';
+  return {
+    ...item,
+    haystack: {
+      title,
+      subtitle,
+      keywords,
+      full: `${title} ${subtitle} ${keywords}`,
+    },
+  };
+}
 
 export type Translate = (key: MessageKey, vars?: Record<string, string | number>) => string;
 
@@ -38,53 +62,53 @@ export function buildCommands(issues: readonly Issue[], context: PaletteContext)
   if (context.project !== null) {
     const projectId = context.project.projectId;
     commands.push(
-      {
+      createCommandItem({
         id: 'nav:list',
         title: t('shortcut.list'),
         group: 'Navigation',
         keywords: 'issues tickets list',
-        run: () => context.navigate(`/w/${projectId}/list`),
-      },
-      {
+        run: () => context.navigate(listPath(projectId)),
+      }),
+      createCommandItem({
         id: 'nav:board',
         title: t('shortcut.board'),
         group: 'Navigation',
         keywords: 'columns kanban board',
-        run: () => context.navigate(`/w/${projectId}/board`),
-      }
+        run: () => context.navigate(boardPath(projectId)),
+      })
     );
   }
 
   commands.push(
-    {
+    createCommandItem({
       id: 'nav:settings',
       title: t('shortcut.settings'),
       group: 'Navigation',
       keywords: 'preferences config',
       run: () => context.navigate('/settings'),
-    },
-    {
+    }),
+    createCommandItem({
       id: 'action:refresh',
       title: t('shortcut.refresh'),
       group: 'Actions',
       keywords: 'reload sync journal workspace',
       run: context.refresh,
-    },
-    {
+    }),
+    createCommandItem({
       id: 'action:diagnostics',
       title: t('palette.diagnostics'),
       group: 'Actions',
       keywords: 'copy debug status bd workspace',
       run: context.copyDiagnostics,
-    },
-    {
+    }),
+    createCommandItem({
       id: 'action:theme',
       title: t('palette.theme', { theme: t(`theme.${context.theme}` as MessageKey) }),
       group: 'Actions',
       keywords: 'theme dark light system appearance',
       run: () => context.setTheme(nextTheme(context.theme)),
-    },
-    {
+    }),
+    createCommandItem({
       id: 'action:language',
       title: t('palette.language', {
         language: t(`language.${context.language}` as MessageKey),
@@ -95,7 +119,7 @@ export function buildCommands(issues: readonly Issue[], context: PaletteContext)
         context.setLanguage(
           LANGUAGES[(LANGUAGES.indexOf(context.language) + 1) % LANGUAGES.length]
         ),
-    }
+    })
   );
 
   // Ticket commands are workspace-scoped: without one, every entry would be a
@@ -103,14 +127,16 @@ export function buildCommands(issues: readonly Issue[], context: PaletteContext)
   if (context.project !== null) {
     const projectId = context.project.projectId;
     for (const issue of issues) {
-      commands.push({
-        id: `issue:${issue.id}`,
-        title: issue.title,
-        subtitle: issue.id,
-        group: 'Issues',
-        keywords: `${issue.id} ${issue.status} ${issue.labels.join(' ')}`,
-        run: () => context.navigate(`/w/${projectId}/issue/${issue.id}`),
-      });
+      commands.push(
+        createCommandItem({
+          id: `issue:${issue.id}`,
+          title: issue.title,
+          subtitle: issue.id,
+          group: 'Issues',
+          keywords: `${issue.id} ${issue.status} ${issue.labels.join(' ')}`,
+          run: () => context.navigate(`/w/${projectId}/issue/${issue.id}`),
+        })
+      );
     }
   }
 
@@ -141,9 +167,11 @@ export function rankCommands(
 }
 
 function scoreCommand(command: CommandItem, needle: string): number {
-  const title = command.title.toLowerCase();
-  const subtitle = command.subtitle?.toLowerCase() ?? '';
-  const keywords = command.keywords?.toLowerCase() ?? '';
+  const title = command.haystack?.title ?? command.title.toLowerCase();
+  const subtitle =
+    command.haystack?.subtitle ?? (command.subtitle ? command.subtitle.toLowerCase() : '');
+  const keywords =
+    command.haystack?.keywords ?? (command.keywords ? command.keywords.toLowerCase() : '');
 
   if (title.startsWith(needle)) {
     return 1000 - title.length;
@@ -165,7 +193,8 @@ function scoreCommand(command: CommandItem, needle: string): number {
     return 400;
   }
 
-  const fuzzy = fuzzyScore(`${title} ${subtitle} ${keywords}`, needle);
+  const full = command.haystack?.full ?? `${title} ${subtitle} ${keywords}`;
+  const fuzzy = fuzzyScore(full, needle);
   return fuzzy === null ? 0 : 200 + fuzzy;
 }
 

@@ -11,18 +11,16 @@ import {
   type DragEndEvent,
   type DragStartEvent,
 } from '@dnd-kit/core';
-import { useNavigate, useParams } from 'react-router-dom';
-import { Inbox, TriangleAlert } from 'lucide-react';
+import { useParams } from 'react-router-dom';
 
 import type { Issue, SyncState } from '@/bindings/bd';
 import { isEditableTarget, isOverlayOpen } from '@/app/keyboard/resolve';
-import { Button } from '@/components/ui/button';
-import { StateBadge } from '@/components/ui/state-badge';
 import { FilterBar } from '@/components/filter-bar';
+import { EmptyState, ErrorState, HEALTHY, StaleBanner, useOpenIssue } from '@/components/view-states';
 import { describeError } from '@/lib/errors';
 import type { MessageKey } from '@/lib/i18n';
 import { useI18n } from '@/lib/i18n/I18nProvider';
-import { indexIssues } from '@/lib/store/selectors';
+import { indexById } from '@/lib/store/selectors';
 import { buildSearchIndex } from '@/lib/view/filter';
 import { createListViewState } from '@/lib/view/state';
 import { usePersistedView } from '@/lib/view/usePersistedView';
@@ -42,7 +40,6 @@ import { firstCardId, focusedCard, moveFocus, type FocusKey } from './keyboard';
 import { adjacentDroppableColumn, planMove, type MoveRejection } from './move';
 import { loadBoardPosition, saveBoardPosition } from './position';
 
-const HEALTHY: SyncState = { kind: 'healthy', lastSeq: 0, lastEventAt: null };
 
 type BoardState = 'loading' | 'empty' | 'bd-unavailable' | 'ready';
 
@@ -89,31 +86,35 @@ export function BoardView({
   writes,
 }: BoardViewProps) {
   const { t } = useI18n();
-  const navigate = useNavigate();
   const { view, updateView } = usePersistedView(projectId, 'board');
 
-  const index = useMemo(() => indexIssues(issues), [issues]);
+  const byId = useMemo(() => indexById(issues), [issues]);
   const searchText = useMemo(() => buildSearchIndex(issues), [issues]);
   const visible = useMemo(
     () =>
       filterForBoard(issues, view.filter, {
         searchText,
-        issuesById: index.byId,
+        issuesById: byId,
       }),
-    [index.byId, issues, searchText, view.filter]
+    [byId, issues, searchText, view.filter]
   );
-  const board = useMemo(() => buildBoard(visible, index.byId), [index.byId, visible]);
+  const board = useMemo(() => buildBoard(visible, byId), [byId, visible]);
   const activeFilters = hasBoardFilters(view.filter);
 
   // Lookup built once per board model so keyboard navigation, drag start and
   // the overlay all agree on where a card is.
   const layout = useMemo(() => {
     const cards = new Map<string, BoardCard>();
-    const positions = new Map<string, { columnId: ColumnId }>();
-    for (const column of board.columns) {
-      for (const card of column.cards) {
+    const positions = new Map<
+      string,
+      { columnId: ColumnId; columnIndex: number; cardIndex: number }
+    >();
+    for (let columnIndex = 0; columnIndex < board.columns.length; columnIndex += 1) {
+      const column = board.columns[columnIndex];
+      for (let cardIndex = 0; cardIndex < column.cards.length; cardIndex += 1) {
+        const card = column.cards[cardIndex];
         cards.set(card.issue.id, card);
-        positions.set(card.issue.id, { columnId: column.id });
+        positions.set(card.issue.id, { columnId: column.id, columnIndex, cardIndex });
       }
     }
     return { cards, positions };
@@ -170,12 +171,7 @@ export function BoardView({
     [movingIds, writes]
   );
 
-  const openIssue = useCallback(
-    (issue: Issue) => {
-      navigate(`/w/${projectId}/issue/${encodeURIComponent(issue.id)}`);
-    },
-    [navigate, projectId]
-  );
+  const openIssue = useOpenIssue(projectId);
 
   const clearFilters = useCallback(() => {
     // The board hides the status control but the URL keeps it for the list
@@ -323,7 +319,7 @@ export function BoardView({
         if (!isBoardTarget(event.target)) {
           return;
         }
-        const current = focusedCard(board.columns, focusedId);
+        const current = focusedCard(board.columns, focusedId, layout.positions);
         if (current === null) {
           return;
         }
@@ -347,7 +343,7 @@ export function BoardView({
       }
 
       if (event.key === 'Enter') {
-        const current = focusedCard(board.columns, focusedId);
+        const current = focusedCard(board.columns, focusedId, layout.positions);
         if (current !== null && isBoardTarget(event.target)) {
           event.preventDefault();
           openIssue(current.card.issue);
@@ -360,7 +356,7 @@ export function BoardView({
         return;
       }
       event.preventDefault();
-      const next = moveFocus(board.columns, focusedId, key as FocusKey);
+      const next = moveFocus(board.columns, focusedId, key as FocusKey, layout.positions);
       if (next !== null) {
         requestFocus(next);
       }
@@ -368,7 +364,7 @@ export function BoardView({
 
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [activeDrag, attemptMove, board.columns, focusedId, openIssue, requestFocus, t]);
+  }, [activeDrag, attemptMove, board.columns, focusedId, layout.positions, openIssue, requestFocus, t]);
 
   const total = issues.length;
   const state: BoardState =
@@ -405,23 +401,9 @@ export function BoardView({
       ) : null}
 
       {syncState.kind === 'bd-unavailable' && total > 0 ? (
-        <div
-          role="alert"
-          className="flex shrink-0 items-center gap-2 border-b border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive"
-        >
-          <span className="min-w-0 flex-1">{t('list.state.stale')}</span>
-          {onRefresh === undefined ? null : (
-            <Button
-              size="xs"
-              variant="secondary"
-              onClick={onRefresh}
-              className="border-destructive/40 text-destructive hover:bg-destructive/10"
-            >
-              {t('list.state.retry')}
-            </Button>
-          )}
-        </div>
+        <StaleBanner onRefresh={onRefresh} />
       ) : null}
+
 
       {/* Both live regions stay mounted: a region inserted together with its
           text is not announced by most screen readers. The visible bar below
@@ -555,33 +537,3 @@ function LoadingBoard() {
   );
 }
 
-function EmptyState() {
-  const { t } = useI18n();
-  return (
-    <div className="flex flex-1 flex-col items-center justify-center gap-2.5 p-6 text-center">
-      <StateBadge icon={<Inbox aria-hidden="true" className="size-4" />} />
-      <p className="text-sm font-medium">{t('list.state.empty.title')}</p>
-      <p className="max-w-sm text-xs text-muted-foreground">{t('list.state.empty.body')}</p>
-    </div>
-  );
-}
-
-function ErrorState({ message, onRefresh }: { message: string; onRefresh?: () => void }) {
-  const { t } = useI18n();
-  return (
-    <div
-      role="alert"
-      className="flex flex-1 flex-col items-center justify-center gap-2.5 p-6 text-center"
-    >
-      <StateBadge tone="danger" icon={<TriangleAlert aria-hidden="true" className="size-4" />} />
-      <p className="text-sm font-medium text-destructive">{t('list.state.error.title')}</p>
-      <p className="text-xs text-muted-foreground">{t('list.state.error.body')}</p>
-      <p className="max-w-md text-xs text-muted-foreground">{message}</p>
-      {onRefresh === undefined ? null : (
-        <Button size="md" variant="secondary" onClick={onRefresh} className="mt-1">
-          {t('list.state.retry')}
-        </Button>
-      )}
-    </div>
-  );
-}

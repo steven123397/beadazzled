@@ -8,6 +8,7 @@ import { usePreferenceWriteError } from '@/app/shell/PreferencesBridge';
 import { PopoverSelect } from '@/components/ui/popover-select';
 
 import { LANGUAGE_LABELS, THEME_LABELS } from './labels';
+import { SettingsSection } from './SettingsSection';
 
 /**
  * Language and theme apply immediately; the registry write follows through
@@ -19,10 +20,8 @@ export function GeneralSection() {
   const saveError = usePreferenceWriteError();
 
   return (
-    <section aria-labelledby="settings-general" className="space-y-3">
-      <h2 id="settings-general" className="text-lg font-semibold">
-        {t('settings.general')}
-      </h2>
+    <SettingsSection id="settings-general" title={t('settings.general')}>
+
       <div className="grid gap-3 sm:grid-cols-2">
         <Field label={t('settings.language')}>
           <PopoverSelect
@@ -60,7 +59,7 @@ export function GeneralSection() {
           {t('settings.saveFailed', { error: saveError })}
         </p>
       )}
-    </section>
+    </SettingsSection>
   );
 }
 

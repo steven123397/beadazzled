@@ -1,12 +1,12 @@
-import { memo, useMemo } from 'react';
+import { memo } from 'react';
 
 import type { Issue } from '@/bindings/bd';
 import { useI18n } from '@/lib/i18n/I18nProvider';
-import { formatAbsoluteTime, formatRelativeTime } from '@/lib/time';
 
 import { Avatar } from '@/components/ui/avatar';
-import { Badge } from '@/components/ui/badge';
+import { LabelChips } from '@/components/label-chips';
 import { PriorityIcon } from '@/components/ui/priority-icon';
+import { RelativeTime } from '@/components/ui/relative-time';
 import { StatusIcon } from '@/components/ui/status-icon';
 import { statusText } from '@/lib/status';
 import { cn } from '@/lib/utils';
@@ -41,17 +41,6 @@ export const Row = memo(function Row({
 }: RowProps) {
   const { t, language } = useI18n();
   const statusLabel = statusText(issue.status, t);
-  const visibleLabels = issue.labels.slice(0, 2);
-  const extraLabels = issue.labels.length - visibleLabels.length;
-  const moreLabels = extraLabels > 0 ? t('list.moreLabels', { count: extraLabels }) : '';
-  const relative = useMemo(
-    () => formatRelativeTime(issue.updated_at, language),
-    [issue.updated_at, language]
-  );
-  const absolute = useMemo(
-    () => formatAbsoluteTime(issue.updated_at, language),
-    [issue.updated_at, language]
-  );
 
   return (
     <div
@@ -108,25 +97,19 @@ export const Row = memo(function Row({
           </>
         )}
       </span>
-      <span
-        className="hidden w-36 shrink-0 items-center gap-1 overflow-hidden lg:flex xl:w-40"
-        title={issue.labels.join(', ')}
-      >
-        {visibleLabels.map((label, index) => (
-          <Badge key={`${label}-${index}`} className="min-w-0 text-2xs" title={label}>
-            <span className="min-w-0 truncate">{label}</span>
-          </Badge>
-        ))}
-        {extraLabels > 0 ? (
-          <span className="shrink-0 text-muted-foreground">{moreLabels}</span>
-        ) : null}
-      </span>
-      <span
+      <LabelChips
+        labels={issue.labels}
+        wrapperClassName="hidden w-36 shrink-0 items-center gap-1 overflow-hidden lg:flex xl:w-40"
+        wrapperTitle={issue.labels.join(', ')}
+        badgeClassName="text-2xs"
+        extraClassName="text-muted-foreground"
+        showTitle
+      />
+      <RelativeTime
+        value={issue.updated_at}
+        language={language}
         className="hidden w-20 shrink-0 truncate text-right text-2xs text-muted-foreground lg:block"
-        title={absolute}
-      >
-        {relative}
-      </span>
+      />
     </div>
   );
 });

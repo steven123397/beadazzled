@@ -1,7 +1,7 @@
-import { useRef, type ReactNode } from 'react';
+import type { ReactNode } from 'react';
 
-import { useFocusTrap } from '@/app/keyboard/useFocusTrap';
 import { Button } from '@/components/ui/button';
+import { DialogSurface } from '@/components/ui/modal';
 
 export type ConfirmDialogProps = {
   title: string;
@@ -24,21 +24,14 @@ export function ConfirmDialog({
   onConfirm,
   onCancel,
 }: ConfirmDialogProps) {
-  const dialogRef = useRef<HTMLDivElement>(null);
-  useFocusTrap(dialogRef);
-
   return (
     <div
       data-confirm-backdrop
       className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 p-4"
       onClick={onCancel}
     >
-      <div
-        ref={dialogRef}
-        role="dialog"
-        aria-modal="true"
+      <DialogSurface
         aria-labelledby="confirm-title"
-        tabIndex={-1}
         onClick={(event) => event.stopPropagation()}
         onKeyDown={(event) => {
           if (event.key === 'Escape') {
@@ -60,7 +53,7 @@ export function ConfirmDialog({
             {confirmLabel}
           </Button>
         </div>
-      </div>
+      </DialogSurface>
     </div>
   );
 }

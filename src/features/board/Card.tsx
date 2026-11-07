@@ -1,6 +1,5 @@
 import {
   memo,
-  useMemo,
   type KeyboardEventHandler,
   type PointerEventHandler,
   type ReactNode,
@@ -9,7 +8,7 @@ import { useDraggable } from '@dnd-kit/core';
 import { Ban, GripVertical } from 'lucide-react';
 
 import type { Issue } from '@/bindings/bd';
-import { Badge } from '@/components/ui/badge';
+import { LabelChips } from '@/components/label-chips';
 import { PriorityIcon } from '@/components/ui/priority-icon';
 import { Tooltip } from '@/components/ui/tooltip';
 import { useI18n } from '@/lib/i18n/I18nProvider';
@@ -50,12 +49,6 @@ export function CardBody({
 }) {
   const { t } = useI18n();
   const { issue, blockers, manual } = card;
-  const visibleLabels = issue.labels.slice(0, 2);
-  const extraLabels = issue.labels.length - visibleLabels.length;
-  const moreLabels = useMemo(
-    () => (extraLabels > 0 ? t('list.moreLabels', { count: extraLabels }) : ''),
-    [extraLabels, t]
-  );
   const blockedIds = blockers.join(', ');
   const blockedBy =
     blockers.length > 0 ? t('board.card.blockedBy', { count: blockers.length }) : '';
@@ -117,14 +110,11 @@ export function CardBody({
       </p>
 
       <div className="mt-auto flex items-center gap-1 overflow-hidden pt-1.5">
-        {visibleLabels.map((label, index) => (
-          <Badge key={`${label}-${index}`} className="min-w-0 truncate">
-            {label}
-          </Badge>
-        ))}
-        {extraLabels > 0 ? (
-          <span className={`shrink-0 text-2xs ${secondary}`}>{moreLabels}</span>
-        ) : null}
+        <LabelChips
+          labels={issue.labels}
+          badgeClassName="truncate"
+          extraClassName={`text-2xs ${secondary}`}
+        />
         <span
           className={`ml-auto shrink-0 truncate text-2xs ${secondary} ${
             issue.assignee === undefined ? 'italic' : ''

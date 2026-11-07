@@ -1,10 +1,8 @@
-import { useRef } from 'react';
-
+import { DialogSurface } from '@/components/ui/modal';
 import { useI18n } from '@/lib/i18n/I18nProvider';
 
 import { formatKeys } from './resolve';
 import type { Shortcut, ShortcutGroup } from './types';
-import { useFocusTrap } from './useFocusTrap';
 
 const GROUP_ORDER: ShortcutGroup[] = ['General', 'Navigation', 'Views', 'Data', 'Help'];
 
@@ -16,19 +14,13 @@ export function HelpPanel({
   onClose: () => void;
 }) {
   const { t } = useI18n();
-  const dialogRef = useRef<HTMLDivElement>(null);
-  useFocusTrap(dialogRef);
   const groups = GROUP_ORDER.map((group) => ({
     group,
     items: shortcuts.filter((shortcut) => shortcut.group === group),
   })).filter(({ items }) => items.length > 0);
 
   return (
-    <div
-      ref={dialogRef}
-      tabIndex={-1}
-      role="dialog"
-      aria-modal="true"
+    <DialogSurface
       aria-label={t('keyboard.title')}
       className="fixed inset-0 z-20 flex items-start justify-center overflow-auto bg-black/60 p-8"
     >
@@ -61,6 +53,6 @@ export function HelpPanel({
           </section>
         ))}
       </div>
-    </div>
+    </DialogSurface>
   );
 }

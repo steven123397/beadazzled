@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Navigate, useLocation, useNavigate } from 'react-router-dom';
 
 import type { BdStatus, WorkspaceSnapshot } from '@/bindings/bd';
+import { listPath } from '@/app/paths';
 import { useI18n } from '@/lib/i18n/I18nProvider';
 
 import { SkeletonScreen } from './SkeletonScreen';
@@ -28,7 +29,7 @@ export function Welcome() {
   // Keep the reason/error path visible: a failed switch must not bounce the
   // user back into the old workspace.
   if (project !== null && reason === null && error === null) {
-    return <Navigate to={`/w/${project.projectId}/list`} replace />;
+    return <Navigate to={listPath(project.projectId)} replace />;
   }
 
   return (
