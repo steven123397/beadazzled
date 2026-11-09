@@ -1,6 +1,8 @@
 import { expect, test } from 'vitest';
 
 import type { Issue } from '@/bindings/bd';
+import { selectVisibleIssues } from '@/lib/view/select';
+import { createListViewState } from '@/lib/view/state';
 
 import { groupIssues } from './group';
 
@@ -107,4 +109,26 @@ test('status, priority and assignee groups preserve order within each bucket', (
   expect(ids('priority', '1')).toEqual(['a', 'c']);
   expect(ids('assignee', 'ada')).toEqual(['a']);
   expect(ids('assignee', '')).toEqual(['b']);
+});
+
+test('filter, group and sort keep a fixed composition order', () => {
+  const issues = [
+    issue('open-low', { status: 'open', priority: 4 }),
+    issue('closed', { status: 'closed', priority: 0 }),
+    issue('open-high', { status: 'open', priority: 0 }),
+    issue('open-mid', { status: 'open', priority: 2 }),
+  ];
+  const view = {
+    ...createListViewState(),
+    filter: { ...createListViewState().filter, status: ['open', 'closed'] },
+    group: 'status' as const,
+    sort: { by: 'priority' as const, direction: 'asc' as const },
+  };
+
+  const visible = selectVisibleIssues(issues, view);
+  const groups = groupIssues(visible, view.group);
+
+  expect(groups.map((group) => group.key)).toEqual(['open', 'closed']);
+  expect(groups[0]?.issues.map((item) => item.id)).toEqual(['open-high', 'open-mid', 'open-low']);
+  expect(groups[1]?.issues.map((item) => item.id)).toEqual(['closed']);
 });

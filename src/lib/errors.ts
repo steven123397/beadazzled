@@ -63,8 +63,7 @@ export function describeError(error: BridgeError): {
   // bd reports some failures as JSON on stdout with an empty stderr (for
   // example a directory whose .beads folder has no database), so the bridge
   // puts that text in `bd_error` instead.
-  const detailText = (value: unknown): string =>
-    typeof value === 'string' ? value.trim() : '';
+  const detailText = (value: unknown): string => (typeof value === 'string' ? value.trim() : '');
   const stderr =
     error.code === 'BD_EXIT_NONZERO'
       ? detailText(error.detail?.stderr) || detailText(error.detail?.bd_error)

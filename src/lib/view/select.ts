@@ -1,6 +1,7 @@
 import type { Issue } from '@/bindings/bd';
 
-import { indexById, matchesFilter, type FilterContext } from '@/lib/view/filter';
+import { indexById } from '@/lib/issues';
+import { matchesFilter, type FilterContext } from '@/lib/view/filter';
 import type { ListViewState } from '@/lib/view/state';
 
 import { sortIssues } from './sort';

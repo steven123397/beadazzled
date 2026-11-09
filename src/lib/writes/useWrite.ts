@@ -76,10 +76,7 @@ export function useWrite(flow: WriteFlow, bd: BdStatus | null): UseWrite {
   );
 
   const clearError = useCallback(() => setError(null), []);
-  const isPending = useCallback(
-    (issueId: string) => pending.includes(issueId),
-    [pending]
-  );
+  const isPending = useCallback((issueId: string) => pending.includes(issueId), [pending]);
 
   return {
     pending,

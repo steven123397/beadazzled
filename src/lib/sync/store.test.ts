@@ -25,7 +25,11 @@ function issue(id: string, overrides: Partial<Issue> = {}): Issue {
   };
 }
 
-function record(seq: number, issueId: string, overrides: Partial<JournalRecord> = {}): JournalRecord {
+function record(
+  seq: number,
+  issueId: string,
+  overrides: Partial<JournalRecord> = {}
+): JournalRecord {
   return {
     seq,
     ts: TS,

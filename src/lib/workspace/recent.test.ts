@@ -40,10 +40,7 @@ test('does not mutate the input list', () => {
 test('limits the recent list', () => {
   const ordered = recentWorkspaces([older, newer, middle], 2);
 
-  expect(ordered.map((workspace) => workspace.path)).toEqual([
-    'D:/work/beta',
-    'D:/work/gamma',
-  ]);
+  expect(ordered.map((workspace) => workspace.path)).toEqual(['D:/work/beta', 'D:/work/gamma']);
 });
 
 test('treats a missing timestamp as the oldest entry', () => {
@@ -51,10 +48,7 @@ test('treats a missing timestamp as the oldest entry', () => {
 
   const ordered = recentWorkspaces([unknown, older]);
 
-  expect(ordered.map((workspace) => workspace.path)).toEqual([
-    'D:/work/alpha',
-    'D:/work/unknown',
-  ]);
+  expect(ordered.map((workspace) => workspace.path)).toEqual(['D:/work/alpha', 'D:/work/unknown']);
 });
 
 test('uses the shared numeric collator to break timestamp ties', () => {

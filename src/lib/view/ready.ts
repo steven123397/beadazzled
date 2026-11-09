@@ -1,9 +1,7 @@
 import type { Issue } from '@/bindings/bd';
+import type { IssueLookup } from '@/lib/issues';
 
 import * as guard from '@/lib/writes/guard';
-
-/** Resolves a dependency target; a missing id means "not in the store". */
-export type IssueLookup = (id: string) => Issue | undefined;
 
 /**
  * Ids of dependencies that are not closed yet, matching Scotty's

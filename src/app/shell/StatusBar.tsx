@@ -1,6 +1,7 @@
 import { useI18n } from '@/lib/i18n/I18nProvider';
+import { describeSyncState, syncToneClass } from '@/lib/sync/labels';
 
-import { describeSyncState, syncToneClass, useSyncState } from './SyncStatus';
+import { useSyncState } from './SyncStatus';
 import { activeWorkspace, useWorkspaceContext } from './WorkspaceProvider';
 
 export function StatusBar({
@@ -22,7 +23,10 @@ export function StatusBar({
   );
 
   return (
-    <footer aria-label={t('shell.statusBar')} className="border-t border-border text-xs text-muted-foreground">
+    <footer
+      aria-label={t('shell.statusBar')}
+      className="border-t border-border text-xs text-muted-foreground"
+    >
       <button
         type="button"
         onClick={onOpen}

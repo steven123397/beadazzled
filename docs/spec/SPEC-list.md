@@ -100,9 +100,9 @@ src/features/list/
   Row.tsx             单行（memo）
   GroupHeader.tsx     分组头与计数
   group.ts            groupIssues
-  sort.ts             sortIssues
 src/lib/view/          列表与看板共享
   select.ts           selectVisibleIssues
+  sort.ts             sortIssues
   state.ts            ListViewState 与 URL 序列化
   storage.ts          每个工作区记住上次视图
   filter.ts           matchesFilter / buildSearchIndex / hasActiveFilters

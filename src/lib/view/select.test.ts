@@ -4,8 +4,7 @@ import type { Dependency, Issue } from '@/bindings/bd';
 import { buildSearchIndex } from '@/lib/view/filter';
 import { createListViewState, type ListFilter } from '@/lib/view/state';
 
-import { selectVisibleIssues } from './filter';
-import { groupIssues } from './group';
+import { selectVisibleIssues } from './select';
 
 const TS = '2026-11-01T00:00:00Z';
 
@@ -109,28 +108,6 @@ test('selectVisibleIssues filters first and then sorts', () => {
   const visible = selectVisibleIssues(issues, withFilter(filter({ status: ['open'] })));
 
   expect(ids(visible)).toEqual(['new', 'old']);
-});
-
-test('filter, group and sort keep a fixed composition order', () => {
-  const issues = [
-    issue('open-low', { status: 'open', priority: 4 }),
-    issue('closed', { status: 'closed', priority: 0 }),
-    issue('open-high', { status: 'open', priority: 0 }),
-    issue('open-mid', { status: 'open', priority: 2 }),
-  ];
-  const view = {
-    ...createListViewState(),
-    filter: filter({ status: ['open', 'closed'] }),
-    group: 'status' as const,
-    sort: { by: 'priority' as const, direction: 'asc' as const },
-  };
-
-  const visible = selectVisibleIssues(issues, view);
-  const groups = groupIssues(visible, view.group);
-
-  expect(groups.map((group) => group.key)).toEqual(['open', 'closed']);
-  expect(groups[0]?.issues.map((item) => item.id)).toEqual(['open-high', 'open-mid', 'open-low']);
-  expect(groups[1]?.issues.map((item) => item.id)).toEqual(['closed']);
 });
 
 test('filtering 1000 issues stays within the 16ms budget for six combinations', () => {

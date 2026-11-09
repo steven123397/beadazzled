@@ -1,7 +1,7 @@
 import { expect, test } from 'vitest';
 
 import type { Issue } from '@/bindings/bd';
-import { selectVisibleIssues } from '@/features/list/filter';
+import { selectVisibleIssues } from '@/lib/view/select';
 import { createListViewState, type ListFilter } from '@/lib/view/state';
 
 import { buildBoard, columnOf, filterForBoard, hasBoardFilters } from './columns';

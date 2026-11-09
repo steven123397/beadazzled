@@ -1,11 +1,12 @@
 import { useState } from 'react';
 
 import { useAppRefresh } from '@/app/shell/AppRefresh';
-import { describeSyncState, useSyncErrorHistory, useSyncState } from '@/app/shell/SyncStatus';
+import { useSyncErrorHistory, useSyncState } from '@/app/shell/SyncStatus';
 import { useWorkspaceContext } from '@/app/shell/WorkspaceProvider';
 import { Button } from '@/components/ui/button';
 import { copyText, type CopyResult } from '@/lib/clipboard';
 import { useI18n } from '@/lib/i18n/I18nProvider';
+import { describeSyncState } from '@/lib/sync/labels';
 import { formatDateTime } from '@/lib/time';
 
 const JOURNAL_COMMAND = 'bd config set events-journal true';

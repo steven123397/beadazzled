@@ -2,7 +2,7 @@ import { expect, test } from 'vitest';
 
 import type { Dependency, Issue } from '@/bindings/bd';
 
-import { getBlockedBy, getBlocks, getIssue, indexIssues } from './selectors';
+import { getBlockedBy, getBlocks, indexIssues } from './selectors';
 
 const TS = '2026-11-01T00:00:00Z';
 
@@ -36,20 +36,6 @@ function dependsOn(...ids: string[]): Dependency[] {
 function relation(issueId: string, dependsOnId: string, type: string): Dependency {
   return { issue_id: issueId, depends_on_id: dependsOnId, type, created_at: TS };
 }
-
-test('getIssue returns the issue and undefined for an id that is gone', () => {
-  const index = indexIssues([issue('a')]);
-
-  expect(getIssue(index, 'a')?.title).toBe('Issue a');
-  expect(getIssue(index, 'missing')).toBeUndefined();
-});
-
-test('an issue id of constructor stays a normal lookup', () => {
-  const index = indexIssues([issue('constructor')]);
-
-  expect(getIssue(index, 'constructor')?.id).toBe('constructor');
-  expect(getIssue(index, 'toString')).toBeUndefined();
-});
 
 test('blocked by lists the targets of this issue dependencies in edge order', () => {
   const index = indexIssues([

@@ -1,7 +1,8 @@
 import type { Issue } from '@/bindings/bd';
 
 import { isBlockingDependency } from '@/lib/dependencies';
-import { emptyRecord } from '@/lib/sync/reducer';
+import { indexById } from '@/lib/issues';
+import { emptyRecord } from '@/lib/records';
 import { collator } from '@/lib/view/collator';
 
 /**
@@ -26,11 +27,10 @@ export type IssueIndex = {
  * section.
  */
 export function indexIssues(issues: readonly Issue[]): IssueIndex {
-  const byId = emptyRecord<Issue>();
+  const byId = indexById(issues);
   const dependents = emptyRecord<DependentEdge[]>();
 
   for (const issue of issues) {
-    byId[issue.id] = issue;
     for (const dependency of issue.dependencies ?? []) {
       (dependents[dependency.depends_on_id] ??= []).push({
         id: issue.id,
@@ -40,10 +40,6 @@ export function indexIssues(issues: readonly Issue[]): IssueIndex {
   }
 
   return { byId, dependents };
-}
-
-export function getIssue(index: IssueIndex, id: string): Issue | undefined {
-  return index.byId[id];
 }
 
 /**
