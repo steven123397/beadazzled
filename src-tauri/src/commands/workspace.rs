@@ -16,12 +16,12 @@ use ts_rs::TS;
 use super::config_writer::ConfigWriter;
 use super::{bd_status_error, not_registered, ws_inaccessible};
 use crate::bridge::{BdBridge, BridgeError, BridgeErrorCode, WriteCommand, WriteOutcome};
-use crate::util::{lock, unix_secs_now};
+use crate::util::{lock, now_iso};
 use crate::workspace::discovery::{BdDiscovery, BdStatus};
 use crate::workspace::registry::{
     load, AddOutcome, AppConfig, Checkpoint, Language, Theme, WorkspaceEntry,
 };
-use crate::workspace::validate::validate_workspace;
+use crate::workspace::validate::{validate_workspace, ValidatedWorkspace};
 
 /// What the workspace UI needs in one call.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
@@ -124,7 +124,7 @@ impl WorkspaceService {
             state.config.bd_path = None;
             let discovery = std::sync::Arc::new(BdDiscovery::from_env(None));
             state.discovery = std::sync::Arc::clone(&discovery);
-            self.writer.queue(state.config.clone());
+            self.commit(&state);
             drop(state);
             return discovery.refresh(probe);
         };
@@ -147,7 +147,7 @@ impl WorkspaceService {
         // bd again for the cached read that follows this command.
         discovery.prime(status.clone());
         state.discovery = std::sync::Arc::clone(&discovery);
-        self.writer.queue(state.config.clone());
+        self.commit(&state);
         status
     }
 
@@ -166,8 +166,7 @@ impl WorkspaceService {
             let mut state = lock(&self.state);
             state.config.language = language;
             state.config.theme = theme;
-            self.writer.queue(state.config.clone());
-            state.config.clone()
+            self.commit(&state)
         };
         self.writer.flush().map_err(|error| {
             BridgeError::new(
@@ -179,11 +178,7 @@ impl WorkspaceService {
     }
 
     pub fn add_workspace(&self, directory: &str) -> Result<WorkspaceEntry, BridgeError> {
-        let bd_path = self.ready_bd_path()?;
-        if !Path::new(directory).is_dir() {
-            return Err(ws_inaccessible(directory));
-        }
-        let validated = validate_workspace(Path::new(&bd_path), Path::new(directory))?;
+        let (_, validated) = self.validate(directory)?;
         let now = now_iso();
         let entry = validated.into_entry(now.clone());
 
@@ -201,9 +196,8 @@ impl WorkspaceService {
         };
         let canonical = state.config.workspaces[index].path.clone();
         state.config.switch_workspace(&canonical, now);
-        let saved = state.config.clone();
         let result = state.config.workspaces[index].clone();
-        self.writer.queue(saved);
+        self.commit(&state);
         Ok(result)
     }
 
@@ -216,11 +210,12 @@ impl WorkspaceService {
                 .ok_or_else(|| not_registered(path))?;
             state.config.workspaces[index].path.clone()
         };
-        if !Path::new(&canonical).is_dir() {
-            return Err(ws_inaccessible(&canonical));
-        }
-        let bd_path = self.ready_bd_path()?;
-        let validated = validate_workspace(Path::new(&bd_path), Path::new(&canonical))?;
+        // This caller checked the directory before resolving bd; the other
+        // mutation callers do it the other way round. Keep that order so a
+        // missing directory still surfaces WS_INACCESSIBLE when bd is also
+        // unavailable, instead of masking it behind a bd error.
+        ensure_dir(&canonical)?;
+        let (_, validated) = self.validate(&canonical)?;
 
         let mut state = lock(&self.state);
         let index = state
@@ -229,9 +224,8 @@ impl WorkspaceService {
             .ok_or_else(|| not_registered(&canonical))?;
         state.config.workspaces[index].apply_identity(&validated.project_id, validated.is_worktree);
         state.config.switch_workspace(&canonical, now_iso());
-        let saved = state.config.clone();
         let result = state.config.workspaces[index].clone();
-        self.writer.queue(saved);
+        self.commit(&state);
         Ok(result)
     }
 
@@ -240,8 +234,7 @@ impl WorkspaceService {
         if state.config.remove_workspace(path).is_none() {
             return false;
         }
-        let saved = state.config.clone();
-        self.writer.queue(saved);
+        self.commit(&state);
         true
     }
 
@@ -250,11 +243,7 @@ impl WorkspaceService {
         old_path: &str,
         new_path: &str,
     ) -> Result<WorkspaceEntry, BridgeError> {
-        let bd_path = self.ready_bd_path()?;
-        if !Path::new(new_path).is_dir() {
-            return Err(ws_inaccessible(new_path));
-        }
-        let validated = validate_workspace(Path::new(&bd_path), Path::new(new_path))?;
+        let (_, validated) = self.validate(new_path)?;
         let entry = validated.into_entry(now_iso());
 
         let mut state = lock(&self.state);
@@ -263,8 +252,7 @@ impl WorkspaceService {
             .relocate_workspace(old_path, entry)
             .ok_or_else(|| not_registered(old_path))?;
         let result = state.config.workspaces[index].clone();
-        let saved = state.config.clone();
-        self.writer.queue(saved);
+        self.commit(&state);
         Ok(result)
     }
 
@@ -278,8 +266,7 @@ impl WorkspaceService {
         if !state.config.set_checkpoint(path, checkpoint) {
             return false;
         }
-        let saved = state.config.clone();
-        self.writer.queue(saved);
+        self.commit(&state);
         true
     }
 
@@ -306,14 +293,37 @@ impl WorkspaceService {
         if !registered {
             return Err(not_registered(workspace));
         }
-        if !Path::new(workspace).is_dir() {
-            return Err(ws_inaccessible(workspace));
-        }
+        ensure_dir(workspace)?;
         BdBridge::new(bd_path, workspace).write(command)
     }
 
     pub fn flush(&self) -> std::io::Result<()> {
         self.writer.flush()
+    }
+
+    /// Queues the current config snapshot for persistence and returns it.
+    ///
+    /// Convention: call while the state lock is still held. The writer numbers
+    /// snapshots in queue order, so queueing after dropping the lock would let
+    /// a concurrent command store an older snapshot last. Returning the
+    /// snapshot lets `set_preferences` serve both the queue and its result from
+    /// the same clone.
+    fn commit(&self, state: &State) -> AppConfig {
+        let saved = state.config.clone();
+        self.writer.queue(saved.clone());
+        saved
+    }
+
+    /// Shared bd-first preflight for `add_workspace` / `relocate_workspace`:
+    /// resolve bd, check the directory, then validate it. `switch_workspace`
+    /// used the opposite order, so it runs `ensure_dir` before calling this;
+    /// that keeps every caller's surfaced error code unchanged. The bd path is
+    /// returned for callers that build a bridge from it.
+    fn validate(&self, path: &str) -> Result<(String, ValidatedWorkspace), BridgeError> {
+        let bd_path = self.ready_bd_path()?;
+        ensure_dir(path)?;
+        let validated = validate_workspace(Path::new(&bd_path), Path::new(path))?;
+        Ok((bd_path, validated))
     }
 
     pub(crate) fn ready_bd_path(&self) -> Result<String, BridgeError> {
@@ -324,50 +334,11 @@ impl WorkspaceService {
     }
 }
 
-fn now_iso() -> String {
-    format_utc(unix_secs_now())
-}
-
-fn format_utc(seconds: u64) -> String {
-    let days = (seconds / 86_400) as i64;
-    let remainder = seconds % 86_400;
-    let (year, month, day) = civil_from_days(days);
-    format!(
-        "{year:04}-{month:02}-{day:02}T{:02}:{:02}:{:02}Z",
-        remainder / 3_600,
-        (remainder % 3_600) / 60,
-        remainder % 60
-    )
-}
-
-/// Howard Hinnant's `civil_from_days`.
-fn civil_from_days(days: i64) -> (i64, u32, u32) {
-    let z = days + 719_468;
-    let era = if z >= 0 { z } else { z - 146_096 } / 146_097;
-    let day_of_era = z - era * 146_097;
-    let year_of_era =
-        (day_of_era - day_of_era / 1_460 + day_of_era / 36_524 - day_of_era / 146_096) / 365;
-    let year = year_of_era + era * 400;
-    let day_of_year = day_of_era - (365 * year_of_era + year_of_era / 4 - year_of_era / 100);
-    let month_prime = (5 * day_of_year + 2) / 153;
-    let day = (day_of_year - (153 * month_prime + 2) / 5 + 1) as u32;
-    let month = if month_prime < 10 {
-        month_prime + 3
-    } else {
-        month_prime - 9
-    } as u32;
-    (if month <= 2 { year + 1 } else { year }, month, day)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::format_utc;
-
-    #[test]
-    fn formats_unix_timestamps_as_utc_iso() {
-        assert_eq!(format_utc(0), "1970-01-01T00:00:00Z");
-        assert_eq!(format_utc(1_700_000_000), "2023-11-14T22:13:20Z");
+fn ensure_dir(path: &str) -> Result<(), BridgeError> {
+    if !Path::new(path).is_dir() {
+        return Err(ws_inaccessible(path));
     }
+    Ok(())
 }
 
 // ---- Tauri commands -------------------------------------------------------

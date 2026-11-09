@@ -13,14 +13,18 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use ts_rs::TS;
 
+use crate::bridge::error::detail_keys;
 use crate::bridge::{BdVersion, BridgeError, BridgeErrorCode};
 use crate::util::lock;
 
 /// The executable name to look for on PATH.
 pub const BD_EXECUTABLE: &str = if cfg!(windows) { "bd.exe" } else { "bd" };
 
-/// The minimum bd version the app supports (mirrors `SPEC-bridge`).
-pub const MIN_BD_VERSION: &str = "1.3.2";
+/// Display form of the single [`crate::bridge::MIN_BD_VERSION`] tuple.
+pub fn min_bd_version() -> String {
+    let (major, minor, patch) = crate::bridge::MIN_BD_VERSION;
+    format!("{major}.{minor}.{patch}")
+}
 
 /// The outcome of locating and probing bd.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
@@ -186,23 +190,23 @@ impl BdDiscovery {
 fn version_bounds(error: &BridgeError) -> (String, String) {
     let detail = error.detail.as_ref().map(|extra| &extra.0);
     let found = detail
-        .and_then(|values| values.get("found"))
+        .and_then(|values| values.get(detail_keys::FOUND))
         .and_then(Value::as_str)
         .unwrap_or("unknown")
         .to_owned();
     let min = detail
-        .and_then(|values| values.get("min"))
+        .and_then(|values| values.get(detail_keys::MIN))
         .and_then(Value::as_str)
-        .unwrap_or(MIN_BD_VERSION)
-        .to_owned();
+        .map(str::to_owned)
+        .unwrap_or_else(min_bd_version);
     (found, min)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::bridge::error::version_unsupported;
     use crate::bridge::{BdVersion, BridgeError, BridgeErrorCode};
-    use serde_json::{Map, Value};
     use std::ffi::OsString;
     use std::fs;
     use std::path::{Path, PathBuf};
@@ -242,14 +246,7 @@ mod tests {
     }
 
     fn unsupported(found: &str) -> BridgeError {
-        let mut detail = Map::new();
-        detail.insert("found".to_owned(), Value::String(found.to_owned()));
-        detail.insert("min".to_owned(), Value::String(MIN_BD_VERSION.to_owned()));
-        BridgeError::new(
-            BridgeErrorCode::BdVersionUnsupported,
-            format!("bd {found} is older than the required {MIN_BD_VERSION}"),
-        )
-        .with_detail(detail)
+        version_unsupported(found, &min_bd_version())
     }
 
     #[test]
@@ -376,7 +373,7 @@ mod tests {
             BdStatus::Unsupported {
                 path: bd.display().to_string(),
                 found: "1.2.9".to_owned(),
-                min: MIN_BD_VERSION.to_owned(),
+                min: min_bd_version(),
             }
         );
     }

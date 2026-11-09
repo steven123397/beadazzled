@@ -41,6 +41,18 @@ impl TS for ExtraFields {
     }
 }
 
+impl ExtraFields {
+    /// Reads a string field from the flattened unknown fields.
+    pub fn get_str(&self, key: &str) -> Option<&str> {
+        self.0.get(key).and_then(Value::as_str)
+    }
+
+    /// Reads a boolean field from the flattened unknown fields.
+    pub fn get_bool(&self, key: &str) -> Option<bool> {
+        self.0.get(key).and_then(Value::as_bool)
+    }
+}
+
 /// A ticket as emitted by `bd export` (one JSON object per line).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
 pub struct Issue {
