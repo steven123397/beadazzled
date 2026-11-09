@@ -65,6 +65,8 @@ src/
   features/           功能面：list / board / detail / settings / workspace
   components/         共享展示组件（无业务逻辑）
   lib/                IPC 客户端、store、i18n、markdown、格式化
+    issues/         中立 byId 索引与安全查找（store / view 共用）
+    records.ts      无原型记录构造叶子（sync / store 共用）
   bindings/           ts-rs 生成的 TS 类型（禁止手改）
   styles/             全局样式与主题变量
 src-tauri/
@@ -126,6 +128,7 @@ pub enum BridgeError {
 
 **Always**
 - 票数据只经 `bd` 命令获取；所有 bd 调用收敛到 `bridge`。
+- 前端 `store` / `view` 共用中立 `issues` 叶子；`sync` / `store` 共用 `records` 叶子；禁止 `src/lib/store/*` 反向引用 `src/lib/sync/*`（ADR-0012）。
 - 每个写操作先写 beads issue，再改代码；质量检查按 CONSTRAINTS 分层执行。
 - 失败必须可见：区分「没有数据」与「读不到数据」。
 - 用户输入进入 argv 前必须走结构化参数；长正文走 stdin。

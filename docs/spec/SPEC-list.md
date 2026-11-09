@@ -46,7 +46,7 @@
 ## 派生计算
 
 ```ts
-// src/features/list/filter.ts —— 纯函数
+// src/lib/view/select.ts —— 纯函数
 export function selectVisibleIssues(issues: Issue[], view: ListViewState): Issue[];
 ```
 
@@ -99,10 +99,10 @@ src/features/list/
   ListView.tsx        虚拟列表与键盘容器
   Row.tsx             单行（memo）
   GroupHeader.tsx     分组头与计数
-  filter.ts           selectVisibleIssues（过滤原语见 src/lib/view）
   group.ts            groupIssues
   sort.ts             sortIssues
 src/lib/view/          列表与看板共享
+  select.ts           selectVisibleIssues
   state.ts            ListViewState 与 URL 序列化
   storage.ts          每个工作区记住上次视图
   filter.ts           matchesFilter / buildSearchIndex / hasActiveFilters
