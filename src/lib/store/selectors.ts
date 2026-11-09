@@ -2,6 +2,7 @@ import type { Issue } from '@/bindings/bd';
 
 import { isBlockingDependency } from '@/lib/dependencies';
 import { emptyRecord } from '@/lib/sync/reducer';
+import { collator } from '@/lib/view/collator';
 
 /**
  * A dependency target. `issue` is undefined when the target is not in the
@@ -75,8 +76,6 @@ export function getBlockedBy(index: IssueIndex, id: string): IssueRef[] {
 /** The issues this one blocks, sorted by id for a stable list. */
 export function getBlocks(index: IssueIndex, id: string): IssueRef[] {
   const edges = (index.dependents[id] ?? []).filter((edge) => isBlockingDependency(edge.type));
-  const ids = [...new Set(edges.map((edge) => edge.id))].sort((left, right) =>
-    left.localeCompare(right)
-  );
+  const ids = [...new Set(edges.map((edge) => edge.id))].sort(collator.compare);
   return ids.map((target) => ({ id: target, issue: index.byId[target] }));
 }

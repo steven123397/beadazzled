@@ -2,8 +2,15 @@ import { useEffect, useState } from 'react';
 
 import { getVersion } from '@tauri-apps/api/app';
 
+let versionPromise: Promise<string> | null = null;
+
+/** Test hook: clear the process-wide request so a case can choose its result. */
+export function resetAppVersion(): void {
+  versionPromise = null;
+}
+
 /**
- * The application version, read once from the Tauri app plugin.
+ * The application version, shared by every hook consumer in this process.
  *
  * A browser page (the e2e seam) has no plugin, so the value stays null there
  * and callers render "unknown" or omit the row instead of inventing a number.
@@ -13,14 +20,13 @@ export function useAppVersion(): string | null {
 
   useEffect(() => {
     let alive = true;
-    void getVersion().then(
-      (value) => {
+    void (versionPromise ??= getVersion())
+      .then((value) => {
         if (alive) {
           setVersion(value);
         }
-      },
-      () => undefined
-    );
+      })
+      .catch(() => null);
     return () => {
       alive = false;
     };

@@ -1,4 +1,5 @@
 import type { Comment, Issue, JournalRecord } from '@/bindings/bd';
+import { timeOrder } from '@/lib/time';
 
 /** Everything the UI reads: the issue map plus the journal cursor. */
 export type TicketState = {
@@ -127,7 +128,7 @@ function upsert(issues: Record<string, Issue>, incoming: Issue): void {
     issues[incoming.id] = incoming;
     return;
   }
-  if (freshness(incoming) < freshness(current)) {
+  if (timeOrder(incoming.updated_at) < timeOrder(current.updated_at)) {
     return;
   }
   // Journal payloads never carry comments, dependencies or their counts. The
@@ -145,11 +146,6 @@ function upsert(issues: Record<string, Issue>, incoming: Issue): void {
     dependent_count: current.dependent_count,
     comment_count: incoming.comments === undefined ? current.comment_count : incoming.comment_count,
   };
-}
-
-function freshness(issue: Issue): number {
-  const parsed = Date.parse(issue.updated_at);
-  return Number.isNaN(parsed) ? 0 : parsed;
 }
 
 function appendComment(issues: Record<string, Issue>, record: JournalRecord): void {

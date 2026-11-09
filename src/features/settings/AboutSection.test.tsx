@@ -4,6 +4,7 @@ import { beforeEach, expect, test, vi } from 'vitest';
 
 import type { WorkspaceEntry, WorkspaceSnapshot } from '@/bindings/bd';
 import { WorkspaceProvider } from '@/app/shell/WorkspaceProvider';
+import { resetAppVersion } from '@/lib/app-version';
 import { I18nProvider } from '@/lib/i18n/I18nProvider';
 import { ThemeProvider } from '@/lib/theme/ThemeProvider';
 import { resetUpdates } from '@/lib/updates';
@@ -29,6 +30,8 @@ vi.mock('@tauri-apps/plugin-updater', () => ({
 }));
 
 beforeEach(() => {
+  getVersion.mockReset();
+  resetAppVersion();
   resetUpdates();
   updater.check.mockReset();
   updater.check.mockResolvedValue(null);
@@ -98,6 +101,18 @@ test('the app version comes from the runtime', async () => {
     'href',
     'https://github.com/steven123397/beadazzled'
   );
+});
+
+test('the app version request is shared across remounts', async () => {
+  getVersion.mockResolvedValue('0.1.0');
+  const first = renderSection();
+  expect(await screen.findByText(/Version 0\.1\.0/)).toBeInTheDocument();
+
+  first.unmount();
+  renderSection();
+
+  expect(await screen.findByText(/Version 0\.1\.0/)).toBeInTheDocument();
+  expect(getVersion).toHaveBeenCalledTimes(1);
 });
 
 test('the update check is enabled and reports the latest version', async () => {

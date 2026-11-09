@@ -90,3 +90,21 @@ test('assignee groups are alphabetical with unassigned last', () => {
 
   expect(groups.map((group) => group.key)).toEqual(['ada', 'lin', '']);
 });
+
+test('status, priority and assignee groups preserve order within each bucket', () => {
+  const issues = [
+    issue('a', { status: 'open', priority: 1, assignee: 'ada', labels: ['ui'] }),
+    issue('b', { status: 'open', priority: 2, labels: ['ui', 'backend'] }),
+    issue('c', { status: 'closed', priority: 1, assignee: 'lin' }),
+  ];
+  const ids = (group: 'status' | 'priority' | 'assignee', key: string) =>
+    groupIssues(issues, group)
+      .find((bucket) => bucket.key === key)
+      ?.issues.map((item) => item.id);
+
+  expect(ids('status', 'open')).toEqual(['a', 'b']);
+  expect(ids('status', 'closed')).toEqual(['c']);
+  expect(ids('priority', '1')).toEqual(['a', 'c']);
+  expect(ids('assignee', 'ada')).toEqual(['a']);
+  expect(ids('assignee', '')).toEqual(['b']);
+});

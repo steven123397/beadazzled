@@ -57,6 +57,16 @@ test('treats a missing timestamp as the oldest entry', () => {
   ]);
 });
 
+test('uses the shared numeric collator to break timestamp ties', () => {
+  const ten = entry('D:/work/BZA-10', older.lastOpenedAt);
+  const two = entry('D:/work/BZA-2', older.lastOpenedAt);
+
+  expect(recentWorkspaces([ten, two]).map((workspace) => workspace.path)).toEqual([
+    'D:/work/BZA-2',
+    'D:/work/BZA-10',
+  ]);
+});
+
 test('finds a workspace through a differently spelled path', () => {
   const workspaces = [older, newer];
 

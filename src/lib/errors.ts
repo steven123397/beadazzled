@@ -1,6 +1,6 @@
-import type { BridgeError } from '@/bindings/bd';
+import type { BridgeError, BridgeErrorCode } from '@/bindings/bd';
 
-const MESSAGES: Partial<Record<BridgeError['code'], string>> = {
+const MESSAGES: Partial<Record<BridgeErrorCode, string>> = {
   WRITE_CONFLICT: 'This issue changed elsewhere; refreshing the view.',
   BD_TIMEOUT: 'Saving timed out: bd did not respond within 20 seconds.',
   BD_LOCKED: 'The beads database is busy; try again in a moment.',
@@ -52,7 +52,7 @@ export function isBridgeError(value: unknown): value is BridgeError {
 
 /** Maps a bridge failure to text a person can act on. */
 export function describeError(error: BridgeError): {
-  code: BridgeError['code'];
+  code: BridgeErrorCode;
   message: string;
 } {
   const base = MESSAGES[error.code];

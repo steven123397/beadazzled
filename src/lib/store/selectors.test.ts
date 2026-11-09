@@ -102,6 +102,16 @@ test('blocks is sorted by id, not by the order the store was scanned', () => {
   expect(getBlocks(index, 'a').map((ref) => ref.id)).toEqual(['c', 'm', 'z']);
 });
 
+test('blocks uses the shared numeric collator for issue ids', () => {
+  const index = indexIssues([
+    issue('BZA-10', { dependencies: dependsOn('a') }),
+    issue('BZA-2', { dependencies: dependsOn('a') }),
+    issue('a'),
+  ]);
+
+  expect(getBlocks(index, 'a').map((ref) => ref.id)).toEqual(['BZA-2', 'BZA-10']);
+});
+
 test('only blocking relations appear in blocked by', () => {
   const index = indexIssues([
     issue('a'),
