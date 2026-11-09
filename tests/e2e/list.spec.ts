@@ -1,28 +1,20 @@
 import { expect, test } from '@playwright/test';
 
-import { clearInvokeLog, installFakeBridge, invokeLog } from './fakeBridge';
-
-function issue(index: number) {
-  return {
-    id: `bza-${index}`,
-    title: `Issue ${index}`,
-    description: '',
-    status: index % 7 === 0 ? 'closed' : index % 5 === 0 ? 'in_progress' : 'open',
-    priority: index % 5,
-    issue_type: index % 3 === 0 ? 'bug' : 'task',
-    assignee: index % 4 === 0 ? 'ada' : index % 4 === 1 ? 'lin' : undefined,
-    created_at: '2026-11-01T00:00:00Z',
-    updated_at: '2026-11-01T00:00:00Z',
-    labels: index % 2 === 0 ? ['ui'] : ['backend', 'perf', 'docs'],
-    dependency_count: 0,
-    dependent_count: 0,
-    comment_count: 0,
-  };
-}
+import { clearInvokeLog, installFakeBridge, invokeLog, makeIssue, makeIssues } from './fakeBridge';
 
 async function openThousandIssueList(page: import('@playwright/test').Page): Promise<void> {
   await installFakeBridge(page, {
-    issues: Array.from({ length: 1000 }, (_, index) => issue(index)),
+    issues: makeIssues(1000, (index) =>
+      makeIssue({
+        id: `bza-${index}`,
+        title: `Issue ${index}`,
+        status: index % 7 === 0 ? 'closed' : index % 5 === 0 ? 'in_progress' : 'open',
+        priority: index % 5,
+        issue_type: index % 3 === 0 ? 'bug' : 'task',
+        assignee: index % 4 === 0 ? 'ada' : index % 4 === 1 ? 'lin' : undefined,
+        labels: index % 2 === 0 ? ['ui'] : ['backend', 'perf', 'docs'],
+      })
+    ),
   });
   await page.goto('/#/w/p1/list');
   await expect(page.getByRole('heading', { name: 'List' })).toBeVisible();
@@ -70,8 +62,8 @@ test('a 1000-issue list virtualizes, navigates with J/K and restores focus', asy
 test('typing a multi-word query keeps its spaces', async ({ page }) => {
   await installFakeBridge(page, {
     issues: [
-      { ...issue(1), title: 'Fix scroll' },
-      { ...issue(2), title: 'Fix board' },
+      makeIssue(1, { title: 'Fix scroll' }),
+      makeIssue(2, { title: 'Fix board' }),
     ],
   });
   await page.goto('/#/w/p1/list');

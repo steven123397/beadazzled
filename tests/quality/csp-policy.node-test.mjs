@@ -4,8 +4,10 @@ import path from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 
+import { readJson } from '../../scripts/lib/paths.mjs';
+
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
-const config = JSON.parse(readFileSync(path.join(root, 'src-tauri/tauri.conf.json'), 'utf8'));
+const config = readJson(root, 'src-tauri/tauri.conf.json');
 const security = config.app?.security ?? {};
 
 // Tauri accepts either a single policy string or an object of directive -> sources.

@@ -3,10 +3,9 @@
 // at or below 15 MB. The installer is produced by `npm run build:app`.
 import { readdirSync, statSync } from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 
-const scriptPath = fileURLToPath(import.meta.url);
-const defaultRoot = path.resolve(path.dirname(scriptPath), '..');
+import { parseRootArg, runCheck } from './lib/paths.mjs';
+
 const BUDGET_BYTES = 15 * 1024 * 1024;
 const BUNDLE_DIRECTORIES = [
   'src-tauri/target/release/bundle/nsis',
@@ -38,24 +37,12 @@ function collectInstallers(root) {
   return installers;
 }
 
-function parseRoot(argv) {
-  const flagIndex = argv.indexOf('--root');
-  if (flagIndex === -1) {
-    return defaultRoot;
-  }
-  const value = argv[flagIndex + 1];
-  if (!value) {
-    throw new Error('--root requires a directory argument');
-  }
-  return path.resolve(value);
-}
-
 function formatMegabytes(bytes) {
   return `${(bytes / 1024 / 1024).toFixed(2)} MB`;
 }
 
-try {
-  const root = parseRoot(process.argv.slice(2));
+runCheck('check-size', () => {
+  const root = parseRootArg(process.argv.slice(2));
   const installers = collectInstallers(root);
 
   if (installers.length === 0) {
@@ -82,7 +69,4 @@ try {
       console.log(`check-size: all installers within the ${formatMegabytes(BUDGET_BYTES)} budget`);
     }
   }
-} catch (error) {
-  console.error(`check-size: ${error instanceof Error ? error.message : String(error)}`);
-  process.exitCode = 1;
-}
+});

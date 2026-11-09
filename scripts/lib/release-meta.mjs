@@ -1,10 +1,10 @@
-// Read the release version from the three places that must agree. Shared by
-// check-versions (the editing-loop gate) and verify-release (the artifact
-// check), so the two can never disagree about which sources count.
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 
+import { readJson } from './paths.mjs';
+
 export const SEMVER = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/;
+export const UPDATER_PLATFORM = 'windows-x86_64';
 
 export function cargoVersion(root) {
   const text = readFileSync(path.join(root, 'src-tauri/Cargo.toml'), 'utf8');
@@ -25,22 +25,32 @@ export function cargoVersion(root) {
   return null;
 }
 
-export function readReleaseVersions(root) {
-  const packageJson = JSON.parse(readFileSync(path.join(root, 'package.json'), 'utf8'));
-  const tauri = JSON.parse(readFileSync(path.join(root, 'src-tauri/tauri.conf.json'), 'utf8'));
-  return [
-    ['package.json', packageJson.version],
-    ['src-tauri/Cargo.toml', cargoVersion(root)],
-    ['src-tauri/tauri.conf.json', tauri.version],
-  ];
-}
-
-/** The updater public key from tauri.conf.json, or null when still a placeholder. */
-export function readUpdaterPublicKey(root) {
-  const tauri = JSON.parse(readFileSync(path.join(root, 'src-tauri/tauri.conf.json'), 'utf8'));
+/** The updater public key from tauri.conf.json (or parsed config object), or null when placeholder. */
+export function readUpdaterPublicKey(rootOrConfig) {
+  const tauri =
+    typeof rootOrConfig === 'object' && rootOrConfig !== null
+      ? rootOrConfig
+      : readJson(rootOrConfig, 'src-tauri/tauri.conf.json');
   const key = tauri.plugins?.updater?.pubkey;
   if (typeof key !== 'string' || key.trim() === '' || key.includes('<')) {
     return null;
   }
   return key.trim();
 }
+
+export function readReleaseMeta(root) {
+  const packageJson = readJson(root, 'package.json');
+  const tauri = readJson(root, 'src-tauri/tauri.conf.json');
+  const versions = [
+    ['package.json', packageJson.version],
+    ['src-tauri/Cargo.toml', cargoVersion(root)],
+    ['src-tauri/tauri.conf.json', tauri.version],
+  ];
+  const publicKey = readUpdaterPublicKey(tauri);
+  return { versions, publicKey };
+}
+
+export function readReleaseVersions(root) {
+  return readReleaseMeta(root).versions;
+}
+

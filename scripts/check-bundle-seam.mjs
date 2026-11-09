@@ -4,26 +4,14 @@
 // the branch, but that guarantee lived only in a comment; this asserts it.
 import { readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+
+import { parseRootArg, runCheck } from './lib/paths.mjs';
 
 const MARKER = '__BEADAZZLED_E2E__';
 const ASSET_DIRECTORY = 'dist/assets';
-const defaultRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
-function parseRoot(argv) {
-  const flagIndex = argv.indexOf('--root');
-  if (flagIndex === -1) {
-    return defaultRoot;
-  }
-  const value = argv[flagIndex + 1];
-  if (!value) {
-    throw new Error('--root requires a directory argument');
-  }
-  return path.resolve(value);
-}
-
-try {
-  const root = parseRoot(process.argv.slice(2));
+runCheck('check-bundle-seam', () => {
+  const root = parseRootArg(process.argv.slice(2));
   const assetDirectory = path.join(root, ASSET_DIRECTORY);
 
   let bundles;
@@ -46,7 +34,4 @@ try {
   } else {
     console.log(`check-bundle-seam: ${bundles.length} bundle(s) free of ${MARKER}`);
   }
-} catch (error) {
-  console.error(`check-bundle-seam: ${error instanceof Error ? error.message : String(error)}`);
-  process.exitCode = 1;
-}
+});

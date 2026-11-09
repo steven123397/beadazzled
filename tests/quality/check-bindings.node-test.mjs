@@ -1,17 +1,16 @@
 import assert from 'node:assert/strict';
-import { spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
-import os from 'node:os';
+import { mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
-import { afterEach, test } from 'node:test';
-import { fileURLToPath } from 'node:url';
+import { test } from 'node:test';
 
 import { compareBindings } from '../../scripts/lib/bindings.mjs';
+import { scriptFor, withTempRoots } from './helpers.mjs';
 
-const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
-const scriptPath = path.join(repoRoot, 'scripts/check-bindings.mjs');
-
-const tempRoots = [];
+const scriptPath = scriptFor('check-bindings');
+const { makeRoot: makeBaseRoot, run } = withTempRoots({
+  prefix: 'beadazzled-bindings-',
+  scriptPath,
+});
 
 // Stands in for scripts/gen-bindings.mjs: writes whatever the test asks for, or
 // fails, without needing cargo.
@@ -36,8 +35,7 @@ function bindingsPath(root) {
 }
 
 function makeRoot(committed) {
-  const root = mkdtempSync(path.join(os.tmpdir(), 'beadazzled-bindings-'));
-  tempRoots.push(root);
+  const root = makeBaseRoot();
   if (committed !== null) {
     mkdirSync(path.dirname(bindingsPath(root)), { recursive: true });
     writeFileSync(bindingsPath(root), committed);
@@ -46,19 +44,6 @@ function makeRoot(committed) {
   writeFileSync(path.join(root, 'scripts', 'gen-bindings.mjs'), FAKE_GENERATOR);
   return root;
 }
-
-function run(root, env = {}) {
-  return spawnSync(process.execPath, [scriptPath, '--root', root], {
-    encoding: 'utf8',
-    env: { ...process.env, ...env },
-  });
-}
-
-afterEach(() => {
-  while (tempRoots.length > 0) {
-    rmSync(tempRoots.pop(), { recursive: true, force: true });
-  }
-});
 
 test('identical generated content is not drift', () => {
   assert.deepEqual(compareBindings('a\nb\n', 'a\nb\n'), {

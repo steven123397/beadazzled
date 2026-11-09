@@ -4,11 +4,10 @@ import path from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 
-const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+import { readJson } from '../scripts/lib/paths.mjs';
 
-function readJson(relativePath) {
-  return JSON.parse(readFileSync(path.join(root, relativePath), 'utf8'));
-}
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const pkg = readJson(root, 'package.json');
 
 // Every command listed in docs/spec/capability-map.md must be declared in package.json.
 const CAPABILITY_MAP_SCRIPTS = [
@@ -33,26 +32,26 @@ const CAPABILITY_MAP_SCRIPTS = [
 ];
 
 test('package.json declares a semantic version', () => {
-  assert.match(readJson('package.json').version, /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/);
+  assert.match(pkg.version, /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/);
 });
 
 test('package.json declares every capability-map command', () => {
-  const scripts = readJson('package.json').scripts ?? {};
+  const scripts = pkg.scripts ?? {};
   const missing = CAPABILITY_MAP_SCRIPTS.filter((name) => !scripts[name]);
   assert.deepEqual(missing, []);
 });
 
 test('tauri.conf.json carries the product identity', () => {
-  const config = readJson('src-tauri/tauri.conf.json');
+  const config = readJson(root, 'src-tauri/tauri.conf.json');
   assert.equal(config.productName, 'beadazzled');
-  assert.equal(config.version, readJson('package.json').version);
+  assert.equal(config.version, pkg.version);
   assert.equal(config.identifier, 'com.steven123397.beadazzled');
 });
 
 test('Cargo.toml version matches package.json', () => {
   const cargoToml = readFileSync(path.join(root, 'src-tauri/Cargo.toml'), 'utf8');
   const version = /^version\s*=\s*"([^"]+)"/m.exec(cargoToml)?.[1];
-  assert.equal(version, readJson('package.json').version);
+  assert.equal(version, pkg.version);
 });
 
 test('scaffold entry points exist', () => {

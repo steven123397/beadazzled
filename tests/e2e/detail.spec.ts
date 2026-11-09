@@ -1,34 +1,16 @@
 import { expect, test } from '@playwright/test';
 
-import { clearInvokeLog, installFakeBridge, invokeLog } from './fakeBridge';
+import { clearInvokeLog, installFakeBridge, invokeLog, makeIssue, makeIssues } from './fakeBridge';
 
 const TS = '2026-11-01T00:00:00Z';
-
-function issue(id: string, overrides: Record<string, unknown> = {}) {
-  return {
-    id,
-    title: `Issue ${id}`,
-    description: '',
-    status: 'open',
-    priority: 2,
-    issue_type: 'task',
-    created_at: TS,
-    updated_at: TS,
-    labels: [],
-    dependency_count: 0,
-    dependent_count: 0,
-    comment_count: 0,
-    ...overrides,
-  };
-}
 
 test('detail renders markdown, metadata, dependencies and comments from memory', async ({
   page,
 }) => {
   await installFakeBridge(page, {
     issues: [
-      issue('bza-a', { title: 'Blocker' }),
-      issue('bza-b', {
+      makeIssue('bza-a', { title: 'Blocker' }),
+      makeIssue('bza-b', {
         title: 'Document reading',
         description: [
           '| Name | State |',
@@ -71,7 +53,7 @@ test('opening a ticket from the list renders from memory without calling bd', as
   // deep list open renders the detail and never reaches bd.
   test.setTimeout(90_000);
   await installFakeBridge(page, {
-    issues: Array.from({ length: 1000 }, (_, index) => issue(`bza-${index}`)),
+    issues: makeIssues(1000, (index) => makeIssue(`bza-${index}`)),
   });
   await page.goto('/#/w/p1/list');
   await expect(page.getByRole('heading', { name: 'List' })).toBeVisible();
@@ -95,7 +77,7 @@ test('opening a ticket from the list renders from memory without calling bd', as
 test('injected markdown never creates executable nodes', async ({ page }) => {
   await installFakeBridge(page, {
     issues: [
-      issue('bza-x', {
+      makeIssue('bza-x', {
         title: 'Injection sample',
         description: [
           '<script>window.__pwned = true;</script>',
@@ -123,14 +105,14 @@ test('injected markdown never creates executable nodes', async ({ page }) => {
 test('blocked-by and blocks both resolve, including a deleted target', async ({ page }) => {
   await installFakeBridge(page, {
     issues: [
-      issue('bza-a'),
-      issue('bza-b', {
+      makeIssue('bza-a'),
+      makeIssue('bza-b', {
         dependencies: [
           { issue_id: 'bza-b', depends_on_id: 'bza-a', type: 'blocks', created_at: TS },
           { issue_id: 'bza-b', depends_on_id: 'bza-gone', type: 'blocks', created_at: TS },
         ],
       }),
-      issue('bza-c', {
+      makeIssue('bza-c', {
         dependencies: [
           { issue_id: 'bza-c', depends_on_id: 'bza-a', type: 'blocks', created_at: TS },
         ],

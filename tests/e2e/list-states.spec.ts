@@ -1,25 +1,17 @@
 import { expect, test } from '@playwright/test';
 
-import { installFakeBridge } from './fakeBridge';
+import { installFakeBridge, makeIssue } from './fakeBridge';
 
 function issue(index: number, overrides: Record<string, unknown> = {}) {
-  return {
+  return makeIssue({
     id: `bza-${index}`,
     title: `Issue ${index}`,
-    description: '',
-    status: 'open',
-    priority: 2,
-    issue_type: 'task',
     assignee: 'ada',
-    created_at: '2026-11-01T00:00:00Z',
-    updated_at: '2026-11-01T00:00:00Z',
     labels: ['ui'],
-    dependency_count: 0,
-    dependent_count: 0,
-    comment_count: 0,
     ...overrides,
-  };
+  });
 }
+
 
 const loading = { kind: 'loading', step: 'export' };
 const healthy = { kind: 'healthy', lastSeq: 1, lastEventAt: null };
