@@ -52,7 +52,7 @@ const FORBIDDEN_IMPORT = new RegExp(
     String.raw`|\bimport\s*\(\s*['"]${REFERENCE_SPECIFIER}['"]\s*\)` +
     String.raw`|\bimport\s*['"]${REFERENCE_SPECIFIER}['"])`
 );
-const STORE_SYNC_SPECIFIER = String.raw`(?:@/lib/sync(?:/[^'"]*)?|(?:\.\./)+sync(?:/[^'"]*)?)`;
+const STORE_SYNC_SPECIFIER = String.raw`(?:@/lib/sync(?:/[^'"]*)?|(?:\.\./)+(?:lib/)?sync(?:/[^'"]*)?)`;
 const STORE_SYNC_IMPORT = new RegExp(
   String.raw`(?:\bfrom\s*['"]${STORE_SYNC_SPECIFIER}['"]` +
     String.raw`|\brequire\s*\(\s*['"]${STORE_SYNC_SPECIFIER}['"]\s*\)` +
