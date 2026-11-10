@@ -9,6 +9,7 @@ import { useWorkspace } from '@/lib/workspace/useWorkspace';
 import { I18nProvider, useI18n } from '@/lib/i18n/I18nProvider';
 import type { Language } from '@/lib/i18n';
 import type { SyncApi } from '@/lib/sync/api';
+import { recordSyncError, type SyncErrorRecord } from '@/lib/sync/labels';
 import { useSync } from '@/lib/sync/useSync';
 import { ThemeProvider } from '@/lib/theme/ThemeProvider';
 import type { Theme } from '@/lib/theme/theme';
@@ -20,7 +21,7 @@ import { ErrorBoundary } from './shell/ErrorBoundary';
 import { PreferencesBridge, type PreferencesApi } from './shell/PreferencesBridge';
 import { Shell } from './shell/Shell';
 import { SkeletonScreen } from './shell/SkeletonScreen';
-import { recordSyncError, SyncStatusProvider, type SyncErrorRecord } from './shell/SyncStatus';
+import { SyncStatusProvider } from './shell/SyncStatus';
 import { Welcome } from './shell/Welcome';
 import {
   activeWorkspace,

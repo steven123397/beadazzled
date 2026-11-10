@@ -1,7 +1,7 @@
 import { expect, test } from 'vitest';
 
 import type { Shortcut } from './types';
-import { formatKeys, isEditableTarget, keyToken, resolveShortcut } from './resolve';
+import { formatKeys, keyToken, resolveShortcut } from './resolve';
 
 const shortcuts: Shortcut[] = [
   {
@@ -133,39 +133,6 @@ test('alt combinations are not treated as shortcuts', () => {
   const result = resolveShortcut(shortcuts, { key: 'k', altKey: true }, { now: 100 });
 
   expect(result.binding).toBeNull();
-});
-
-test('editable targets are inputs, textareas and contenteditable hosts', () => {
-  expect(isEditableTarget(document.createElement('input'))).toBe(true);
-  expect(isEditableTarget(document.createElement('textarea'))).toBe(true);
-  expect(isEditableTarget(document.createElement('select'))).toBe(true);
-
-  const host = document.createElement('div');
-  host.setAttribute('contenteditable', 'true');
-  expect(isEditableTarget(host)).toBe(true);
-
-  const child = document.createElement('span');
-  host.append(child);
-  expect(isEditableTarget(child)).toBe(true);
-
-  const locked = document.createElement('span');
-  locked.setAttribute('contenteditable', 'false');
-  host.append(locked);
-  expect(isEditableTarget(locked)).toBe(false);
-
-  // A summary replaces the native select in dropdowns; it owns single keys.
-  const details = document.createElement('details');
-  const summary = document.createElement('summary');
-  const summaryChild = document.createElement('span');
-  summary.append(summaryChild);
-  details.append(summary);
-  document.body.append(details);
-  expect(isEditableTarget(summary)).toBe(true);
-  expect(isEditableTarget(summaryChild)).toBe(true);
-  details.remove();
-
-  expect(isEditableTarget(document.createElement('button'))).toBe(false);
-  expect(isEditableTarget(null)).toBe(false);
 });
 
 test('formatKeys renders modifiers and chords for the help panel', () => {

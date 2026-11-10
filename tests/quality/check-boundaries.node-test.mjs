@@ -154,6 +154,33 @@ test('require of reference packages fails', () => {
   assert.match(result.stdout, /forbidden-import/);
 });
 
+test('lib/store imports from lib/sync fail through aliases and relative paths', () => {
+  const root = makeRoot({
+    'src/lib/store/alias.ts': "import { createTicketState } from '@/lib/sync/reducer';\n",
+    'src/lib/store/relative.ts': "import { createTicketState } from '../sync/reducer';\n",
+    'src/lib/store/nested/relative.ts':
+      "import { createTicketState } from '../../../lib/sync/reducer';\n",
+  });
+
+  const result = run(root);
+
+  assert.equal(result.status, 1, result.stdout + result.stderr);
+  assert.match(result.stdout, /alias\.ts:1.*lib-store-to-sync/);
+  assert.match(result.stdout, /relative\.ts:1.*lib-store-to-sync/);
+  assert.match(result.stdout, /nested\/relative\.ts:1.*lib-store-to-sync/);
+});
+
+test('lib/store can import neutral issues and records leaves', () => {
+  const root = makeRoot({
+    'src/lib/store/selectors.ts':
+      "import { indexById } from '@/lib/issues';\nimport { emptyRecord } from '@/lib/records';\nimport { helper } from '@/lib/sync-foo';\n",
+  });
+
+  const result = run(root);
+
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+});
+
 test('child_process imports in the frontend fail', () => {
   const root = makeRoot({
     'src/lib/run.ts': "import { spawn } from 'node:child_process';\nexport const run = spawn;\n",

@@ -2,14 +2,15 @@ import { ChevronRight } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 
-import { isEditableTarget, isOverlayOpen } from '@/app/keyboard/resolve';
 import { Button } from '@/components/ui/button';
 import type { Issue } from '@/bindings/bd';
 import { confirmLeaveDraft, setDraftGuard } from '@/lib/draft-guard';
+import { isEditableTarget, isOverlayOpen } from '@/lib/dom/focus';
 import { describeError } from '@/lib/errors';
 import { useI18n } from '@/lib/i18n/I18nProvider';
+import { lookupFrom } from '@/lib/issues';
 import { openExternal } from '@/lib/links';
-import { getIssue, indexIssues } from '@/lib/store/selectors';
+import { indexIssues } from '@/lib/store/selectors';
 import { commentIssue, updateIssue, type UpdateInput } from '@/lib/writes/commands';
 import type { UseWrite } from '@/lib/writes/useWrite';
 
@@ -47,7 +48,7 @@ export function DetailView({
 }: DetailViewProps) {
   const { t } = useI18n();
   const index = useMemo(() => indexIssues(issues), [issues]);
-  const issue = getIssue(index, issueId);
+  const issue = lookupFrom(index.byId)(issueId);
   const [editing, setEditing] = useState<EditableField | null>(null);
   // Every local draft on the page reports up, so navigation asks once no
   // matter which surface holds unsaved input.

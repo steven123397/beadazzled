@@ -1,13 +1,9 @@
 import { useEffect, useRef } from 'react';
 
 import { isDraftOpen } from '@/lib/draft-guard';
+import { isEditableTarget } from '@/lib/dom/focus';
 
-import {
-  isEditableTarget,
-  resolveShortcut,
-  type PendingSequence,
-  type ResolveOptions,
-} from './resolve';
+import { resolveShortcut, type PendingSequence, type ResolveOptions } from './resolve';
 import type { Shortcut, ShortcutContext } from './types';
 
 /** Binds the window keydown listener and dispatches to the registered shortcut. */

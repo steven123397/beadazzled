@@ -184,15 +184,28 @@ test('writes are refused without calling bd when it is not available', async () 
   expect(result.current.error).toMatch(/not found/i);
 });
 
-test('an unsupported bd explains the version gap and blocks writes', () => {
-  const { flow } = fakeFlow({ status: 'ok' });
+test('an unsupported bd uses the same described error for disabled state and submit', async () => {
+  const { flow, calls } = fakeFlow({ status: 'ok' });
   const { result } = renderHook(() =>
     useWrite(flow, { kind: 'unsupported', path: 'C:/bd.exe', found: '1.2.9', min: '1.3.2' })
   );
 
   expect(result.current.canWrite).toBe(false);
-  expect(result.current.disabledReason).toContain('1.2.9');
-  expect(result.current.disabledReason).toContain('1.3.2');
+  expect(result.current.disabledReason).toBe(
+    'This bd version is older than 1.3.2; update bd and try again.'
+  );
+
+  await act(async () => {
+    const outcome = await result.current.submit({
+      key: 'k',
+      issueId: 'bza-1',
+      build: () => COMMAND,
+    });
+    expect(outcome.status).toBe('failed');
+  });
+
+  expect(calls()).toBe(0);
+  expect(result.current.error).toBe(result.current.disabledReason);
 });
 
 test('clearError dismisses the message', async () => {

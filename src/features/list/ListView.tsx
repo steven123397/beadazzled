@@ -4,16 +4,16 @@ import { useVirtualizer } from '@tanstack/react-virtual';
 import { Inbox, SearchX, TriangleAlert } from 'lucide-react';
 
 import type { Issue, SyncState } from '@/bindings/bd';
-import { isEditableTarget, isOverlayOpen } from '@/app/keyboard/resolve';
 import { Button } from '@/components/ui/button';
 import { StateBadge } from '@/components/ui/state-badge';
 import { FilterBar } from '@/components/filter-bar';
+import { isEditableTarget, isOverlayOpen, isViewTarget } from '@/lib/dom/focus';
 import { useI18n } from '@/lib/i18n/I18nProvider';
 import { buildSearchIndex, hasActiveFilters } from '@/lib/view/filter';
+import { selectVisibleIssues } from '@/lib/view/select';
 import { createListViewState, type GroupBy } from '@/lib/view/state';
 import { usePersistedView } from '@/lib/view/usePersistedView';
 
-import { selectVisibleIssues } from './filter';
 import { GROUP_HEIGHT, GroupHeader } from './GroupHeader';
 import { groupIssues } from './group';
 import { loadListPosition, saveListPosition } from './position';
@@ -311,7 +311,7 @@ export function ListView({ projectId, issues, syncState = HEALTHY, onRefresh }: 
         focusRow(meta.order[position < 0 ? meta.count - 1 : Math.max(position - 1, 0)] ?? '');
         return;
       }
-      if (event.key === 'Enter' && current !== undefined && isListTarget(event.target)) {
+      if (event.key === 'Enter' && current !== undefined && isViewTarget(event.target)) {
         const item = itemsRef.current[current.itemIndex];
         if (item?.kind === 'row') {
           event.preventDefault();
@@ -495,21 +495,4 @@ function ErrorState({ message, onRefresh }: { message: string; onRefresh?: () =>
       )}
     </div>
   );
-}
-
-/**
- * Enter only activates the list when the event came from the list itself. A
- * button in the top bar must keep its native Enter behavior.
- */
-function isListTarget(target: EventTarget | null): boolean {
-  if (target === null) {
-    return false;
-  }
-  if (target === window || target === document || target === document.body) {
-    return true;
-  }
-  if (!(target instanceof Element)) {
-    return false;
-  }
-  return target.closest('[data-issue-id]') !== null || target.getAttribute('role') === 'list';
 }

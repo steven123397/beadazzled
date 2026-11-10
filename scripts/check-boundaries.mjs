@@ -3,6 +3,7 @@
 // - only src-tauri/src/bridge may spawn processes
 // - the frontend must not spawn processes or reach the bd command layer
 // - no code may read the embedded Dolt store directly
+// - src/lib/store must not import src/lib/sync (ADR-0012)
 // - reference code from AGPL/EPL/ELv2/CC-BY-NC projects must not enter the repo
 //
 // This is a text scan, not a compiler: string concatenation, macro expansion or
@@ -50,6 +51,13 @@ const FORBIDDEN_IMPORT = new RegExp(
     String.raw`|\brequire\s*\(\s*['"]${REFERENCE_SPECIFIER}['"]\s*\)` +
     String.raw`|\bimport\s*\(\s*['"]${REFERENCE_SPECIFIER}['"]\s*\)` +
     String.raw`|\bimport\s*['"]${REFERENCE_SPECIFIER}['"])`
+);
+const STORE_SYNC_SPECIFIER = String.raw`(?:@/lib/sync(?:/[^'"]*)?|(?:\.\./)+(?:lib/)?sync(?:/[^'"]*)?)`;
+const STORE_SYNC_IMPORT = new RegExp(
+  String.raw`(?:\bfrom\s*['"]${STORE_SYNC_SPECIFIER}['"]` +
+    String.raw`|\brequire\s*\(\s*['"]${STORE_SYNC_SPECIFIER}['"]\s*\)` +
+    String.raw`|\bimport\s*\(\s*['"]${STORE_SYNC_SPECIFIER}['"]\s*\)` +
+    String.raw`|\bimport\s*['"]${STORE_SYNC_SPECIFIER}['"])`
 );
 const CHILD_PROCESS_IMPORT =
   /(?:\bfrom\s*['"](?:node:)?child_process['"]|\brequire\s*\(\s*['"](?:node:)?child_process['"]\s*\)|\bimport\s*\(\s*['"](?:node:)?child_process['"]\s*\)|\bimport\s*['"](?:node:)?child_process['"])/;
@@ -99,6 +107,12 @@ const RULES = [
     applies: (relPath) => isFrontendSource(relPath),
     matches: (line) => CHILD_PROCESS_IMPORT.test(line),
     message: 'the frontend must talk to Rust commands, not spawn child processes',
+  },
+  {
+    id: 'lib-store-to-sync',
+    applies: (relPath) => relPath.startsWith('src/lib/store/'),
+    matches: (line) => STORE_SYNC_IMPORT.test(line),
+    message: 'lib/store must depend on neutral issues/records leaves, not lib/sync',
   },
   {
     id: 'forbidden-import',

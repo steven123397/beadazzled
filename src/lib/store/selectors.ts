@@ -1,7 +1,9 @@
 import type { Issue } from '@/bindings/bd';
 
 import { isBlockingDependency } from '@/lib/dependencies';
-import { emptyRecord } from '@/lib/sync/reducer';
+import { indexById } from '@/lib/issues';
+import { emptyRecord } from '@/lib/records';
+import { collator } from '@/lib/view/collator';
 
 /**
  * A dependency target. `issue` is undefined when the target is not in the
@@ -25,11 +27,10 @@ export type IssueIndex = {
  * section.
  */
 export function indexIssues(issues: readonly Issue[]): IssueIndex {
-  const byId = emptyRecord<Issue>();
+  const byId = indexById(issues);
   const dependents = emptyRecord<DependentEdge[]>();
 
   for (const issue of issues) {
-    byId[issue.id] = issue;
     for (const dependency of issue.dependencies ?? []) {
       (dependents[dependency.depends_on_id] ??= []).push({
         id: issue.id,
@@ -39,10 +40,6 @@ export function indexIssues(issues: readonly Issue[]): IssueIndex {
   }
 
   return { byId, dependents };
-}
-
-export function getIssue(index: IssueIndex, id: string): Issue | undefined {
-  return index.byId[id];
 }
 
 /**
@@ -75,8 +72,6 @@ export function getBlockedBy(index: IssueIndex, id: string): IssueRef[] {
 /** The issues this one blocks, sorted by id for a stable list. */
 export function getBlocks(index: IssueIndex, id: string): IssueRef[] {
   const edges = (index.dependents[id] ?? []).filter((edge) => isBlockingDependency(edge.type));
-  const ids = [...new Set(edges.map((edge) => edge.id))].sort((left, right) =>
-    left.localeCompare(right)
-  );
+  const ids = [...new Set(edges.map((edge) => edge.id))].sort(collator.compare);
   return ids.map((target) => ({ id: target, issue: index.byId[target] }));
 }

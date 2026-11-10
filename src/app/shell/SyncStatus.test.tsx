@@ -2,7 +2,7 @@ import { expect, test } from 'vitest';
 
 import type { SyncState } from '@/bindings/bd';
 
-import { describeSyncState, syncToneClass } from './SyncStatus';
+import { describeSyncState, syncToneClass } from '@/lib/sync/labels';
 
 test('loading distinguishes the export and journal steps', () => {
   expect(describeSyncState({ kind: 'loading', step: 'export' }).key).toBe('status.loadingIssues');

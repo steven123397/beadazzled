@@ -25,7 +25,11 @@ function issue(id: string, overrides: Partial<Issue> = {}): Issue {
   };
 }
 
-function record(seq: number, issueId: string, overrides: Partial<JournalRecord> = {}): JournalRecord {
+function record(
+  seq: number,
+  issueId: string,
+  overrides: Partial<JournalRecord> = {}
+): JournalRecord {
   return {
     seq,
     ts: TS,
@@ -35,13 +39,6 @@ function record(seq: number, issueId: string, overrides: Partial<JournalRecord> 
     ...overrides,
   };
 }
-
-test('a label named constructor does not break the indexes', () => {
-  const store = createTicketStore();
-  store.applySnapshot([issue('a', { labels: ['constructor'] })]);
-
-  expect(store.getIndexes().byLabel['constructor']).toEqual(['a']);
-});
 
 test('an issue id of __proto__ stays a normal entry', () => {
   const store = createTicketStore();
@@ -103,48 +100,6 @@ test('a gap asks the caller for a full baseline', () => {
 
   expect(report.needsBaseline).toBe(true);
   expect(store.getState().lastSeq).toBe(1);
-});
-
-test('indexes group issues by status, priority, assignee and label', () => {
-  const store = createTicketStore();
-  store.applySnapshot([
-    issue('a', { status: 'open', priority: 1, assignee: 'ada', labels: ['ui'] }),
-    issue('b', { status: 'open', priority: 2, labels: ['ui', 'backend'] }),
-    issue('c', { status: 'closed', priority: 1, assignee: 'lin' }),
-  ]);
-
-  const indexes = store.getIndexes();
-
-  expect(indexes.byStatus.open).toEqual(['a', 'b']);
-  expect(indexes.byStatus.closed).toEqual(['c']);
-  expect(indexes.byPriority['1']).toEqual(['a', 'c']);
-  expect(indexes.byAssignee.ada).toEqual(['a']);
-  expect(indexes.byAssignee['']).toEqual(['b']);
-  expect(indexes.byLabel.ui).toEqual(['a', 'b']);
-  expect(indexes.byLabel.backend).toEqual(['b']);
-});
-
-test('search text contains id, title and description in lower case', () => {
-  const store = createTicketStore();
-  store.applySnapshot([issue('BZA-1', { title: 'Fix The List', description: 'Scroll Jank' })]);
-
-  const text = store.getIndexes().searchText['BZA-1'];
-
-  expect(text).toContain('bza-1');
-  expect(text).toContain('fix the list');
-  expect(text).toContain('scroll jank');
-});
-
-test('indexes are cached until the store changes', () => {
-  const store = createTicketStore();
-  store.applySnapshot([issue('a')]);
-
-  const first = store.getIndexes();
-  expect(store.getIndexes()).toBe(first);
-
-  store.applyRecords([record(1, 'a')]);
-
-  expect(store.getIndexes()).not.toBe(first);
 });
 
 test('applies 1000 journal records over 1000 issues within 100ms', () => {

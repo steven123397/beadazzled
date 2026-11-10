@@ -2,7 +2,7 @@ import { expect, test } from 'vitest';
 
 import type { SyncState } from '@/bindings/bd';
 
-import { recordSyncError, type SyncErrorRecord } from './SyncStatus';
+import { recordSyncError, type SyncErrorRecord } from '@/lib/sync/labels';
 
 const failure: SyncState = {
   kind: 'bd-unavailable',
