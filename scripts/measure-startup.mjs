@@ -18,23 +18,26 @@
  */
 import { spawn, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
-import { mkdtemp, readFile, rm, unlink, writeFile } from 'node:fs/promises';
+import { createReadStream, existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { summarize } from './lib/startup-stats.mjs';
+import { parseOptions, runMain } from './lib/cli.mjs';
+import { sleep } from './lib/desktop-harness.mjs';
+import { DEFAULT_RELEASE_EXE_REL, releaseExe } from './lib/paths.mjs';
+import { round, summarize } from './lib/startup-stats.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const defaultExe = path.join(root, 'src-tauri/target/release/beadazzled.exe');
+const defaultExe = releaseExe(root);
 const budgets = { coldP95: 2000, warmP95: 800 };
 const TRACE_PREFIX = 'page-load-finished';
+const TRACE_PATTERN = new RegExp(`^${TRACE_PREFIX} (\\d+) (\\S+)$`, 'gm');
 // Inputs whose change makes an existing binary unrepresentative. `dist` is
 // included because `tauri build` copies it into the exe.
 const SOURCE_DIRECTORIES = ['src', 'src-tauri/src', 'dist'];
 const SOURCE_FILES = ['index.html', 'vite.config.ts', 'src-tauri/tauri.conf.json'];
-const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 function usage() {
   return [
@@ -42,7 +45,7 @@ function usage() {
     '',
     '  --runs <n>        cold launches to measure (default 20)',
     '  --warm-runs <n>   warm launches to measure (default 20)',
-    '  --exe <path>      application binary (default src-tauri/target/release/beadazzled.exe)',
+    `  --exe <path>      application binary (default ${DEFAULT_RELEASE_EXE_REL})`,
     '  --timeout <ms>    per-launch timeout (default 20000)',
     '  --no-build        fail instead of building a missing release binary',
     '  --json            print the machine-readable result instead of a report',
@@ -55,64 +58,43 @@ function usage() {
 }
 
 function parseArgs(argv) {
-  const options = {
-    runs: 20,
-    warmRuns: 20,
-    exe: defaultExe,
-    timeout: 20_000,
-    build: true,
-    json: false,
-  };
-
-  const valueOptions = new Set(['--runs', '--warm-runs', '--exe', '--timeout']);
-  const flagOptions = new Set(['--no-build', '--json']);
-
-  for (let index = 0; index < argv.length; index += 1) {
-    const arg = argv[index];
-    // Split on the first '=' only: a Windows path such as --exe=C:\a=b\app.exe
-    // would otherwise be truncated at the second one.
-    const separator = arg.indexOf('=');
-    const name = separator === -1 ? arg : arg.slice(0, separator);
-    const inline = separator === -1 ? undefined : arg.slice(separator + 1);
-
-    if (flagOptions.has(name)) {
+  const options = parseOptions(argv, {
+    flags: ['--no-build', '--json'],
+    values: ['--runs', '--warm-runs', '--exe', '--timeout'],
+    usage,
+    usageOnUnknown: true,
+    defaults: {
+      runs: 20,
+      warmRuns: 20,
+      exe: defaultExe,
+      timeout: 20_000,
+      build: true,
+      json: false,
+    },
+    onFlag(opts, name) {
       if (name === '--no-build') {
-        options.build = false;
+        opts.build = false;
       } else {
-        options.json = true;
+        opts.json = true;
       }
-      continue;
-    }
-
-    if (name === '--help' || name === '-h') {
-      console.log(usage());
-      process.exit(0);
-    }
-
-    if (!valueOptions.has(name)) {
-      throw new Error(`unknown option: ${arg}\n\n${usage()}`);
-    }
-
-    const value = inline ?? argv[++index];
-    if (value === undefined) {
-      throw new Error(`${name} needs a value`);
-    }
-
-    switch (name) {
-      case '--runs':
-        options.runs = Number(value);
-        break;
-      case '--warm-runs':
-        options.warmRuns = Number(value);
-        break;
-      case '--exe':
-        options.exe = path.resolve(value);
-        break;
-      case '--timeout':
-        options.timeout = Number(value);
-        break;
-    }
-  }
+    },
+    onValue(opts, name, value) {
+      switch (name) {
+        case '--runs':
+          opts.runs = Number(value);
+          break;
+        case '--warm-runs':
+          opts.warmRuns = Number(value);
+          break;
+        case '--exe':
+          opts.exe = path.resolve(value);
+          break;
+        case '--timeout':
+          opts.timeout = Number(value);
+          break;
+      }
+    },
+  });
 
   for (const name of ['runs', 'warmRuns']) {
     if (!Number.isInteger(options[name]) || options[name] < 0) {
@@ -200,6 +182,14 @@ function newestSource() {
   return newest;
 }
 
+async function sha256File(filePath) {
+  const hash = createHash('sha256');
+  for await (const chunk of createReadStream(filePath)) {
+    hash.update(chunk);
+  }
+  return hash.digest('hex');
+}
+
 /**
  * Which commit and binary this run measured, and whether the binary predates
  * its inputs. Reporting a stale binary is the difference between a budget
@@ -222,9 +212,7 @@ async function describeFreshness(exe, exeStat) {
     gitHead: head,
     gitDirty: gitValue(['status', '--porcelain']) !== '',
     binaryModifiedAt: new Date(exeStat.mtimeMs).toISOString(),
-    binarySha256: createHash('sha256')
-      .update(await readFile(exe))
-      .digest('hex'),
+    binarySha256: await sha256File(exe),
     stale: reasons.length > 0,
     reasons,
   };
@@ -273,8 +261,7 @@ function describeAppConfig() {
 async function readTrace(traceFile) {
   try {
     const contents = await readFile(traceFile, 'utf8');
-    const pattern = new RegExp(`^${TRACE_PREFIX} (\\d+) (\\S+)$`, 'gm');
-    for (const match of contents.matchAll(pattern)) {
+    for (const match of contents.matchAll(TRACE_PATTERN)) {
       if (!match[2].startsWith('about:')) {
         return Number(match[1]);
       }
@@ -292,7 +279,6 @@ async function measureOnce({ exe, profile, traceFile, timeout }) {
   let child = null;
 
   try {
-    await unlink(traceFile).catch(() => undefined);
     await writeFile(traceFile, '', 'utf8');
 
     child = spawn(exe, [], {
@@ -410,7 +396,7 @@ async function removeProfile(profile) {
   console.warn(`could not remove ${profile}; it will be left in the temp directory`);
 }
 
-async function runBatch(label, count, options, profileFactory, traceDir) {
+async function runBatch(label, count, options, profileFactory, traceDir, disposeProfile = false) {
   const samples = [];
 
   for (let index = 0; index < count; index += 1) {
@@ -429,7 +415,7 @@ async function runBatch(label, count, options, profileFactory, traceDir) {
       }
     } finally {
       await sleep(350);
-      if (label === 'cold') {
+      if (disposeProfile) {
         await removeProfile(profile);
       }
     }
@@ -439,11 +425,11 @@ async function runBatch(label, count, options, profileFactory, traceDir) {
 }
 
 async function main() {
+  const options = parseArgs(process.argv.slice(2));
+
   if (process.platform !== 'win32') {
     throw new Error('startup measurement targets the Windows WebView2 app');
   }
-
-  const options = parseArgs(process.argv.slice(2));
   if (!existsSync(options.exe)) {
     if (!options.build) {
       throw new Error(
@@ -479,7 +465,7 @@ async function main() {
     const cold =
       options.runs === 0
         ? null
-        : await runBatch('cold', options.runs, options, async () => freshProfile(), traceDir);
+        : await runBatch('cold', options.runs, options, async () => freshProfile(), traceDir, true);
 
     // Prime one profile so warm runs start from the same WebView2 state a user
     // has after the app has opened at least once.
@@ -496,7 +482,14 @@ async function main() {
         if (!options.json) {
           console.log(`warm-up run: ${Math.round(priming.elapsedMs)}ms (not counted)`);
         }
-        warm = await runBatch('warm', options.warmRuns, options, async () => warmProfile, traceDir);
+        warm = await runBatch(
+          'warm',
+          options.warmRuns,
+          options,
+          async () => warmProfile,
+          traceDir,
+          false
+        );
       }
 
       const coldSummary = cold === null ? null : summarize(cold);
@@ -534,10 +527,6 @@ async function main() {
   } finally {
     await removeProfile(traceDir);
   }
-}
-
-function round(value) {
-  return Math.round(value * 10) / 10;
 }
 
 /**
@@ -578,10 +567,10 @@ function printReport(result) {
   console.log(`probe: ${result.probe}`);
   console.log(`p95: ${result.p95Method}`);
   if (result.cold !== null) {
-    console.log(describe('cold', result.cold, budgets.coldP95));
+    console.log(formatBudgetLine('cold', result.cold, budgets.coldP95));
   }
   if (result.warm !== null) {
-    console.log(describe('warm', result.warm, budgets.warmP95));
+    console.log(formatBudgetLine('warm', result.warm, budgets.warmP95));
   }
   console.log('');
   console.log(`git: ${result.freshness.gitHead ?? 'unknown'}`);
@@ -605,7 +594,7 @@ function printReport(result) {
   }
 }
 
-function describe(label, summary, budget) {
+function formatBudgetLine(label, summary, budget) {
   return (
     `${label}: n=${summary.count} p50=${Math.round(summary.p50)}ms ` +
     `p95=${Math.round(summary.p95)}ms min=${Math.round(summary.min)}ms ` +
@@ -614,7 +603,4 @@ function describe(label, summary, budget) {
   );
 }
 
-main().catch((error) => {
-  console.error(error.message);
-  process.exitCode = 1;
-});
+runMain('measure-startup', main);

@@ -9,25 +9,10 @@
 import { spawnSync } from 'node:child_process';
 import { existsSync, readFileSync, statSync, utimesSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
-
 import { compareBindings } from './lib/bindings.mjs';
+import { parseRootArg, runCheck } from './lib/paths.mjs';
 
-const scriptPath = fileURLToPath(import.meta.url);
-const defaultRoot = path.resolve(path.dirname(scriptPath), '..');
 const MAX_LISTED_LINES = 5;
-
-function parseRoot(argv) {
-  const flagIndex = argv.indexOf('--root');
-  if (flagIndex === -1) {
-    return defaultRoot;
-  }
-  const value = argv[flagIndex + 1];
-  if (!value) {
-    throw new Error('--root requires a directory argument');
-  }
-  return path.resolve(value);
-}
 
 function printLines(prefix, lines) {
   for (const line of lines.slice(0, MAX_LISTED_LINES)) {
@@ -38,8 +23,8 @@ function printLines(prefix, lines) {
   }
 }
 
-try {
-  const root = parseRoot(process.argv.slice(2));
+runCheck('check-bindings', () => {
+  const root = parseRootArg(process.argv.slice(2));
   const bindings = path.join(root, 'src', 'bindings', 'bd.ts');
   const relativePath = path.relative(root, bindings);
 
@@ -84,7 +69,4 @@ try {
     console.log('check-bindings: run `npm run gen:bindings` and commit the result');
     process.exitCode = 1;
   }
-} catch (error) {
-  console.error(`check-bindings: ${error instanceof Error ? error.message : String(error)}`);
-  process.exitCode = 1;
-}
+});

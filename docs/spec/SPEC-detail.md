@@ -118,7 +118,8 @@ src/features/detail/
   MetadataRail.tsx     元数据、标签、时间
   Dependencies.tsx     blocked by / blocks 只读列表
   Comments.tsx         时间线与输入框
-src/lib/store/selectors.ts  getIssue、getBlockedBy、getBlocks
+src/lib/issues/index.ts    indexById、lookupFrom、IssueLookup
+src/lib/store/selectors.ts  indexIssues、getBlockedBy、getBlocks
 ```
 
 ## Module Code Style

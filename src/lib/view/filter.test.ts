@@ -71,6 +71,26 @@ test('buildSearchIndex indexes id, title and labels but not description', () => 
   expect(index.get('BZA-1')).not.toContain('scroll jank');
 });
 
+test('label filtering keeps the same issue groups the dead store index exposed', () => {
+  const issues = [
+    issue('a', { status: 'open', priority: 1, assignee: 'ada', labels: ['ui'] }),
+    issue('b', { status: 'open', priority: 2, labels: ['ui', 'backend'] }),
+    issue('c', { status: 'closed', priority: 1, assignee: 'lin' }),
+  ];
+  const withLabel = (label: string) =>
+    issues.filter((item) => matchesFilter(item, filter({ label: [label] }))).map((item) => item.id);
+
+  expect(withLabel('ui')).toEqual(['a', 'b']);
+  expect(withLabel('backend')).toEqual(['b']);
+});
+
+test('a label named constructor stays searchable and filterable', () => {
+  const subject = issue('a', { labels: ['constructor'] });
+
+  expect(matchesFilter(subject, filter({ label: ['constructor'] }))).toBe(true);
+  expect(matchesFilter(subject, filter({ query: 'constructor' }))).toBe(true);
+});
+
 test('hasActiveFilters notices every filter dimension but not grouping or sorting', () => {
   expect(hasActiveFilters(filter())).toBe(false);
   expect(hasActiveFilters(filter({ query: '  ' }))).toBe(false);

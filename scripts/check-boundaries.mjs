@@ -3,17 +3,19 @@
 // - only src-tauri/src/bridge may spawn processes
 // - the frontend must not spawn processes or reach the bd command layer
 // - no code may read the embedded Dolt store directly
+// - src/lib/store must not import src/lib/sync (ADR-0012)
 // - reference code from AGPL/EPL/ELv2/CC-BY-NC projects must not enter the repo
 //
 // This is a text scan, not a compiler: string concatenation, macro expansion or
 // wrapper crates (duct, xshell, ...) can still slip through. It catches the
 // conventional forms so review only has to cover the unusual ones.
-import { readdirSync, readFileSync, statSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { parseRootArg, runCheck } from './lib/paths.mjs';
+
 const scriptPath = fileURLToPath(import.meta.url);
-const defaultRoot = path.resolve(path.dirname(scriptPath), '..');
 
 const SKIPPED_DIRECTORIES = new Set([
   'node_modules',
@@ -50,6 +52,13 @@ const FORBIDDEN_IMPORT = new RegExp(
     String.raw`|\bimport\s*\(\s*['"]${REFERENCE_SPECIFIER}['"]\s*\)` +
     String.raw`|\bimport\s*['"]${REFERENCE_SPECIFIER}['"])`
 );
+const STORE_SYNC_SPECIFIER = String.raw`(?:@/lib/sync(?:/[^'"]*)?|(?:\.\./)+(?:lib/)?sync(?:/[^'"]*)?)`;
+const STORE_SYNC_IMPORT = new RegExp(
+  String.raw`(?:\bfrom\s*['"]${STORE_SYNC_SPECIFIER}['"]` +
+    String.raw`|\brequire\s*\(\s*['"]${STORE_SYNC_SPECIFIER}['"]\s*\)` +
+    String.raw`|\bimport\s*\(\s*['"]${STORE_SYNC_SPECIFIER}['"]\s*\)` +
+    String.raw`|\bimport\s*['"]${STORE_SYNC_SPECIFIER}['"])`
+);
 const CHILD_PROCESS_IMPORT =
   /(?:\bfrom\s*['"](?:node:)?child_process['"]|\brequire\s*\(\s*['"](?:node:)?child_process['"]\s*\)|\bimport\s*\(\s*['"](?:node:)?child_process['"]\s*\)|\bimport\s*['"](?:node:)?child_process['"])/;
 
@@ -78,8 +87,7 @@ const RULES = [
   {
     id: 'rust-process-spawn',
     applies: (relPath) => isRustSource(relPath) && !isBridgeSource(relPath),
-    matches: (line) => {
-      const normalized = normalizeRustLine(line);
+    matches: (line, normalized = normalizeRustLine(line)) => {
       return (
         /\bprocess::Command\b/.test(normalized) ||
         /\buse\s+(?:std|tokio|async_std)::process::\{[^}]*\bCommand\b/.test(normalized)
@@ -90,7 +98,8 @@ const RULES = [
   {
     id: 'bridge-internal-api',
     applies: (relPath) => isRustSource(relPath) && !isBridgeSource(relPath),
-    matches: (line) => /\bbridge::(?:process|argv|parse)::/.test(normalizeRustLine(line)),
+    matches: (line, normalized = normalizeRustLine(line)) =>
+      /\bbridge::(?:process|argv|parse)::/.test(normalized),
     message: 'use bridge::BdBridge instead of the bridge process/argv/parse internals',
   },
   {
@@ -98,6 +107,12 @@ const RULES = [
     applies: (relPath) => isFrontendSource(relPath),
     matches: (line) => CHILD_PROCESS_IMPORT.test(line),
     message: 'the frontend must talk to Rust commands, not spawn child processes',
+  },
+  {
+    id: 'lib-store-to-sync',
+    applies: (relPath) => relPath.startsWith('src/lib/store/'),
+    matches: (line) => STORE_SYNC_IMPORT.test(line),
+    message: 'lib/store must depend on neutral issues/records leaves, not lib/sync',
   },
   {
     id: 'forbidden-import',
@@ -155,10 +170,16 @@ function scan(root) {
     }
     const relPath = toPosix(path.relative(root, absolutePath));
     scannedFiles += 1;
+    const applicable = RULES.filter((rule) => rule.applies(relPath));
+    if (applicable.length === 0) {
+      continue;
+    }
+    const isRust = isRustSource(relPath);
     const lines = readFileSync(absolutePath, 'utf8').split(/\r?\n/);
     lines.forEach((line, index) => {
-      for (const rule of RULES) {
-        if (rule.applies(relPath) && rule.matches(line)) {
+      const normalized = isRust ? normalizeRustLine(line) : null;
+      for (const rule of applicable) {
+        if (rule.matches(line, normalized)) {
           violations.push({
             location: `${relPath}:${index + 1}`,
             rule: rule.id,
@@ -172,24 +193,8 @@ function scan(root) {
   return { violations, scannedFiles };
 }
 
-function parseRoot(argv) {
-  const flagIndex = argv.indexOf('--root');
-  if (flagIndex === -1) {
-    return defaultRoot;
-  }
-  const value = argv[flagIndex + 1];
-  if (!value) {
-    throw new Error('--root requires a directory argument');
-  }
-  const resolved = path.resolve(value);
-  if (!statSync(resolved).isDirectory()) {
-    throw new Error(`--root is not a directory: ${resolved}`);
-  }
-  return resolved;
-}
-
-try {
-  const root = parseRoot(process.argv.slice(2));
+runCheck('check-boundaries', () => {
+  const root = parseRootArg(process.argv.slice(2), { requireDirectory: true });
   const { violations, scannedFiles } = scan(root);
 
   if (violations.length === 0) {
@@ -201,7 +206,4 @@ try {
     console.log(`check-boundaries: ${violations.length} violation(s) found`);
     process.exitCode = 1;
   }
-} catch (error) {
-  console.error(`check-boundaries: ${error instanceof Error ? error.message : String(error)}`);
-  process.exitCode = 1;
-}
+});

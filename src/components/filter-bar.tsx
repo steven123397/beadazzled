@@ -1,7 +1,7 @@
 import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 
 import type { Issue } from '@/bindings/bd';
-import { isEditableTarget, isOverlayOpen } from '@/app/keyboard/resolve';
+import { isEditableTarget, isOverlayOpen } from '@/lib/dom/focus';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { PopoverSelect } from '@/components/ui/popover-select';

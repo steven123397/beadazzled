@@ -64,12 +64,14 @@ impl Default for OutputLimits {
 
 /// One `bd` invocation.
 ///
-/// Workspace-scoped calls always prepend `-C <workspace>`. Global probes such
-/// as `bd --version` use [`ProcessRequest::global`] and omit `-C`, because bd
-/// 1.3.2 rejects `-C` on a directory that is not a beads workspace.
+/// `label` is a diagnostics tag (it appears in the call log and timeout
+/// errors); the command that actually runs is `args`. Workspace-scoped calls
+/// always prepend `-C <workspace>`. Global probes such as `bd --version` use
+/// [`ProcessRequest::global`] and omit `-C`, because bd 1.3.2 rejects `-C` on
+/// a directory that is not a beads workspace.
 #[derive(Debug, Clone)]
 pub struct ProcessRequest {
-    pub command: String,
+    pub label: String,
     pub workspace: Option<PathBuf>,
     pub args: Vec<OsString>,
     pub stdin: Option<Vec<u8>>,
@@ -81,12 +83,12 @@ pub struct ProcessRequest {
 
 impl ProcessRequest {
     pub fn new(
-        command: impl Into<String>,
+        label: impl Into<String>,
         workspace: impl Into<PathBuf>,
         args: Vec<OsString>,
     ) -> Self {
         Self {
-            command: command.into(),
+            label: label.into(),
             workspace: Some(workspace.into()),
             args,
             stdin: None,
@@ -97,9 +99,9 @@ impl ProcessRequest {
     }
 
     /// A workspace-less call (for example `bd --version`).
-    pub fn global(command: impl Into<String>, args: Vec<OsString>) -> Self {
+    pub fn global(label: impl Into<String>, args: Vec<OsString>) -> Self {
         Self {
-            command: command.into(),
+            label: label.into(),
             workspace: None,
             args,
             stdin: None,
@@ -158,15 +160,16 @@ fn workspace_lock(workspace: &Path) -> Arc<Mutex<()>> {
 
 fn normalize_workspace(workspace: &Path) -> PathBuf {
     // Windows treats these as the same directory, but PathBuf equality does
-    // not: normalize before using the path as a mutex key.
+    // not: normalize before using the path as a mutex key. canonicalize adds
+    // the `\\?\` prefix; the shared core strips it and folds the case.
     let trimmed = workspace
         .to_string_lossy()
         .trim_end_matches(['\\', '/'])
         .to_owned();
     let canonical = std::fs::canonicalize(&trimmed).unwrap_or_else(|_| PathBuf::from(&trimmed));
-    let text = canonical.to_string_lossy();
-    let stripped = text.strip_prefix(r"\\?\").unwrap_or(&text);
-    PathBuf::from(stripped.to_lowercase())
+    PathBuf::from(crate::util::normalize_path_key(
+        &canonical.to_string_lossy(),
+    ))
 }
 
 /// Runs short bd calls serially per workspace and records diagnostics.
@@ -195,23 +198,34 @@ impl ProcessRunner {
         }
     }
 
-    /// Runs a short call. The workspace lock is held for the whole call, so a
-    /// refresh and a write on the same workspace never overlap. The timeout
-    /// starts after the lock is acquired: queueing behind another call must not
-    /// consume this call's budget.
-    pub fn run(&self, request: &ProcessRequest) -> Result<ProcessOutput, BridgeError> {
-        let (result, started) = match &request.workspace {
+    /// Acquires the per-workspace semaphore (when the call is workspace-scoped)
+    /// and timestamps the call only after the lock is held: queueing behind
+    /// another call must not consume this call's timeout budget.
+    fn with_workspace_lock<T>(
+        &self,
+        request: &ProcessRequest,
+        f: impl FnOnce(&Self, Instant) -> T,
+    ) -> (T, Instant) {
+        match &request.workspace {
             Some(workspace) => {
                 let workspace_mutex = workspace_lock(workspace);
                 let _guard = lock(&workspace_mutex);
                 let started = Instant::now();
-                (self.run_locked(request, started), started)
+                (f(self, started), started)
             }
             None => {
                 let started = Instant::now();
-                (self.run_locked(request, started), started)
+                (f(self, started), started)
             }
-        };
+        }
+    }
+
+    /// Runs a short call. The workspace lock is held for the whole call, so a
+    /// refresh and a write on the same workspace never overlap.
+    pub fn run(&self, request: &ProcessRequest) -> Result<ProcessOutput, BridgeError> {
+        let (result, started) = self.with_workspace_lock(request, |runner, started| {
+            runner.run_locked(request, started)
+        });
 
         match result {
             Ok(output) => {
@@ -234,18 +248,11 @@ impl ProcessRunner {
     ) -> Result<ScannedOutput, BridgeError> {
         // A backfill is a short read: it joins the same workspace semaphore as
         // `run`, so it cannot overlap a write on that workspace.
-        let (result, started) = match &request.workspace {
-            Some(workspace) => {
-                let workspace_mutex = workspace_lock(workspace);
-                let _guard = lock(&workspace_mutex);
-                let started = Instant::now();
-                (self.run_scan_locked(request, bounds, started), started)
-            }
-            None => {
-                let started = Instant::now();
-                (self.run_scan_locked(request, bounds, started), started)
-            }
-        };
+        let (result, started) = self.with_workspace_lock(request, |runner, started| {
+            runner.run_scan_locked(request, bounds, started)
+        });
+        // `ScannedOutput.exit_code` is optional; do not fold this dispatch into
+        // `run`'s, which records a plain i32 exit code.
         match &result {
             Ok(output) => self.record(request, started, output.exit_code, None),
             Err(error) => self.record(request, started, None, Some(error.code)),
@@ -321,7 +328,7 @@ impl ProcessRunner {
             stdout,
             stderr: stderr_buffer,
             log: Arc::clone(&self.calls),
-            command: request.command.clone(),
+            command: request.label.clone(),
             argv_summary: argv_summary(&request.args),
             started,
             finished: false,
@@ -427,7 +434,7 @@ impl ProcessRunner {
         push_record(
             &self.calls,
             CallRecord {
-                command: request.command.clone(),
+                command: request.label.clone(),
                 argv_summary: argv_summary(&request.args),
                 duration: started.elapsed(),
                 exit_code,
@@ -491,6 +498,13 @@ impl FollowProcess {
     /// never block on a full stderr pipe.
     pub fn stderr_snapshot(&self) -> Vec<u8> {
         lock(&self.stderr).clone()
+    }
+
+    /// Checks the buffered stderr for a marker without cloning the buffer.
+    /// The follow loop only decodes the full snapshot when this hits.
+    pub fn stderr_contains(&self, needle: &str) -> bool {
+        let captured = lock(&self.stderr);
+        String::from_utf8_lossy(&captured).contains(needle)
     }
 
     pub fn stderr_lossy(&self) -> String {
@@ -571,6 +585,27 @@ pub struct ScannedOutput {
     pub stop: ScanStop,
 }
 
+/// Whether a short call must return a complete output or may stop early with a
+/// partial one. The stopping conditions in `capture` used to branch on
+/// `scan.is_some()` (and `lines.max.is_some()` inside `pump_stdout`); keeping
+/// the choice here lets the loop just drain.
+#[derive(Clone, Copy)]
+enum CaptureMode {
+    Complete,
+    Scan,
+}
+
+impl CaptureMode {
+    /// A bounded scan reports a `ScanStop`; a normal call has no partial result
+    /// to return, so the same condition is a hard error instead (`None`).
+    fn stop(self, reason: ScanStop) -> Option<ScanStop> {
+        match self {
+            CaptureMode::Scan => Some(reason),
+            CaptureMode::Complete => None,
+        }
+    }
+}
+
 fn capture(
     child: &mut Child,
     mut stdout: ChildStdout,
@@ -579,6 +614,11 @@ fn capture(
     started: Instant,
     scan: Option<ScanBounds>,
 ) -> Result<CaptureResult, BridgeError> {
+    let mode = if scan.is_some() {
+        CaptureMode::Scan
+    } else {
+        CaptureMode::Complete
+    };
     let limits = request.limits;
     let deadline = started + request.timeout;
     let mut out = Vec::new();
@@ -616,6 +656,15 @@ fn capture(
                 PumpOutcome::State(PipeState::Progress) => progressed = true,
                 PumpOutcome::State(PipeState::Eof) => stdout_eof = true,
                 PumpOutcome::Stop(reason) => stop = Some(reason),
+                PumpOutcome::BudgetExceeded => {
+                    if let Some(reason) = mode.stop(ScanStop::OutputLimit) {
+                        stop = Some(reason);
+                    } else {
+                        // Force-closing an oversized stdout cannot return
+                        // partial data, so a normal call reports the error.
+                        return Err(output_too_large(limits, budget.total()));
+                    }
+                }
             }
         }
 
@@ -656,8 +705,8 @@ fn capture(
                 }
                 if grace_deadline.is_some_and(|grace| Instant::now() >= grace) {
                     if !stdout_eof {
-                        if scan.is_some() {
-                            stop = Some(ScanStop::Incomplete);
+                        if let Some(reason) = mode.stop(ScanStop::Incomplete) {
+                            stop = Some(reason);
                             break;
                         }
                         // Force-closing a still-open stdout can drop the tail
@@ -671,8 +720,8 @@ fn capture(
             }
             None => {
                 if Instant::now() >= deadline {
-                    if scan.is_some() {
-                        stop = Some(ScanStop::Deadline);
+                    if let Some(reason) = mode.stop(ScanStop::Deadline) {
+                        stop = Some(reason);
                         break;
                     }
                     return Err(timeout_error(request));
@@ -705,6 +754,9 @@ enum PipeState {
 enum PumpOutcome {
     State(PipeState),
     Stop(ScanStop),
+    /// The last chunk exceeded the output budget; the caller decides whether
+    /// that is a scan stop or a hard error for a complete call.
+    BudgetExceeded,
 }
 
 enum Available {
@@ -743,10 +795,7 @@ fn pump_stdout(
                 Ok(0) => Ok(PumpOutcome::State(PipeState::Eof)),
                 Ok(read) => {
                     if !budget.push(&buffer[..read], limits) {
-                        if lines.max.is_some() {
-                            return Ok(PumpOutcome::Stop(ScanStop::OutputLimit));
-                        }
-                        return Err(output_too_large(limits, budget.total()));
+                        return Ok(PumpOutcome::BudgetExceeded);
                     }
                     out.extend_from_slice(&buffer[..read]);
                     if lines.count(&buffer[..read]) {
@@ -878,56 +927,44 @@ fn build_output(
 
 fn timeout_error(request: &ProcessRequest) -> BridgeError {
     let timeout = request.timeout;
-    let mut detail = serde_json::Map::new();
-    detail.insert("command".to_owned(), Value::String(request.command.clone()));
-    detail.insert(
-        "timeout_ms".to_owned(),
-        Value::from(timeout.as_millis() as u64),
-    );
-
-    BridgeError::new(
+    BridgeError::with_fields(
         BridgeErrorCode::BdTimeout,
         format!(
             "bd {} timed out after {} ms",
-            request.command,
+            request.label,
             timeout.as_millis()
         ),
+        [
+            ("command", Value::String(request.label.clone())),
+            ("timeout_ms", Value::from(timeout.as_millis() as u64)),
+        ],
     )
-    .with_detail(detail)
 }
 
 fn partial_stdout_error(stdout_bytes: usize, stderr_bytes: usize) -> BridgeError {
-    let mut detail = serde_json::Map::new();
-    detail.insert("stdout_bytes".to_owned(), Value::from(stdout_bytes as u64));
-    detail.insert("stderr_bytes".to_owned(), Value::from(stderr_bytes as u64));
-
-    BridgeError::new(
+    BridgeError::with_fields(
         BridgeErrorCode::BdParseFailed,
         "bd exited while stdout was still open; output may be truncated",
+        [
+            ("stdout_bytes", Value::from(stdout_bytes as u64)),
+            ("stderr_bytes", Value::from(stderr_bytes as u64)),
+        ],
     )
-    .with_detail(detail)
 }
 
 fn output_too_large(limits: OutputLimits, total: usize) -> BridgeError {
-    let mut detail = serde_json::Map::new();
-    detail.insert("limit_bytes".to_owned(), Value::from(limits.total as u64));
-    detail.insert(
-        "line_limit_bytes".to_owned(),
-        Value::from(limits.line as u64),
-    );
-    detail.insert("read_bytes".to_owned(), Value::from(total as u64));
-
-    BridgeError::new(
+    BridgeError::with_fields(
         BridgeErrorCode::BdOutputTooLarge,
         "bd produced more output than the bridge can capture",
+        [
+            ("limit_bytes", Value::from(limits.total as u64)),
+            ("line_limit_bytes", Value::from(limits.line as u64)),
+            ("read_bytes", Value::from(total as u64)),
+        ],
     )
-    .with_detail(detail)
 }
 
 fn spawn_error(path: &Path, error: io::Error) -> BridgeError {
-    let mut detail = serde_json::Map::new();
-    detail.insert("path".to_owned(), Value::String(path.display().to_string()));
-
     let raw = error.raw_os_error();
     let (code, message) = match error.kind() {
         io::ErrorKind::NotFound => (
@@ -950,7 +987,11 @@ fn spawn_error(path: &Path, error: io::Error) -> BridgeError {
         ),
     };
 
-    BridgeError::new(code, message).with_detail(detail)
+    BridgeError::with_fields(
+        code,
+        message,
+        [("path", Value::String(path.display().to_string()))],
+    )
 }
 
 fn internal_error(message: impl Into<String>) -> BridgeError {

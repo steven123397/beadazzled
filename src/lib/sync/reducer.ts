@@ -1,4 +1,6 @@
 import type { Comment, Issue, JournalRecord } from '@/bindings/bd';
+import { emptyRecord } from '@/lib/records';
+import { timeOrder } from '@/lib/time';
 
 /** Everything the UI reads: the issue map plus the journal cursor. */
 export type TicketState = {
@@ -15,16 +17,6 @@ export type ApplyReport = {
   /** A skipped sequence was seen; the caller must run a full baseline. */
   gap: boolean;
 };
-
-/**
- * Untrusted keys (issue ids, labels, assignees) must not collide with
- * `Object.prototype` entries such as `constructor` or `__proto__`: a plain
- * `{}` makes `map['constructor']` inherit a function and `map['__proto__']`
- * write through the prototype setter.
- */
-export function emptyRecord<T>(): Record<string, T> {
-  return Object.create(null) as Record<string, T>;
-}
 
 function copyRecord<T>(source: Record<string, T>): Record<string, T> {
   return Object.assign(emptyRecord<T>(), source);
@@ -127,7 +119,7 @@ function upsert(issues: Record<string, Issue>, incoming: Issue): void {
     issues[incoming.id] = incoming;
     return;
   }
-  if (freshness(incoming) < freshness(current)) {
+  if (timeOrder(incoming.updated_at) < timeOrder(current.updated_at)) {
     return;
   }
   // Journal payloads never carry comments, dependencies or their counts. The
@@ -145,11 +137,6 @@ function upsert(issues: Record<string, Issue>, incoming: Issue): void {
     dependent_count: current.dependent_count,
     comment_count: incoming.comments === undefined ? current.comment_count : incoming.comment_count,
   };
-}
-
-function freshness(issue: Issue): number {
-  const parsed = Date.parse(issue.updated_at);
-  return Number.isNaN(parsed) ? 0 : parsed;
 }
 
 function appendComment(issues: Record<string, Issue>, record: JournalRecord): void {

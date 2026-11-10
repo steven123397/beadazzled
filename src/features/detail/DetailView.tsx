@@ -5,8 +5,9 @@ import { Button } from '@/components/ui/button';
 import type { Issue } from '@/bindings/bd';
 import { confirmLeaveDraft } from '@/lib/draft-guard';
 import { useI18n } from '@/lib/i18n/I18nProvider';
+import { lookupFrom } from '@/lib/issues';
 import { openExternal } from '@/lib/links';
-import { getIssue, indexIssues } from '@/lib/store/selectors';
+import { indexIssues } from '@/lib/store/selectors';
 import type { UseWrite } from '@/lib/writes/useWrite';
 
 import { Comments } from './Comments';
@@ -56,7 +57,7 @@ export function DetailView({
 }: DetailViewProps) {
   const { t } = useI18n();
   const index = useMemo(() => indexIssues(issues), [issues]);
-  const issue = getIssue(index, issueId);
+  const issue = lookupFrom(index.byId)(issueId);
 
   const {
     editing,

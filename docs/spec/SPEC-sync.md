@@ -67,8 +67,8 @@ export function applyRecord(state: TicketState, record: JournalRecord): TicketSt
 | op | 行为 |
 |---|---|
 | `create` / `update` / `close` | `issue` 非空 → 按 id 整体替换（upsert） |
-| `delete` | 从 map 删除；清理索引 |
-| `dep_add` / `dep_remove` | 若 `issue` 非空则整体替换；否则仅更新依赖索引 |
+| `delete` | 从 map 删除 |
+| `dep_add` / `dep_remove` | 若 `issue` 非空则整体替换；否则仅更新依赖关系 |
 | `comment` | 若 `issue` 非空则整体替换；否则按 comment.id 去重后追加 |
 
 规则：
@@ -76,7 +76,7 @@ export function applyRecord(state: TicketState, record: JournalRecord): TicketSt
 - **单调新鲜度**：`issue` 只有在 `record.issue.updated_at >= 当前.updated_at` 时才覆盖（时间相同用 seq 决胜）。基线回放历史记录时，旧事件不会把较新的快照状态改回去；`delete` 直接按 id 移除（票 id 不复用，快照中存在而历史中有 delete 的情况不应发生）。
 - 检测到 seq 跳跃（journal 契约声明 gapless）→ 视为丢事件，触发一次完整基线，而不是继续拼接。
 - 记录乱序到达（不应发生）→ 先按 seq 缓冲再应用。
-- 应用后派生索引（按状态/优先级/负责人/标签分组、搜索文本）增量更新；1000 条票下 1000 条事件应用 ≤100ms。
+- 应用后只更新 issue map 与 seq；搜索索引由视图在数据变化时通过 `buildSearchIndex` 全量重建，分组由列表纯函数派生，store 不维护未被读取的派生缓存。1000 条票下 1000 条事件应用 ≤100ms。
 
 ## 降级语义
 
@@ -132,7 +132,7 @@ src-tauri/src/sync/
   state.rs         SyncState 与 Tauri event 推送
 src/lib/sync/
   reducer.ts       applyRecord（纯函数）
-  store.ts         TicketState 与派生索引
+  store.ts         TicketState 与订阅通知
   echo.ts          waitForEcho
 tests/fixtures/bd/ export-*.jsonl、events-*.jsonl、truncated-*.json、disabled-*.txt
 ```

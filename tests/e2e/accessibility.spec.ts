@@ -1,7 +1,7 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
 
-import { installFakeBridge } from './fakeBridge';
+import { installFakeBridge, makeIssue } from './fakeBridge';
 
 // Four routes plus two overlays of axe analysis need more than the default 30s.
 test.setTimeout(60_000);
@@ -108,20 +108,13 @@ test('the detail reading page has no serious or critical violations', async ({ p
   const TS = '2026-11-01T00:00:00Z';
   await installFakeBridge(page, {
     issues: [
-      {
+      makeIssue({
         id: 'bza-a',
         title: 'Blocker',
-        description: '',
         status: 'closed',
         priority: 1,
-        issue_type: 'task',
-        created_at: TS,
-        updated_at: TS,
-        labels: [],
-        dependency_count: 0,
         dependent_count: 1,
-        comment_count: 0,
-      },
+      }),
       {
         id: 'bza-b',
         title: 'Document reading',

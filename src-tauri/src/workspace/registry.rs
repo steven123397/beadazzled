@@ -11,10 +11,8 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
 use ts_rs::TS;
 
-use crate::bridge::WorkspaceContext;
 use crate::util::unix_secs_now;
 
 /// Bumped only when the on-disk shape changes incompatibly.
@@ -249,22 +247,6 @@ impl AppConfig {
 }
 
 impl WorkspaceEntry {
-    /// Builds an entry from a validated `bd context` response.
-    pub fn from_context(
-        repo_root: &str,
-        context: &WorkspaceContext,
-        now: impl Into<String>,
-    ) -> Self {
-        Self {
-            path: repo_root.to_owned(),
-            name: workspace_name(repo_root),
-            project_id: context.project_id.clone(),
-            is_worktree: context_flag(context, "is_worktree"),
-            last_opened_at: now.into(),
-            checkpoint: None,
-        }
-    }
-
     /// Re-binds the entry to the identity of the workspace just opened.
     ///
     /// Returns `true` when a checkpoint was discarded because `project_id`
@@ -347,11 +329,7 @@ pub fn path_key(path: &str) -> String {
     } else {
         trimmed
     };
-    if cfg!(windows) {
-        trimmed.to_lowercase()
-    } else {
-        trimmed.to_owned()
-    }
+    crate::util::normalize_path_key(trimmed)
 }
 
 /// The default display name for a workspace path.
@@ -374,15 +352,6 @@ fn default_language() -> Language {
 
 fn default_theme() -> Theme {
     DEFAULT_THEME
-}
-
-fn context_flag(context: &WorkspaceContext, key: &str) -> bool {
-    context
-        .extra
-        .0
-        .get(key)
-        .and_then(Value::as_bool)
-        .unwrap_or(false)
 }
 
 fn parent_dir(path: &Path) -> &Path {
@@ -420,7 +389,7 @@ fn temporary_path(config_path: &Path) -> PathBuf {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::bridge::WorkspaceContext;
+    use crate::workspace::validate::ValidatedWorkspace;
     use std::fs;
     use std::path::PathBuf;
 
@@ -437,18 +406,13 @@ mod tests {
         dir
     }
 
-    fn context(project_id: &str) -> WorkspaceContext {
-        WorkspaceContext {
-            project_id: project_id.to_owned(),
-            bd_version: "1.3.2".to_owned(),
-            dolt_mode: "embedded".to_owned(),
-            schema_version: 1,
-            extra: Default::default(),
-        }
-    }
-
     fn entry(path: &str, project_id: &str, now: &str) -> WorkspaceEntry {
-        WorkspaceEntry::from_context(path, &context(project_id), now)
+        ValidatedWorkspace {
+            repo_root: path.to_owned(),
+            project_id: project_id.to_owned(),
+            is_worktree: false,
+        }
+        .into_entry(now)
     }
 
     fn with_checkpoint(mut entry: WorkspaceEntry, seq: i64) -> WorkspaceEntry {

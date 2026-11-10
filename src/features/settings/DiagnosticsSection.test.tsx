@@ -1,10 +1,11 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { expect, test, vi } from 'vitest';
+import { beforeEach, expect, test, vi } from 'vitest';
 
 import type { DiagnosticsSnapshot, SyncState, WorkspaceSnapshot } from '@/bindings/bd';
 import { AppRefreshProvider } from '@/app/shell/AppRefresh';
 import { SyncStatusProvider } from '@/app/shell/SyncStatus';
 import { WorkspaceProvider } from '@/app/shell/WorkspaceProvider';
+import { resetAppVersion } from '@/lib/app-version';
 import { I18nProvider } from '@/lib/i18n/I18nProvider';
 import type { UseWorkspace } from '@/lib/workspace/useWorkspace';
 
@@ -16,6 +17,10 @@ vi.mock('@tauri-apps/api/app', () => ({
 
 // Every test renders the version hook; the default keeps it resolved.
 getVersion.mockResolvedValue('0.1.0');
+
+beforeEach(() => {
+  resetAppVersion();
+});
 
 import { DiagnosticsSection } from './DiagnosticsSection';
 import './messages';

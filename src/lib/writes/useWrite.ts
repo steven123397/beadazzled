@@ -1,10 +1,13 @@
 import { useCallback, useMemo, useState } from 'react';
 
-import type { BdStatus, BridgeError } from '@/bindings/bd';
+import type { BdStatus, BridgeError, BridgeErrorCode } from '@/bindings/bd';
 import { describeError } from '@/lib/errors';
 
 import { submitWrite, type WriteFlow, type WriteSubmission } from './flow';
 import type { WriteResult } from './queue';
+
+const BD_NOT_FOUND: BridgeErrorCode = 'BD_NOT_FOUND';
+const BD_VERSION_UNSUPPORTED: BridgeErrorCode = 'BD_VERSION_UNSUPPORTED';
 
 export type UseWrite = {
   /** Issue ids whose write is in flight (including the echo wait). */
@@ -33,7 +36,7 @@ export function useWrite(flow: WriteFlow, bd: BdStatus | null): UseWrite {
   const pending = useMemo(() => Array.from(new Set(inFlight)), [inFlight]);
 
   const canWrite = bd?.kind === 'ready';
-  const disabledReason = canWrite ? null : reasonFor(bd);
+  const disabledReason = canWrite ? null : describeError(blockedError(bd)).message;
 
   const submit = useCallback(
     async (submission: WriteSubmission): Promise<WriteResult> => {
@@ -73,10 +76,7 @@ export function useWrite(flow: WriteFlow, bd: BdStatus | null): UseWrite {
   );
 
   const clearError = useCallback(() => setError(null), []);
-  const isPending = useCallback(
-    (issueId: string) => pending.includes(issueId),
-    [pending]
-  );
+  const isPending = useCallback((issueId: string) => pending.includes(issueId), [pending]);
 
   return {
     pending,
@@ -90,34 +90,12 @@ export function useWrite(flow: WriteFlow, bd: BdStatus | null): UseWrite {
   };
 }
 
-function reasonFor(bd: BdStatus | null): string {
-  if (!bd) {
-    return 'Checking whether bd is available…';
-  }
-  switch (bd.kind) {
-    case 'ready':
-      return '';
-    case 'not-found':
-      return describeError({ code: 'BD_NOT_FOUND', message: '' }).message;
-    case 'unsupported':
-      return `bd ${bd.found} is older than the required ${bd.min}.`;
-    case 'broken':
-      return describeError(bd.error).message;
-  }
-}
-
 function blockedError(bd: BdStatus | null): BridgeError {
   if (bd?.kind === 'broken') {
     return bd.error;
   }
   if (bd?.kind === 'unsupported') {
-    return {
-      code: 'BD_VERSION_UNSUPPORTED',
-      message: `bd ${bd.found} is older than the required ${bd.min}.`,
-    };
+    return { code: BD_VERSION_UNSUPPORTED, message: '' };
   }
-  return {
-    code: 'BD_NOT_FOUND',
-    message: 'bd is not available; writes are disabled.',
-  };
+  return { code: BD_NOT_FOUND, message: '' };
 }

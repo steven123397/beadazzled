@@ -1,24 +1,23 @@
 import assert from 'node:assert/strict';
-import { spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
-import os from 'node:os';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
-import { afterEach, test } from 'node:test';
-import { fileURLToPath } from 'node:url';
+import { test } from 'node:test';
 
-const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
-const scriptPath = path.join(repoRoot, 'scripts/check-boundaries.mjs');
+import { scriptFor, withTempRoots } from './helpers.mjs';
+
+const scriptPath = scriptFor('check-boundaries');
+const { makeRoot: makeBaseRoot, run } = withTempRoots({
+  prefix: 'beadazzled-boundaries-',
+  scriptPath,
+});
 
 // Fixture tokens are assembled at runtime so this test file itself passes the
 // repo-wide embedded-dolt and banned-license scans.
 const EMBEDDED_DOLT = ['embedded', 'dolt'].join('');
 const BANNED_SPDX = ['AGPL', '3.0-only'].join('-');
 
-const tempRoots = [];
-
 function makeRoot(files) {
-  const root = mkdtempSync(path.join(os.tmpdir(), 'beadazzled-boundaries-'));
-  tempRoots.push(root);
+  const root = makeBaseRoot();
   for (const [relativePath, content] of Object.entries(files)) {
     const filePath = path.join(root, relativePath);
     mkdirSync(path.dirname(filePath), { recursive: true });
@@ -26,17 +25,6 @@ function makeRoot(files) {
   }
   return root;
 }
-
-function run(root) {
-  const args = root === undefined ? [scriptPath] : [scriptPath, '--root', root];
-  return spawnSync(process.execPath, args, { encoding: 'utf8' });
-}
-
-afterEach(() => {
-  while (tempRoots.length > 0) {
-    rmSync(tempRoots.pop(), { recursive: true, force: true });
-  }
-});
 
 test('clean tree passes', () => {
   const root = makeRoot({
@@ -164,6 +152,33 @@ test('require of reference packages fails', () => {
 
   assert.equal(result.status, 1, result.stdout + result.stderr);
   assert.match(result.stdout, /forbidden-import/);
+});
+
+test('lib/store imports from lib/sync fail through aliases and relative paths', () => {
+  const root = makeRoot({
+    'src/lib/store/alias.ts': "import { createTicketState } from '@/lib/sync/reducer';\n",
+    'src/lib/store/relative.ts': "import { createTicketState } from '../sync/reducer';\n",
+    'src/lib/store/nested/relative.ts':
+      "import { createTicketState } from '../../../lib/sync/reducer';\n",
+  });
+
+  const result = run(root);
+
+  assert.equal(result.status, 1, result.stdout + result.stderr);
+  assert.match(result.stdout, /alias\.ts:1.*lib-store-to-sync/);
+  assert.match(result.stdout, /relative\.ts:1.*lib-store-to-sync/);
+  assert.match(result.stdout, /nested\/relative\.ts:1.*lib-store-to-sync/);
+});
+
+test('lib/store can import neutral issues and records leaves', () => {
+  const root = makeRoot({
+    'src/lib/store/selectors.ts':
+      "import { indexById } from '@/lib/issues';\nimport { emptyRecord } from '@/lib/records';\nimport { helper } from '@/lib/sync-foo';\n",
+  });
+
+  const result = run(root);
+
+  assert.equal(result.status, 0, result.stdout + result.stderr);
 });
 
 test('child_process imports in the frontend fail', () => {

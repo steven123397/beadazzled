@@ -1,7 +1,9 @@
 import type { Issue } from '@/bindings/bd';
 
+import { lookupFrom } from '@/lib/issues';
+
 import type { ListFilter } from './state';
-import { isReady, type IssueLookup } from './ready';
+import { isReady } from './ready';
 
 export type FilterContext = {
   /**
@@ -78,22 +80,4 @@ export function matchesFilter(
   }
 
   return true;
-}
-
-/** A lookup that tolerates missing ids and never resolves through the prototype. */
-export function lookupFrom(byId: Readonly<Record<string, Issue>> | undefined): IssueLookup {
-  if (byId === undefined) {
-    return () => undefined;
-  }
-  // Untrusted ids such as `__proto__` must not resolve through the prototype.
-  return (id) => (Object.hasOwn(byId, id) ? byId[id] : undefined);
-}
-
-/** Builds the Ready filter's lookup from the full issue list. */
-export function indexById(issues: readonly Issue[]): Readonly<Record<string, Issue>> {
-  const byId = Object.create(null) as Record<string, Issue>;
-  for (const issue of issues) {
-    byId[issue.id] = issue;
-  }
-  return byId;
 }

@@ -1,7 +1,8 @@
 import { DialogSurface } from '@/components/ui/modal';
 import { useI18n } from '@/lib/i18n/I18nProvider';
+import { describeSyncState } from '@/lib/sync/labels';
 
-import { describeSyncState, useSyncState } from './SyncStatus';
+import { useSyncState } from './SyncStatus';
 import { activeWorkspace, useWorkspaceContext } from './WorkspaceProvider';
 
 /**

@@ -12,38 +12,32 @@ import path from 'node:path';
 
 import { chromium } from '@playwright/test';
 
+import { makeIssue, makeIssues } from './seam.mjs';
+
 export const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 /** Deterministic tickets close to a real workspace; every one is unblocked. */
 export function fixtureIssueLines(count) {
-  const lines = [];
-  for (let index = 0; index < count; index += 1) {
-    lines.push(
-      JSON.stringify({
-        id: `mem-${String(index).padStart(4, '0')}`,
-        title: `Memory fixture issue ${index}`,
-        description: 'Fixture body for the release checks. '.repeat(8),
-        status:
-          index % 11 === 0
-            ? 'blocked'
-            : index % 7 === 0
-              ? 'closed'
-              : index % 5 === 0
-                ? 'in_progress'
-                : 'open',
-        priority: index % 5,
-        issue_type: index % 3 === 0 ? 'bug' : 'task',
-        assignee: index % 4 === 0 ? 'ada' : index % 4 === 1 ? 'lin' : undefined,
-        created_at: '2026-11-01T00:00:00Z',
-        updated_at: '2026-11-01T00:00:00Z',
-        labels: index % 2 === 0 ? ['ui'] : ['backend', 'perf', 'docs'],
-        dependency_count: 0,
-        dependent_count: 0,
-        comment_count: 0,
-      })
-    );
-  }
-  return `${lines.join('\n')}\n`;
+  const issues = makeIssues(count, (index) =>
+    makeIssue({
+      id: `mem-${String(index).padStart(4, '0')}`,
+      title: `Memory fixture issue ${index}`,
+      description: 'Fixture body for the release checks. '.repeat(8),
+      status:
+        index % 11 === 0
+          ? 'blocked'
+          : index % 7 === 0
+            ? 'closed'
+            : index % 5 === 0
+              ? 'in_progress'
+              : 'open',
+      priority: index % 5,
+      issue_type: index % 3 === 0 ? 'bug' : 'task',
+      assignee: index % 4 === 0 ? 'ada' : index % 4 === 1 ? 'lin' : undefined,
+      labels: index % 2 === 0 ? ['ui'] : ['backend', 'perf', 'docs'],
+    })
+  );
+  return `${issues.map((issue) => JSON.stringify(issue)).join('\n')}\n`;
 }
 
 /**

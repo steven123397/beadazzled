@@ -1,5 +1,4 @@
 use std::path::{Path, PathBuf};
-use std::time::{SystemTime, UNIX_EPOCH};
 
 use tauri::Manager;
 
@@ -37,10 +36,7 @@ fn write_startup_trace(label: &str, url: &str) {
     let Some(path) = allowed_trace_path(Path::new(&candidate), &std::env::temp_dir()) else {
         return;
     };
-    let stamp = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|duration| duration.as_millis())
-        .unwrap_or_default();
+    let stamp = util::unix_millis_now();
     let _ = std::fs::write(path, format!("{label} {stamp} {url}\n"));
 }
 

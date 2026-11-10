@@ -4,84 +4,21 @@
 // severity decision is made here: high/critical block, and advisories with no
 // severity data block too unless osv-allowlist.json waives them (ADR-0007).
 import { spawnSync } from 'node:child_process';
-import { existsSync, readFileSync, readdirSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 
 import {
   evaluateAllowlist,
   parseAllowlist,
   summarizeDependencyAudit,
 } from './lib/dependency-audit.mjs';
+import { EXTERNAL_TOOLS, resolveTool } from './lib/find-binary.mjs';
+import { parseRootArg, runCheck } from './lib/paths.mjs';
 
-const scriptPath = fileURLToPath(import.meta.url);
-const defaultRoot = path.resolve(path.dirname(scriptPath), '..');
 const MAX_BUFFER_BYTES = 128 * 1024 * 1024;
-const binaryName = process.platform === 'win32' ? 'osv-scanner.exe' : 'osv-scanner';
 
-function findOnPath() {
-  for (const directory of (process.env.PATH ?? '').split(path.delimiter)) {
-    if (!directory) {
-      continue;
-    }
-    const candidate = path.join(directory, binaryName);
-    if (existsSync(candidate)) {
-      return candidate;
-    }
-  }
-  return undefined;
-}
-
-function findInWinget() {
-  if (process.platform !== 'win32' || !process.env.LOCALAPPDATA) {
-    return undefined;
-  }
-  const packagesDirectory = path.join(process.env.LOCALAPPDATA, 'Microsoft', 'WinGet', 'Packages');
-  let entries;
-  try {
-    entries = readdirSync(packagesDirectory, { withFileTypes: true });
-  } catch {
-    return undefined;
-  }
-  for (const entry of entries) {
-    if (!entry.isDirectory() || !entry.name.startsWith('Google.OSVScanner_')) {
-      continue;
-    }
-    const candidate = path.join(packagesDirectory, entry.name, binaryName);
-    if (existsSync(candidate)) {
-      return candidate;
-    }
-  }
-  return undefined;
-}
-
-function resolveOsvScanner() {
-  const configured = process.env.OSV_SCANNER_PATH;
-  if (configured) {
-    // CI injects this path explicitly; a typo must fail instead of silently
-    // falling back to PATH/WinGet and running a different binary.
-    if (!existsSync(configured)) {
-      throw new Error(`OSV_SCANNER_PATH is set but does not exist: ${configured}`);
-    }
-    return configured;
-  }
-  return findOnPath() ?? findInWinget();
-}
-
-function parseRoot(argv) {
-  const flagIndex = argv.indexOf('--root');
-  if (flagIndex === -1) {
-    return defaultRoot;
-  }
-  const value = argv[flagIndex + 1];
-  if (!value) {
-    throw new Error('--root requires a directory argument');
-  }
-  return path.resolve(value);
-}
-
-try {
-  const scanner = resolveOsvScanner();
+runCheck('check-deps', () => {
+  const scanner = resolveTool(EXTERNAL_TOOLS.osvScanner);
   if (!scanner) {
     console.error(
       'check-deps: osv-scanner not found. Install it (winget install Google.OSVScanner) ' +
@@ -89,7 +26,7 @@ try {
     );
     process.exitCode = 1;
   } else {
-    const root = parseRoot(process.argv.slice(2));
+    const root = parseRootArg(process.argv.slice(2));
     const result = spawnSync(
       scanner,
       [
@@ -165,7 +102,4 @@ try {
       process.exitCode = 1;
     }
   }
-} catch (error) {
-  console.error(`check-deps: ${error instanceof Error ? error.message : String(error)}`);
-  process.exitCode = 1;
-}
+});

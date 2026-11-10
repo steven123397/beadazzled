@@ -42,6 +42,8 @@
 | 正文对比度 | ≥ 4.5:1；大字号 ≥ 3:1 | axe（待有可运行 UI） | 交还前 | block | WCAG AA | 待接线 |
 | 核心流程无鼠标可达 | 必须 | E2E + 手动 | 交还前 | block | 产品定位是键盘优先 | 待接线 |
 
+架构边界同时禁止 `src/lib/store/*` 引用 `src/lib/sync/*`（`lib-store-to-sync`）；中立 issue 查询位于 `src/lib/issues`，无原型记录构造位于 `src/lib/records.ts`，依赖方向见 [ADR-0012](docs/adr/0012-issue-lookup-neutral-layer.md)。
+
 依赖扫描的 severity 取 OSV 的 `database_specific.severity`。没有该字段的记录（常见于 RUSTSEC）判为 unknown，默认 **block**；只有登记在 `osv-allowlist.json` 的条目（`id` + `reason` + `expires`）才放行，条目到期后自动失败复审，匹配不到任何 unknown 的条目会提示清理。见 [ADR-0007](docs/adr/0007-osv-unknown-severity-allowlist.md)。
 
 ## 检查分层

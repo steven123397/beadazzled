@@ -1,4 +1,6 @@
 import type { WorkspaceEntry } from '@/bindings/bd';
+import { timeOrder } from '@/lib/time';
+import { collator } from '@/lib/view/collator';
 
 const DEFAULT_RECENT_LIMIT = 5;
 
@@ -11,18 +13,17 @@ export function workspaceKey(path: string): string {
   return rooted.toLowerCase();
 }
 
-function openedAt(workspace: WorkspaceEntry): number {
-  const parsed = Date.parse(workspace.lastOpenedAt);
-  return Number.isNaN(parsed) ? 0 : parsed;
-}
-
 /** The most recently opened workspaces, newest first. */
 export function recentWorkspaces(
   workspaces: readonly WorkspaceEntry[],
   limit = DEFAULT_RECENT_LIMIT
 ): WorkspaceEntry[] {
   return [...workspaces]
-    .sort((left, right) => openedAt(right) - openedAt(left) || left.path.localeCompare(right.path))
+    .sort(
+      (left, right) =>
+        timeOrder(right.lastOpenedAt) - timeOrder(left.lastOpenedAt) ||
+        collator.compare(left.path, right.path)
+    )
     .slice(0, limit);
 }
 

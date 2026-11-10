@@ -1,29 +1,18 @@
 import assert from 'node:assert/strict';
-import { spawnSync } from 'node:child_process';
 import {
   closeSync,
   ftruncateSync,
   mkdirSync,
-  mkdtempSync,
   openSync,
-  rmSync,
   writeSync,
 } from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
-import { afterEach, test } from 'node:test';
-import { fileURLToPath } from 'node:url';
+import { test } from 'node:test';
 
-const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
-const scriptPath = path.join(repoRoot, 'scripts/check-size.mjs');
+import { scriptFor, withTempRoots } from './helpers.mjs';
 
-const tempRoots = [];
-
-function makeRoot() {
-  const root = mkdtempSync(path.join(os.tmpdir(), 'beadazzled-size-'));
-  tempRoots.push(root);
-  return root;
-}
+const scriptPath = scriptFor('check-size');
+const { makeRoot, run } = withTempRoots({ prefix: 'beadazzled-size-', scriptPath });
 
 function writeInstaller(root, name, bytes) {
   const filePath = path.join(root, 'src-tauri/target/release/bundle/nsis', name);
@@ -38,16 +27,6 @@ function writeInstaller(root, name, bytes) {
     closeSync(fd);
   }
 }
-
-function run(root) {
-  return spawnSync(process.execPath, [scriptPath, '--root', root], { encoding: 'utf8' });
-}
-
-afterEach(() => {
-  while (tempRoots.length > 0) {
-    rmSync(tempRoots.pop(), { recursive: true, force: true });
-  }
-});
 
 test('missing installer fails with a clear instruction', () => {
   const root = makeRoot();

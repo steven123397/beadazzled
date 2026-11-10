@@ -1,21 +1,12 @@
 import assert from 'node:assert/strict';
-import { spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
-import os from 'node:os';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
-import { afterEach, test } from 'node:test';
-import { fileURLToPath } from 'node:url';
+import { test } from 'node:test';
 
-const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
-const scriptPath = path.join(repoRoot, 'scripts/check-versions.mjs');
+import { scriptFor, withTempRoots } from './helpers.mjs';
 
-const tempRoots = [];
-
-function makeRoot() {
-  const root = mkdtempSync(path.join(os.tmpdir(), 'beadazzled-versions-'));
-  tempRoots.push(root);
-  return root;
-}
+const scriptPath = scriptFor('check-versions');
+const { makeRoot, run } = withTempRoots({ prefix: 'beadazzled-versions-', scriptPath });
 
 function writeFixture(root, { npm = '0.1.0', cargo = '0.1.0', tauri = '0.1.0' } = {}) {
   mkdirSync(path.join(root, 'src-tauri'), { recursive: true });
@@ -26,16 +17,6 @@ function writeFixture(root, { npm = '0.1.0', cargo = '0.1.0', tauri = '0.1.0' } 
   );
   writeFileSync(path.join(root, 'src-tauri/tauri.conf.json'), JSON.stringify({ version: tauri }));
 }
-
-function run(root) {
-  return spawnSync(process.execPath, [scriptPath, '--root', root], { encoding: 'utf8' });
-}
-
-afterEach(() => {
-  while (tempRoots.length > 0) {
-    rmSync(tempRoots.pop(), { recursive: true, force: true });
-  }
-});
 
 test('matching versions pass', () => {
   const root = makeRoot();

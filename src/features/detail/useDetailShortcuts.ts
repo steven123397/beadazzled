@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 
-import { isEditableTarget, isOverlayOpen } from '@/app/keyboard/resolve';
+import { isEditableTarget, isOverlayOpen } from '@/lib/dom/focus';
 import type { Issue } from '@/bindings/bd';
 
 import type { EditableField } from './useDetailWrites';

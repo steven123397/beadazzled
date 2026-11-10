@@ -14,13 +14,13 @@ import {
 import { useParams } from 'react-router-dom';
 
 import type { Issue, SyncState } from '@/bindings/bd';
-import { isEditableTarget, isOverlayOpen } from '@/app/keyboard/resolve';
 import { FilterBar } from '@/components/filter-bar';
 import { EmptyState, ErrorState, HEALTHY, StaleBanner, useOpenIssue } from '@/components/view-states';
+import { isEditableTarget, isOverlayOpen, isViewTarget } from '@/lib/dom/focus';
 import { describeError } from '@/lib/errors';
 import type { MessageKey } from '@/lib/i18n';
 import { useI18n } from '@/lib/i18n/I18nProvider';
-import { indexById } from '@/lib/store/selectors';
+import { indexById } from '@/lib/issues';
 import { buildSearchIndex } from '@/lib/view/filter';
 import { createListViewState } from '@/lib/view/state';
 import { usePersistedView } from '@/lib/view/usePersistedView';
@@ -316,7 +316,7 @@ export function BoardView({
       if (event.shiftKey && (event.key === 'ArrowLeft' || event.key === 'ArrowRight')) {
         // A move is a write: only start one when focus is on the board itself,
         // not on a filter control or the sidebar.
-        if (!isBoardTarget(event.target)) {
+        if (!isViewTarget(event.target)) {
           return;
         }
         const current = focusedCard(board.columns, focusedId, layout.positions);
@@ -344,7 +344,7 @@ export function BoardView({
 
       if (event.key === 'Enter') {
         const current = focusedCard(board.columns, focusedId, layout.positions);
-        if (current !== null && isBoardTarget(event.target)) {
+        if (current !== null && isViewTarget(event.target)) {
           event.preventDefault();
           openIssue(current.card.issue);
         }
@@ -486,30 +486,6 @@ function rejectionText(
     case 'invalid-command':
       return t('board.move.failed');
   }
-}
-
-function isBoardTarget(target: EventTarget | null): boolean {
-  if (target === null) {
-    return false;
-  }
-  // jsdom can hand back a Window whose identity differs from the global, so
-  // match by type as well as identity.
-  if (
-    target === window ||
-    target === document ||
-    target === document.body ||
-    (typeof Window !== 'undefined' && target instanceof Window)
-  ) {
-    return true;
-  }
-  if (!(target instanceof Element)) {
-    return false;
-  }
-  // Match the list's target set: a control inside the board (a filter
-  // summary, Clear, Retry) must keep its native Enter behavior. Matching the
-  // whole view root here used to swallow those activations and open the
-  // focused ticket instead.
-  return target.closest('[data-issue-id]') !== null || target.getAttribute('role') === 'list';
 }
 
 function LoadingBoard() {
