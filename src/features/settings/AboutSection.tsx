@@ -11,11 +11,13 @@ import { messageOf } from '@/lib/errors';
 import { useI18n } from '@/lib/i18n/I18nProvider';
 import type { MessageKey } from '@/lib/i18n';
 import { openExternal } from '@/lib/links';
+import { InfoRow } from '@/components/ui/definition-row';
 import { useTheme } from '@/lib/theme/ThemeProvider';
 import { checkForUpdate, getUpdateState, installUpdate, subscribeUpdate } from '@/lib/updates';
 import { cn } from '@/lib/utils';
 
 import { LANGUAGE_LABELS, THEME_LABELS } from './labels';
+import { SettingsSection } from './SettingsSection';
 
 const REPOSITORY_URL = 'https://github.com/steven123397/beadazzled';
 
@@ -82,59 +84,65 @@ export function AboutSection() {
   }
 
   return (
-    <section aria-labelledby="settings-about" className="space-y-5">
-      <div className="flex flex-wrap items-center gap-4">
-        <img src={appIcon} alt="" width={56} height={56} className="size-14 shrink-0" />
-        <div className="min-w-0 flex-1">
-          <h2 id="settings-about" className="text-xl font-semibold">
-            beadazzled
-          </h2>
-          <p className="mt-1 text-xs text-muted-foreground">
-            {t('settings.about.tagline')}
-            {version === null ? null : ` · ${t('settings.about.version', { version })}`}
-          </p>
-        </div>
-        {update.kind === 'available' && confirmingInstall ? (
-          <div className="flex flex-wrap items-center justify-end gap-2">
-            <p className="max-w-60 text-xs text-muted-foreground">
-              {t('settings.about.installConfirmHint')}
+    <SettingsSection
+      id="settings-about"
+      variant="about"
+      header={
+        <div className="flex flex-wrap items-center gap-4">
+          <img src={appIcon} alt="" width={56} height={56} className="size-14 shrink-0" />
+          <div className="min-w-0 flex-1">
+            <h2 id="settings-about" className="text-xl font-semibold">
+              beadazzled
+            </h2>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {t('settings.about.tagline')}
+              {version === null ? null : ` · ${t('settings.about.version', { version })}`}
             </p>
-            <Button size="md" variant="ghost" onClick={() => setConfirmingInstall(false)}>
-              {t('settings.about.cancel')}
+          </div>
+          {update.kind === 'available' && confirmingInstall ? (
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              <p className="max-w-60 text-xs text-muted-foreground">
+                {t('settings.about.installConfirmHint')}
+              </p>
+              <Button size="md" variant="ghost" onClick={() => setConfirmingInstall(false)}>
+                {t('settings.about.cancel')}
+              </Button>
+              <Button
+                size="md"
+                variant="primary"
+                onClick={() => {
+                  setConfirmingInstall(false);
+                  void installUpdate();
+                }}
+              >
+                <RefreshCw aria-hidden="true" className="size-3.5" />
+                {t('settings.about.installConfirm', { version: update.version })}
+              </Button>
+            </div>
+          ) : update.kind === 'available' ? (
+            <Button size="md" variant="primary" onClick={() => setConfirmingInstall(true)}>
+              <RefreshCw aria-hidden="true" className="size-3.5" />
+              {t('settings.about.installUpdate', { version: update.version })}
             </Button>
+          ) : (
             <Button
               size="md"
-              variant="primary"
-              onClick={() => {
-                setConfirmingInstall(false);
-                void installUpdate();
-              }}
+              variant="secondary"
+              disabled={update.kind === 'checking' || update.kind === 'installing'}
+              onClick={() => void checkForUpdate()}
             >
               <RefreshCw aria-hidden="true" className="size-3.5" />
-              {t('settings.about.installConfirm', { version: update.version })}
+              {update.kind === 'checking'
+                ? t('settings.about.checking')
+                : update.kind === 'installing'
+                  ? t('settings.about.installing', { version: update.version })
+                  : t('settings.about.checkUpdates')}
             </Button>
-          </div>
-        ) : update.kind === 'available' ? (
-          <Button size="md" variant="primary" onClick={() => setConfirmingInstall(true)}>
-            <RefreshCw aria-hidden="true" className="size-3.5" />
-            {t('settings.about.installUpdate', { version: update.version })}
-          </Button>
-        ) : (
-          <Button
-            size="md"
-            variant="secondary"
-            disabled={update.kind === 'checking' || update.kind === 'installing'}
-            onClick={() => void checkForUpdate()}
-          >
-            <RefreshCw aria-hidden="true" className="size-3.5" />
-            {update.kind === 'checking'
-              ? t('settings.about.checking')
-              : update.kind === 'installing'
-                ? t('settings.about.installing', { version: update.version })
-                : t('settings.about.checkUpdates')}
-          </Button>
-        )}
-      </div>
+          )}
+        </div>
+      }
+    >
+
       <p className="text-xs text-muted-foreground">{updateMessage()}</p>
 
       <div className="space-y-2">
@@ -195,7 +203,7 @@ export function AboutSection() {
           </Link>
         </div>
       </details>
-    </section>
+    </SettingsSection>
   );
 }
 
@@ -206,11 +214,3 @@ function describeBd(bd: BdStatus | null): string {
   return bd.kind === 'ready' ? `${bd.version} · ${bd.path}` : bd.kind;
 }
 
-function InfoRow({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex justify-between gap-3">
-      <dt className="shrink-0 text-muted-foreground">{label}</dt>
-      <dd className="min-w-0 break-all text-right">{value}</dd>
-    </div>
-  );
-}

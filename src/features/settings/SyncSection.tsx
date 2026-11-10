@@ -1,13 +1,15 @@
-import { useState } from 'react';
-
 import { useAppRefresh } from '@/app/shell/AppRefresh';
 import { useSyncErrorHistory, useSyncState } from '@/app/shell/SyncStatus';
 import { useWorkspaceContext } from '@/app/shell/WorkspaceProvider';
 import { Button } from '@/components/ui/button';
+import { CopyNotice, useCopy } from '@/components/ui/copy-notice';
+import { InfoRow } from '@/components/ui/definition-row';
 import { copyText, type CopyResult } from '@/lib/clipboard';
 import { useI18n } from '@/lib/i18n/I18nProvider';
 import { describeSyncState } from '@/lib/sync/labels';
 import { formatDateTime } from '@/lib/time';
+
+import { SettingsSection } from './SettingsSection';
 
 const JOURNAL_COMMAND = 'bd config set events-journal true';
 
@@ -21,7 +23,7 @@ export function SyncSection({ copy = copyText }: { copy?: (text: string) => Prom
   const lastError = useSyncErrorHistory();
   const { lastRefreshAt, refresh } = useAppRefresh();
   const { snapshot } = useWorkspaceContext();
-  const [copyResult, setCopyResult] = useState<CopyResult | null>(null);
+  const { copyResult, copy: performCopy } = useCopy({ copy });
 
   const label = describeSyncState(sync);
   const active = snapshot?.config.workspaces.find((entry) => entry.path === snapshot.active);
@@ -36,18 +38,15 @@ export function SyncSection({ copy = copyText }: { copy?: (text: string) => Prom
     sync.kind === 'bd-unavailable' ? { ...sync.error, at: historyError?.at ?? null } : historyError;
 
   return (
-    <section aria-labelledby="settings-sync" className="space-y-3">
-      <h2 id="settings-sync" className="text-lg font-semibold">
-        {t('settings.sync')}
-      </h2>
+    <SettingsSection id="settings-sync" title={t('settings.sync')}>
       <dl className="space-y-1 rounded-md border border-border bg-raised p-3 text-xs">
-        <Row label={t('settings.sync.state')} value={t(label.key, label.vars)} />
-        <Row label={t('settings.sync.lastSeq')} value={lastSeq === null ? '-' : String(lastSeq)} />
-        <Row
+        <InfoRow label={t('settings.sync.state')} value={t(label.key, label.vars)} />
+        <InfoRow label={t('settings.sync.lastSeq')} value={lastSeq === null ? '-' : String(lastSeq)} />
+        <InfoRow
           label={t('settings.sync.lastRefresh')}
           value={formatDateTime(new Date(lastRefreshAt).toISOString(), language)}
         />
-        <Row
+        <InfoRow
           label={t('settings.sync.checkpoint')}
           value={
             checkpoint === null
@@ -56,7 +55,7 @@ export function SyncSection({ copy = copyText }: { copy?: (text: string) => Prom
           }
         />
         {lastEventAt === null ? null : (
-          <Row label={t('settings.sync.lastEvent')} value={formatDateTime(lastEventAt, language)} />
+          <InfoRow label={t('settings.sync.lastEvent')} value={formatDateTime(lastEventAt, language)} />
         )}
       </dl>
       {shownError === null ? null : (
@@ -100,29 +99,16 @@ export function SyncSection({ copy = copyText }: { copy?: (text: string) => Prom
           <Button
             size="md"
             variant="ghost"
-            onClick={() => void copy(JOURNAL_COMMAND).then(setCopyResult)}
+            onClick={() => void performCopy(JOURNAL_COMMAND)}
           >
             {t('settings.sync.copyCommand')}
           </Button>
-          {copyResult === null ? null : (
-            <p role="status" aria-live="polite" className="text-muted-foreground">
-              {t(copyResult === 'copied' ? 'clipboard.copied' : 'clipboard.failed')}
-            </p>
-          )}
+          <CopyNotice result={copyResult} />
         </div>
       ) : null}
       <Button size="md" onClick={refresh}>
         {t('settings.sync.refresh')}
       </Button>
-    </section>
-  );
-}
-
-function Row({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex justify-between gap-3">
-      <dt className="text-muted-foreground">{label}</dt>
-      <dd className="min-w-0 break-all text-right text-foreground">{value}</dd>
-    </div>
+    </SettingsSection>
   );
 }

@@ -1,17 +1,18 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { DefinitionRow } from '@/components/ui/definition-row';
 import { IconButton } from '@/components/ui/icon-button';
 import { Input } from '@/components/ui/input';
 import { PopoverSelect } from '@/components/ui/popover-select';
 import { PriorityIcon } from '@/components/ui/priority-icon';
+import { RelativeTime } from '@/components/ui/relative-time';
 import { StatusIcon } from '@/components/ui/status-icon';
 import type { Issue, WriteCommand } from '@/bindings/bd';
 import { useI18n } from '@/lib/i18n/I18nProvider';
 import type { IssueIndex } from '@/lib/store/selectors';
 import { describeError } from '@/lib/errors';
-import { formatAbsoluteTime, formatRelativeTime } from '@/lib/time';
 import { closeIssue, reopenIssue, updateIssue, type UpdateInput } from '@/lib/writes/commands';
 import { blockingDeps, canChangeStatus } from '@/lib/writes/guard';
 import type { UseWrite } from '@/lib/writes/useWrite';
@@ -22,6 +23,29 @@ import { Dependencies } from './Dependencies';
 import { Editor } from './Editor';
 
 const PRIORITIES = [0, 1, 2, 3, 4];
+
+/**
+ * Manages an epoch counter for resetting a select when a write fails,
+ * restoring focus to the trigger element.
+ */
+function useResetEpoch(elementId: string) {
+  const [epoch, setEpoch] = useState(0);
+  const restoreRef = useRef(false);
+
+  useEffect(() => {
+    if (restoreRef.current) {
+      restoreRef.current = false;
+      document.getElementById(elementId)?.focus();
+    }
+  }, [elementId, epoch]);
+
+  const triggerReset = useCallback(() => {
+    restoreRef.current = true;
+    setEpoch((value) => value + 1);
+  }, []);
+
+  return [epoch, triggerReset] as const;
+}
 
 export function MetadataRail({
   issue,
@@ -50,26 +74,8 @@ export function MetadataRail({
   // A select keeps the clicked value while its write is in flight. If that
   // write fails the issue never changes, so bump an epoch to remount it back
   // on the value that is actually stored.
-  const [statusReset, setStatusReset] = useState(0);
-  const [priorityReset, setPriorityReset] = useState(0);
-  // A failed write remounts the select on the stored value. Remember whether
-  // the keyboard was on it so the replacement trigger takes focus back.
-  const restoreStatusFocus = useRef(false);
-  const restorePriorityFocus = useRef(false);
-
-  useEffect(() => {
-    if (restoreStatusFocus.current) {
-      restoreStatusFocus.current = false;
-      document.getElementById('detail-status')?.focus();
-    }
-  }, [statusReset]);
-
-  useEffect(() => {
-    if (restorePriorityFocus.current) {
-      restorePriorityFocus.current = false;
-      document.getElementById('detail-priority')?.focus();
-    }
-  }, [priorityReset]);
+  const [statusReset, resetStatus] = useResetEpoch('detail-status');
+  const [priorityReset, resetPriority] = useResetEpoch('detail-priority');
 
   const dirty = assigneeDirty || (editingLabels && newLabel.trim() !== '');
   useEffect(() => {
@@ -101,8 +107,8 @@ export function MetadataRail({
     label: `P${priority}`,
   }));
 
-  const submitUpdate = async (
-    input: UpdateInput,
+  const submit = async (
+    action: UpdateInput | (() => WriteCommand),
     key: string,
     fields: readonly DraftField[]
   ): Promise<boolean> => {
@@ -110,17 +116,23 @@ export function MetadataRail({
       setLocalError(t('detail.write.unavailable'));
       return false;
     }
-    const result = updateIssue(issue.id, input);
-    if (!result.ok) {
-      setLocalError(result.error.message);
-      return false;
+    let build: () => WriteCommand;
+    if (typeof action === 'function') {
+      build = action;
+    } else {
+      const result = updateIssue(issue.id, action);
+      if (!result.ok) {
+        setLocalError(result.error.message);
+        return false;
+      }
+      build = () => result.command;
     }
     setLocalError(null);
     onSelfWrite?.(fields);
     const outcome = await writes.submit({
       key: `detail:${issue.id}:${key}`,
       issueId: issue.id,
-      build: () => result.command,
+      build,
     });
     if (outcome.status !== 'ok') {
       setLocalError(describeError(outcome.error).message);
@@ -138,19 +150,18 @@ export function MetadataRail({
       setLocalError(blockedMessage(decision.blockers));
       return;
     }
-    void submitUpdate({ status: target, ifStatus: issue.status }, `status:${target}`, [
+    void submit({ status: target, ifStatus: issue.status }, `status:${target}`, [
       'status',
     ]).then((saved) => {
       if (!saved) {
-        restoreStatusFocus.current = true;
-        setStatusReset((value) => value + 1);
+        resetStatus();
       }
     });
   };
 
   const saveAssignee = async (next: string): Promise<boolean> => {
     const value = next.trim();
-    const saved = await submitUpdate(
+    const saved = await submit(
       value === ''
         ? { assignee: { clear: true }, ifAssignee: issue.assignee ?? '' }
         : { assignee: { set: value }, ifAssignee: issue.assignee ?? '' },
@@ -168,7 +179,7 @@ export function MetadataRail({
     if (value === '') {
       return;
     }
-    void submitUpdate({ addLabels: [value] }, `label:add:${value}`, ['labels']).then((saved) => {
+    void submit({ addLabels: [value] }, `label:add:${value}`, ['labels']).then((saved) => {
       if (saved) {
         setNewLabel('');
         setEditingLabels(false);
@@ -187,30 +198,7 @@ export function MetadataRail({
       setLocalError(blockedMessage(decision.blockers));
       return;
     }
-    void submitCommand(() => closeIssue(issue.id), 'close', ['status']);
-  };
-
-  const submitCommand = async (
-    build: () => WriteCommand,
-    key: string,
-    fields: readonly DraftField[]
-  ): Promise<boolean> => {
-    if (writes === undefined) {
-      setLocalError(t('detail.write.unavailable'));
-      return false;
-    }
-    setLocalError(null);
-    onSelfWrite?.(fields);
-    const outcome = await writes.submit({
-      key: `detail:${issue.id}:${key}`,
-      issueId: issue.id,
-      build,
-    });
-    if (outcome.status !== 'ok') {
-      setLocalError(describeError(outcome.error).message);
-      return false;
-    }
-    return true;
+    void submit(() => closeIssue(issue.id), 'close', ['status']);
   };
 
   const blockedMessage = (ids: readonly string[]) =>
@@ -262,14 +250,13 @@ export function MetadataRail({
                 triggerClassName="w-full"
                 disabled={disabled}
                 onChange={(next) =>
-                  void submitUpdate(
+                  void submit(
                     { priority: Number(next), ifStatus: issue.status },
                     `priority:${next}`,
                     ['priority']
                   ).then((saved) => {
                     if (!saved) {
-                      restorePriorityFocus.current = true;
-                      setPriorityReset((value) => value + 1);
+                      resetPriority();
                     }
                   })
                 }
@@ -333,7 +320,7 @@ export function MetadataRail({
                       size="xs"
                       disabled={disabled}
                       onClick={() =>
-                        void submitUpdate({ removeLabels: [label] }, `label:remove:${label}`, [
+                        void submit({ removeLabels: [label] }, `label:remove:${label}`, [
                           'labels',
                         ])
                       }
@@ -395,22 +382,16 @@ export function MetadataRail({
         </PropertyRow>
 
         <PropertyRow label={t('detail.metadata.created')}>
-          <span title={formatAbsoluteTime(issue.created_at, language)}>
-            {formatRelativeTime(issue.created_at, language)}
-          </span>
+          <RelativeTime value={issue.created_at} language={language} />
         </PropertyRow>
 
         <PropertyRow label={t('detail.metadata.updated')}>
-          <span title={formatAbsoluteTime(issue.updated_at, language)}>
-            {formatRelativeTime(issue.updated_at, language)}
-          </span>
+          <RelativeTime value={issue.updated_at} language={language} />
         </PropertyRow>
 
         {issue.closed_at === undefined ? null : (
           <PropertyRow label={t('detail.metadata.closed')}>
-            <span title={formatAbsoluteTime(issue.closed_at, language)}>
-              {formatRelativeTime(issue.closed_at, language)}
-            </span>
+            <RelativeTime value={issue.closed_at} language={language} />
           </PropertyRow>
         )}
       </dl>
@@ -426,7 +407,7 @@ export function MetadataRail({
           {issue.status === 'closed' ? (
             <Button
               disabled={disabled}
-              onClick={() => void submitCommand(() => reopenIssue(issue.id), 'reopen', ['status'])}
+              onClick={() => void submit(() => reopenIssue(issue.id), 'reopen', ['status'])}
             >
               {t('detail.reopen')}
             </Button>
@@ -449,9 +430,9 @@ export function MetadataRail({
 /** Every property row shares one label column and a 32px vertical rhythm. */
 function PropertyRow({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <div className="grid min-h-8 grid-cols-[64px_minmax(0,1fr)] items-center gap-x-3">
-      <dt className="text-muted-foreground">{label}</dt>
-      <dd className="min-w-0">{children}</dd>
-    </div>
+    <DefinitionRow variant="grid" label={label}>
+      {children}
+    </DefinitionRow>
   );
 }
+

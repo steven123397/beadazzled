@@ -1,6 +1,4 @@
-import { useRef } from 'react';
-
-import { useFocusTrap } from '@/app/keyboard/useFocusTrap';
+import { DialogSurface } from '@/components/ui/modal';
 import { useI18n } from '@/lib/i18n/I18nProvider';
 import { describeSyncState } from '@/lib/sync/labels';
 
@@ -30,8 +28,6 @@ export function Diagnostics({
   const { t, language } = useI18n();
   const { snapshot, bd, error } = useWorkspaceContext();
   const sync = useSyncState();
-  const panelRef = useRef<HTMLDivElement>(null);
-  useFocusTrap(panelRef);
 
   const project = activeWorkspace(snapshot);
   const syncLabel = describeSyncState(sync);
@@ -46,12 +42,8 @@ export function Diagnostics({
       className="fixed inset-0 z-30 flex items-end justify-center bg-black/40 p-4"
       onClick={onClose}
     >
-      <div
-        ref={panelRef}
-        role="dialog"
-        aria-modal="true"
+      <DialogSurface
         aria-labelledby="diagnostics-title"
-        tabIndex={-1}
         onClick={(event) => event.stopPropagation()}
         className="w-full max-w-md space-y-3 rounded-lg border border-border bg-raised p-4 text-foreground shadow-lg"
       >
@@ -94,7 +86,7 @@ export function Diagnostics({
             {t('diagnostics.close')}
           </button>
         </div>
-      </div>
+      </DialogSurface>
     </div>
   );
 }

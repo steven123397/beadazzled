@@ -80,3 +80,18 @@ test('with no focus, the first card of the first non-empty column wins', () => {
   expect(firstCardId(columns)).toBe('bza-1');
   expect(moveFocus(columns, null, 'j')).toBe('bza-1');
 });
+
+test('resolves focus using lookup map and falls back gracefully', () => {
+  const lookup = new Map([
+    ['bza-1', { columnIndex: 1, cardIndex: 0 }],
+    ['bza-2', { columnIndex: 1, cardIndex: 1 }],
+    ['bza-3', { columnIndex: 2, cardIndex: 0 }],
+  ]);
+
+  expect(findFocus(columns, 'bza-2', lookup)).toEqual({ columnIndex: 1, cardIndex: 1 });
+  expect(moveFocus(columns, 'bza-1', 'j', lookup)).toBe('bza-2');
+  expect(moveFocus(columns, 'bza-1', 'l', lookup)).toBe('bza-3');
+  // Stale/missing lookup entry falls back to linear search
+  expect(findFocus(columns, 'bza-4', lookup)).toEqual({ columnIndex: 3, cardIndex: 0 });
+});
+

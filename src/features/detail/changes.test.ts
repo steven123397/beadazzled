@@ -2,7 +2,7 @@ import { expect, test } from 'vitest';
 
 import type { Issue } from '@/bindings/bd';
 
-import { changedFields } from './changes';
+import { changedFields, textField } from './changes';
 
 const TS = '2026-11-01T00:00:00Z';
 
@@ -48,3 +48,12 @@ test('an explicit empty value differs from a missing one', () => {
   expect(changedFields(issue(), issue({ assignee: 'ada' }))).toEqual(['assignee']);
   expect(changedFields(issue({ assignee: 'ada' }), issue())).toEqual(['assignee']);
 });
+
+test('textField extracts non-empty string and ignores missing or whitespace values', () => {
+  expect(textField(issue({ design: 'Architecture diagram' }), 'design')).toBe('Architecture diagram');
+  expect(textField(issue({ notes: 'Note text' }), 'notes')).toBe('Note text');
+  expect(textField(issue(), 'design')).toBeNull();
+  expect(textField(issue({ design: '' }), 'design')).toBeNull();
+  expect(textField(issue({ design: '   ' }), 'design')).toBeNull();
+});
+

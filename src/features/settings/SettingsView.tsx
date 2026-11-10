@@ -1,9 +1,9 @@
 import type { ComponentType } from 'react';
 import { Navigate, NavLink, useParams } from 'react-router-dom';
 
+import { navLinkClass } from '@/components/nav-link';
 import type { MessageKey } from '@/lib/i18n';
 import { useI18n } from '@/lib/i18n/I18nProvider';
-import { cn } from '@/lib/utils';
 
 // Registers the settings catalog; the module lives in this route chunk so the
 // copy never reaches the first-screen bundle.
@@ -37,11 +37,6 @@ const SECTION_VIEWS: Record<Section, ComponentType> = {
   about: AboutSection,
 };
 
-const LINK_CLASS =
-  'flex h-control-sm w-full items-center rounded-md px-2 text-sm transition-colors';
-const ACTIVE_CLASS = 'bg-selected font-medium text-selected-foreground';
-const IDLE_CLASS = 'text-muted-foreground hover:bg-hover hover:text-foreground';
-
 function isSection(value: string | undefined): value is Section {
   return value !== undefined && (SECTIONS as readonly string[]).includes(value);
 }
@@ -71,7 +66,7 @@ export function SettingsView() {
             <li key={key}>
               <NavLink
                 to={`/settings/${key}`}
-                className={({ isActive }) => cn(LINK_CLASS, isActive ? ACTIVE_CLASS : IDLE_CLASS)}
+                className={({ isActive }) => navLinkClass(isActive)}
               >
                 {t(SECTION_LABELS[key])}
               </NavLink>
