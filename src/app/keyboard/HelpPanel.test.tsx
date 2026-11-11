@@ -1,7 +1,7 @@
-import { render, screen } from '@testing-library/react';
+import { screen } from '@testing-library/react';
 import { expect, test, vi } from 'vitest';
 
-import { I18nProvider } from '@/lib/i18n/I18nProvider';
+import { renderWithI18n } from '@/test/fixtures';
 
 import type { Shortcut } from './types';
 import { HelpPanel } from './HelpPanel';
@@ -24,11 +24,7 @@ const shortcuts: Shortcut[] = [
 ];
 
 test('lists every registered shortcut with a readable key', () => {
-  render(
-    <I18nProvider initialLanguage="en">
-      <HelpPanel shortcuts={shortcuts} onClose={vi.fn()} />
-    </I18nProvider>
-  );
+  renderWithI18n(<HelpPanel shortcuts={shortcuts} onClose={vi.fn()} />);
 
   expect(screen.getByRole('dialog', { name: /keyboard/i })).toBeInTheDocument();
   expect(screen.getByText('Command palette')).toBeInTheDocument();
@@ -37,11 +33,7 @@ test('lists every registered shortcut with a readable key', () => {
 });
 
 test('groups shortcuts by their registered group', () => {
-  render(
-    <I18nProvider initialLanguage="en">
-      <HelpPanel shortcuts={shortcuts} onClose={vi.fn()} />
-    </I18nProvider>
-  );
+  renderWithI18n(<HelpPanel shortcuts={shortcuts} onClose={vi.fn()} />);
 
   expect(screen.getByRole('heading', { name: 'General' })).toBeInTheDocument();
   expect(screen.getByRole('heading', { name: 'Navigation' })).toBeInTheDocument();
@@ -49,11 +41,7 @@ test('groups shortcuts by their registered group', () => {
 
 test('closing the panel calls onClose', () => {
   const onClose = vi.fn();
-  render(
-    <I18nProvider initialLanguage="en">
-      <HelpPanel shortcuts={shortcuts} onClose={onClose} />
-    </I18nProvider>
-  );
+  renderWithI18n(<HelpPanel shortcuts={shortcuts} onClose={onClose} />);
 
   screen.getByRole('button', { name: /close/i }).click();
 

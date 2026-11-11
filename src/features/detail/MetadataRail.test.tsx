@@ -1,8 +1,8 @@
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import { fireEvent, screen, within } from '@testing-library/react';
 import { expect, test, vi } from 'vitest';
 
 import type { Dependency, Issue } from '@/bindings/bd';
-import { I18nProvider } from '@/lib/i18n/I18nProvider';
+import { renderWithI18n } from '@/test/fixtures';
 import { indexIssues } from '@/lib/store/selectors';
 import type { UseWrite } from '@/lib/writes/useWrite';
 
@@ -34,11 +34,7 @@ function blockerEdge(dependsOnId: string): Dependency {
 }
 
 function renderRail(target: Issue, issues: readonly Issue[] = [target], writes?: UseWrite) {
-  render(
-    <I18nProvider initialLanguage="en">
-      <MetadataRail issue={target} index={indexIssues(issues)} writes={writes} />
-    </I18nProvider>
-  );
+  renderWithI18n(<MetadataRail issue={target} index={indexIssues(issues)} writes={writes} />);
 }
 
 function submitted(writes: UseWrite) {

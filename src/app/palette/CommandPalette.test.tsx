@@ -1,7 +1,7 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, screen } from '@testing-library/react';
 import { expect, test, vi } from 'vitest';
 
-import { I18nProvider } from '@/lib/i18n/I18nProvider';
+import { renderWithI18n } from '@/test/fixtures';
 
 import type { CommandItem } from './commands';
 import { CommandPalette } from './CommandPalette';
@@ -34,11 +34,7 @@ function commands(run: () => void): CommandItem[] {
 }
 
 function open(items: CommandItem[], onClose = vi.fn()) {
-  render(
-    <I18nProvider initialLanguage="en">
-      <CommandPalette commands={items} onClose={onClose} />
-    </I18nProvider>
-  );
+  renderWithI18n(<CommandPalette commands={items} onClose={onClose} />);
   return onClose;
 }
 
@@ -103,11 +99,7 @@ test('renders at most 50 results', () => {
 });
 
 test('follows the active language', () => {
-  render(
-    <I18nProvider initialLanguage="zh-CN">
-      <CommandPalette commands={commands(vi.fn())} onClose={vi.fn()} />
-    </I18nProvider>
-  );
+  renderWithI18n(<CommandPalette commands={commands(vi.fn())} onClose={vi.fn()} />, 'zh-CN');
 
   expect(screen.getByRole('dialog', { name: '命令面板' })).toBeInTheDocument();
   expect(screen.getByPlaceholderText('搜索命令与票')).toBeInTheDocument();

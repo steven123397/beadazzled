@@ -3,6 +3,7 @@ import { expect, test, vi } from 'vitest';
 
 import type { Issue } from '@/bindings/bd';
 import { I18nProvider } from '@/lib/i18n/I18nProvider';
+import { renderWithI18n } from '@/test/fixtures';
 import { createListViewState, type ListViewState } from '@/lib/view/state';
 
 import { FilterBar } from './filter-bar';
@@ -41,17 +42,15 @@ function renderBar({
 } = {}) {
   const onChange = vi.fn();
   const onClear = vi.fn();
-  render(
-    <I18nProvider initialLanguage="en">
-      <FilterBar
-        view={view}
-        issues={issues}
-        visibleCount={visibleCount}
-        totalCount={issues.length}
-        onChange={onChange}
-        onClear={onClear}
-      />
-    </I18nProvider>
+  renderWithI18n(
+    <FilterBar
+      view={view}
+      issues={issues}
+      visibleCount={visibleCount}
+      totalCount={issues.length}
+      onChange={onChange}
+      onClear={onClear}
+    />
   );
   return { onChange, onClear };
 }
