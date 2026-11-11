@@ -5,6 +5,7 @@ import { beforeEach, expect, test, vi } from 'vitest';
 import type { Issue, SyncState } from '@/bindings/bd';
 import { I18nProvider } from '@/lib/i18n/I18nProvider';
 import type { UseWrite } from '@/lib/writes/useWrite';
+import { fakeEchoWrites as fakeWrites } from '@/test/detail-writes';
 
 import { BoardView } from './BoardView';
 
@@ -61,20 +62,6 @@ function issue(id: string, overrides: Partial<Issue> = {}): Issue {
 function LocationProbe() {
   const location = useLocation();
   return <output data-testid="location">{location.pathname + location.search}</output>;
-}
-
-function fakeWrites(overrides: Partial<UseWrite> = {}): UseWrite {
-  return {
-    pending: [],
-    error: null,
-    result: null,
-    canWrite: true,
-    disabledReason: null,
-    isPending: () => false,
-    submit: vi.fn(async () => ({ status: 'ok' as const, echo: 'echoed' as const })),
-    clearError: vi.fn(),
-    ...overrides,
-  };
 }
 
 function BoardHarness({ issues, writes }: { issues: readonly Issue[]; writes?: UseWrite }) {

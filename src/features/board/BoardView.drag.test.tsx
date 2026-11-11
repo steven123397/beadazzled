@@ -7,6 +7,7 @@ import type { DragEndEvent } from '@dnd-kit/core';
 import type { Issue } from '@/bindings/bd';
 import { I18nProvider } from '@/lib/i18n/I18nProvider';
 import type { UseWrite } from '@/lib/writes/useWrite';
+import { fakeEchoWrites as fakeWrites } from '@/test/detail-writes';
 
 import { BoardView } from './BoardView';
 
@@ -71,20 +72,6 @@ function issue(id: string, overrides: Partial<Issue> = {}): Issue {
     dependency_count: 0,
     dependent_count: 0,
     comment_count: 0,
-    ...overrides,
-  };
-}
-
-function fakeWrites(overrides: Partial<UseWrite> = {}): UseWrite {
-  return {
-    pending: [],
-    error: null,
-    result: null,
-    canWrite: true,
-    disabledReason: null,
-    isPending: () => false,
-    submit: vi.fn(async () => ({ status: 'ok' as const, echo: 'echoed' as const })),
-    clearError: vi.fn(),
     ...overrides,
   };
 }

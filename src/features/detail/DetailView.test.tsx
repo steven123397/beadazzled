@@ -5,6 +5,7 @@ import type { Comment, Dependency, Issue } from '@/bindings/bd';
 import { I18nProvider } from '@/lib/i18n/I18nProvider';
 import { MAX_ACCEPTANCE_BYTES } from '@/lib/writes/commands';
 import type { UseWrite } from '@/lib/writes/useWrite';
+import { fakeWrites } from '@/test/detail-writes';
 
 import { DetailView } from './DetailView';
 
@@ -56,20 +57,6 @@ function renderDetail(target: Issue, issues: readonly Issue[] = [target], writes
     </I18nProvider>
   );
   return { onBack };
-}
-
-function fakeWrites(overrides: Partial<UseWrite> = {}): UseWrite {
-  return {
-    pending: [],
-    error: null,
-    result: null,
-    canWrite: true,
-    disabledReason: null,
-    isPending: () => false,
-    submit: vi.fn(async () => ({ status: 'ok' as const })),
-    clearError: vi.fn(),
-    ...overrides,
-  };
 }
 
 /** Pick a status from the rail's popover (its radios live inside `<details>`). */
