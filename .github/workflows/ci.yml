@@ -95,6 +95,11 @@ jobs:
       - name: Fast checks
         run: npm run check:fast
 
+      # endOfLine=auto (ADR-0013) keeps this reproducible on Windows CRLF
+      # worktrees and LF checkouts alike.
+      - name: Format check
+        run: npm run format:check
+
       - name: Rust formatting and lints
         run: npm run check:rust:style
 

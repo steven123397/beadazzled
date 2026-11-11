@@ -67,3 +67,10 @@ PR 不会自动跑 `check:fast` / `check:task` / `check:deps`；`cargo fmt --che
   缓存上限与恢复成本不划算）；cargo-llvm-cov 二进制缓存暂不接线——会新增
   actions/cache 步骤，其运行时版本需与 Node 24 升级策略一并核对。CI 时长
   成为实际问题时，再按“固定版本”原则评估。
+
+## 附注：2026-11-11 format:check 接入 CI（bza-pzb.2）
+
+- `npm run format:check` 成为阻塞门禁，位于 `check:fast` 之后；行尾策略
+  （`endOfLine=auto`）与存量修复见 [ADR-0013](0013-prettier-eol-auto-and-ci-format-gate.md)。
+- 格式检查不并入 `check:fast`：编辑循环保持 ≤5s 预算，全仓格式检查只在
+  CI 层执行。

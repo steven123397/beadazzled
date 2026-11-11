@@ -27,6 +27,7 @@
 | secrets | 0 | `npm run check:secrets`（配置键检查 + gitleaks） | 编辑循环 | block | 仓库公开、安装包对外分发 | 可运行 |
 | 类型 | 0 error | `npm run typecheck` | 编辑循环 | block | 无噪声、秒级 | 可运行 |
 | lint | 0 error | `npm run lint` | 编辑循环 | block | 同上 | 可运行 |
+| 格式 | 0 漂移 | `npm run format:check`（Prettier，`endOfLine=auto`） | CI | block | Windows CRLF 工作区与 CI 结果须可重复，见 [ADR-0013](docs/adr/0013-prettier-eol-auto-and-ci-format-gate.md) | 可运行 |
 | 架构边界 | 0 违规 | `npm run check:boundaries` | 交还前 | block | 防止绕开 bd 桥直读 Dolt | 可运行 |
 | 版本一致 | 3 处一致 | `npm run check:versions` | 编辑循环 | block | 安装包、Cargo 包与更新器必须看到同一个版本 | 可运行 |
 | bridge 行覆盖 | ≥ 80% | `npm run test:rust:coverage` | 交还前 | block | 只有会真坏的那层值得设门槛 | 可运行（bridge 落地后生效） |
@@ -55,7 +56,7 @@
 | CI / review | 不限 | 全量测试、Rust 风格、依赖扫描、构建、体积与性能测量 |
 
 CI 由 `.github/workflows/ci.yml` 执行（PR 与 main push）：`check:fast`、
-`check:rust:style`、`check:task`、`check:deps`、`build`。外部工具固定版本并经
+`format:check`、`check:rust:style`、`check:task`、`check:deps`、`build`。外部工具固定版本并经
 SHA256 校验：gitleaks 8.30.1、osv-scanner 2.7.0，通过 `GITLEAKS_PATH` /
 `OSV_SCANNER_PATH` 注入；CI 不解析 PATH 或 `%LOCALAPPDATA%`。显式注入的路径
 若不存在则直接失败，不回退 PATH / WinGet。见
