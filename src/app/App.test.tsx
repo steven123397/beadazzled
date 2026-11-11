@@ -6,6 +6,7 @@ import { setDraftGuard } from '@/lib/draft-guard';
 import type { SyncApi, SyncEvent, SyncSnapshot } from '@/lib/sync/api';
 import type { WorkspaceApi } from '@/lib/workspace/api';
 import { makeIssue } from '@/test/fixtures';
+import { makeEntry, makeWorkspaceSnapshot } from '@/test/workspace';
 
 import { App } from './App';
 
@@ -24,14 +25,7 @@ function chooseStatus(option: RegExp) {
 }
 
 function entry(projectId: string, name = projectId): WorkspaceEntry {
-  return {
-    path: `/repo/${projectId}`,
-    name,
-    projectId,
-    isWorktree: false,
-    lastOpenedAt: '2026-11-01T00:00:00Z',
-    checkpoint: null,
-  };
+  return makeEntry({ path: `/repo/${projectId}`, name, projectId });
 }
 
 function snapshot(
@@ -39,20 +33,7 @@ function snapshot(
   active: string | null,
   extra: Partial<WorkspaceSnapshot> = {}
 ): WorkspaceSnapshot {
-  return {
-    config: {
-      schemaVersion: 1,
-      bdPath: null,
-      language: 'en',
-      theme: 'system',
-      lastWorkspacePath: null,
-      workspaces,
-    },
-    missing: [],
-    active,
-    corruptBackup: null,
-    ...extra,
-  };
+  return makeWorkspaceSnapshot({ config: { workspaces }, active, ...extra });
 }
 
 const bdReady: BdStatus = { kind: 'ready', path: 'bd', version: '1.3.2' };
