@@ -5,24 +5,12 @@ import type { BdStatus, Issue, SyncState, WorkspaceEntry, WorkspaceSnapshot } fr
 import { setDraftGuard } from '@/lib/draft-guard';
 import type { SyncApi, SyncEvent, SyncSnapshot } from '@/lib/sync/api';
 import type { WorkspaceApi } from '@/lib/workspace/api';
+import { makeIssue } from '@/test/fixtures';
 
 import { App } from './App';
 
 function issue(id: string, title: string): Issue {
-  return {
-    id,
-    title,
-    description: '',
-    status: 'open',
-    priority: 2,
-    issue_type: 'task',
-    created_at: '2026-11-01T00:00:00Z',
-    updated_at: '2026-11-01T00:00:00Z',
-    labels: [],
-    dependency_count: 0,
-    dependent_count: 0,
-    comment_count: 0,
-  };
+  return makeIssue(id, { title });
 }
 
 /** Pick a status from the detail rail's popover. */

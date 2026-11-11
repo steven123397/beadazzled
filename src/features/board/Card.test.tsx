@@ -3,29 +3,13 @@ import { fireEvent, screen, within } from '@testing-library/react';
 import { expect, test, vi } from 'vitest';
 
 import type { Issue } from '@/bindings/bd';
-import { renderWithI18n } from '@/test/fixtures';
+import { makeIssue, renderWithI18n } from '@/test/fixtures';
 
 import { Card } from './Card';
 import type { BoardCard } from './columns';
 
-const TS = '2026-11-01T00:00:00Z';
-
 function issue(overrides: Partial<Issue> = {}): Issue {
-  return {
-    id: 'bza-1',
-    title: 'Board card',
-    description: '',
-    status: 'open',
-    priority: 1,
-    issue_type: 'task',
-    created_at: TS,
-    updated_at: TS,
-    labels: [],
-    dependency_count: 0,
-    dependent_count: 0,
-    comment_count: 0,
-    ...overrides,
-  };
+  return makeIssue('bza-1', { title: 'Board card', priority: 1, ...overrides });
 }
 
 function card(overrides: Partial<BoardCard> = {}): BoardCard {

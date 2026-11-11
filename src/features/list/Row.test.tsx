@@ -2,29 +2,19 @@ import { fireEvent, screen } from '@testing-library/react';
 import { expect, test, vi } from 'vitest';
 
 import type { Issue } from '@/bindings/bd';
-import { renderWithI18n } from '@/test/fixtures';
+import { makeIssue, renderWithI18n } from '@/test/fixtures';
 
 import { Row } from './Row';
 
-const TS = '2026-11-01T00:00:00Z';
-
 function issue(overrides: Partial<Issue> = {}): Issue {
-  return {
-    id: 'bza-42',
+  return makeIssue('bza-42', {
     title: 'Fix scroll jank',
-    description: '',
-    status: 'open',
     priority: 0,
     issue_type: 'bug',
     assignee: 'ada',
-    created_at: TS,
-    updated_at: TS,
     labels: ['ui', 'backend', 'perf'],
-    dependency_count: 0,
-    dependent_count: 0,
-    comment_count: 0,
     ...overrides,
-  };
+  });
 }
 
 function renderRow(overrides: Partial<Issue> = {}, focused = false, showType = true) {

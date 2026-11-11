@@ -6,7 +6,7 @@ import { I18nProvider } from '@/lib/i18n/I18nProvider';
 import { MAX_ACCEPTANCE_BYTES } from '@/lib/writes/commands';
 import type { UseWrite } from '@/lib/writes/useWrite';
 import { fakeWrites } from '@/test/detail-writes';
-import { renderWithI18n } from '@/test/fixtures';
+import { makeIssue, renderWithI18n, TEST_TS as TS } from '@/test/fixtures';
 
 import { DetailView } from './DetailView';
 
@@ -22,24 +22,8 @@ vi.mock('@/lib/links', async (importOriginal) => {
   };
 });
 
-const TS = '2026-11-01T00:00:00Z';
-
 function issue(id: string, overrides: Partial<Issue> = {}): Issue {
-  return {
-    id,
-    title: `Issue ${id}`,
-    description: `Description of ${id}`,
-    status: 'open',
-    priority: 2,
-    issue_type: 'task',
-    created_at: TS,
-    updated_at: TS,
-    labels: [],
-    dependency_count: 0,
-    dependent_count: 0,
-    comment_count: 0,
-    ...overrides,
-  };
+  return makeIssue(id, { description: `Description of ${id}`, ...overrides });
 }
 
 function edge(issueId: string, dependsOnId: string): Dependency {
