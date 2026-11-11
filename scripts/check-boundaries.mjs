@@ -6,9 +6,10 @@
 // - src/lib/store must not import src/lib/sync (ADR-0012)
 // - reference code from AGPL/EPL/ELv2/CC-BY-NC projects must not enter the repo
 //
-// This is a text scan, not a compiler: string concatenation, macro expansion or
-// wrapper crates (duct, xshell, ...) can still slip through. It catches the
-// conventional forms so review only has to cover the unusual ones.
+// This is a text scan, not a compiler: string concatenation, macro expansion,
+// non-@ path aliases, template-literal specifiers, indirect mocks and wrapper
+// crates (duct, xshell, ...) can still slip through. It catches the conventional
+// forms so review only has to cover the unusual ones.
 import { readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -52,13 +53,8 @@ const FORBIDDEN_IMPORT = new RegExp(
     String.raw`|\bimport\s*\(\s*['"]${REFERENCE_SPECIFIER}['"]\s*\)` +
     String.raw`|\bimport\s*['"]${REFERENCE_SPECIFIER}['"])`
 );
-const STORE_SYNC_SPECIFIER = String.raw`(?:@/lib/sync(?:/[^'"]*)?|(?:\.\./)+(?:lib/)?sync(?:/[^'"]*)?)`;
-const STORE_SYNC_IMPORT = new RegExp(
-  String.raw`(?:\bfrom\s*['"]${STORE_SYNC_SPECIFIER}['"]` +
-    String.raw`|\brequire\s*\(\s*['"]${STORE_SYNC_SPECIFIER}['"]\s*\)` +
-    String.raw`|\bimport\s*\(\s*['"]${STORE_SYNC_SPECIFIER}['"]\s*\)` +
-    String.raw`|\bimport\s*['"]${STORE_SYNC_SPECIFIER}['"])`
-);
+const IMPORT_SPECIFIER =
+  /(?:\bfrom\s*|\brequire\s*\(\s*|\bimport\s*\(\s*|\bimport\s*)['"]([^'"]+)['"]/;
 const CHILD_PROCESS_IMPORT =
   /(?:\bfrom\s*['"](?:node:)?child_process['"]|\brequire\s*\(\s*['"](?:node:)?child_process['"]\s*\)|\bimport\s*\(\s*['"](?:node:)?child_process['"]\s*\)|\bimport\s*['"](?:node:)?child_process['"])/;
 
@@ -81,6 +77,21 @@ function isFrontendSource(relPath) {
 // `std :: process :: Command` is valid Rust; normalize before matching.
 function normalizeRustLine(line) {
   return line.replace(/\s*::\s*/g, '::');
+}
+
+function isStoreSyncImport(line, relPath) {
+  const specifier = line.match(IMPORT_SPECIFIER)?.[1];
+  if (specifier === undefined) {
+    return false;
+  }
+  if (specifier === '@/lib/sync' || specifier.startsWith('@/lib/sync/')) {
+    return true;
+  }
+  if (!specifier.startsWith('.')) {
+    return false;
+  }
+  const resolved = path.posix.normalize(path.posix.join(path.posix.dirname(relPath), specifier));
+  return resolved === 'src/lib/sync' || resolved.startsWith('src/lib/sync/');
 }
 
 const RULES = [
@@ -111,7 +122,7 @@ const RULES = [
   {
     id: 'lib-store-to-sync',
     applies: (relPath) => relPath.startsWith('src/lib/store/'),
-    matches: (line) => STORE_SYNC_IMPORT.test(line),
+    matches: (line, _normalized, relPath) => isStoreSyncImport(line, relPath),
     message: 'lib/store must depend on neutral issues/records leaves, not lib/sync',
   },
   {
@@ -179,7 +190,7 @@ function scan(root) {
     lines.forEach((line, index) => {
       const normalized = isRust ? normalizeRustLine(line) : null;
       for (const rule of applicable) {
-        if (rule.matches(line, normalized)) {
+        if (rule.matches(line, normalized, relPath)) {
           violations.push({
             location: `${relPath}:${index + 1}`,
             rule: rule.id,

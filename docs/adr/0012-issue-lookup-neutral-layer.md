@@ -8,8 +8,10 @@
 
 前端同时存在两套 byId 构造与查找逻辑：`view/filter.ts` 的
 `indexById` / `lookupFrom`，以及 `store/selectors.ts` 的 `indexIssues` /
-`getIssue`。`view/ready.ts` 又单独声明了 `IssueLookup`。其中 `getIssue`
-直接读取记录属性，没有像 `lookupFrom` 一样显式拒绝原型链上的 id。
+`getIssue`。`view/ready.ts` 又单独声明了 `IssueLookup`。旧 `getIssue` 的
+byId 已由 null-prototype 记录承载，本身不会泄漏 `Object.prototype`；但它
+依赖直接属性读取，若改接普通对象就没有 `lookupFrom` 的 own-property 防护，
+两个入口对同一 id 的语义并不一致。
 
 此外，`store/selectors.ts` 为使用 `emptyRecord` 而引用
 `sync/reducer.ts`，形成 store → sync 的反向依赖。现有边界脚本只检查
@@ -22,13 +24,19 @@ Dolt、进程与参考实现引用，没有覆盖这条前端分层。
    都依赖它，不再各自维护一套。
 2. 详情页专用的 `IssueIndex`（byId + dependents 反向边）仍留在
    `src/lib/store/selectors.ts`，但 byId 必须复用中立构造器；看板只构造
-   byId，不额外建立详情专用的反向边。
+   byId，不额外建立详情专用的反向边。selectors 内部可以继续直接读取这些
+   由本模块构造的 null-prototype 记录；接受外部普通对象的公开查找入口则
+   统一经过 `lookupFrom` 的 `Object.hasOwn` 防护。
 3. `emptyRecord` 从 `src/lib/sync/reducer.ts` 移到叶子模块
    `src/lib/records.ts`。sync、store 与其他调用方可以依赖该叶子，store
    不再为记录工具引用 sync。
 4. `scripts/check-boundaries.mjs` 增加 `lib-store-to-sync` 规则，禁止
-   `src/lib/store/*` 通过别名或相对路径引用 `src/lib/sync/*`。该检查与
-   `CONSTRAINTS.md` 同步登记。
+   `src/lib/store/*` 通过别名或相对路径引用 `src/lib/sync/*`。相对路径按
+   导入文件位置归一化，避免把嵌套 store 目录自己的 `../sync/*` 误判为
+   跨层引用。该检查与 `CONSTRAINTS.md` 同步登记。
+5. 边界脚本仍是逐行文本扫描，不是模块解析器：非 `@` 别名、模板字面量、
+   字符串拼接、间接 mock 与多行变体可能漏报，这些非常规形式仍由 review
+   覆盖，不把脚本通过当作完整证明。
 
 ## 后果
 

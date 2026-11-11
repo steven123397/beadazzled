@@ -8,6 +8,7 @@ import type { WriteResult } from './queue';
 
 const BD_NOT_FOUND: BridgeErrorCode = 'BD_NOT_FOUND';
 const BD_VERSION_UNSUPPORTED: BridgeErrorCode = 'BD_VERSION_UNSUPPORTED';
+const CHECKING_BD = 'Checking for bd…';
 
 export type UseWrite = {
   /** Issue ids whose write is in flight (including the echo wait). */
@@ -36,14 +37,14 @@ export function useWrite(flow: WriteFlow, bd: BdStatus | null): UseWrite {
   const pending = useMemo(() => Array.from(new Set(inFlight)), [inFlight]);
 
   const canWrite = bd?.kind === 'ready';
-  const disabledReason = canWrite ? null : describeError(blockedError(bd)).message;
+  const disabledReason = canWrite ? null : blockedMessage(bd);
 
   const submit = useCallback(
     async (submission: WriteSubmission): Promise<WriteResult> => {
       if (!canWrite) {
         const blocked: WriteResult = { status: 'failed', error: blockedError(bd) };
         setResult(blocked);
-        setError(describeError(blocked.error).message);
+        setError(blockedMessage(bd));
         return blocked;
       }
 
@@ -95,7 +96,15 @@ function blockedError(bd: BdStatus | null): BridgeError {
     return bd.error;
   }
   if (bd?.kind === 'unsupported') {
-    return { code: BD_VERSION_UNSUPPORTED, message: '' };
+    return {
+      code: BD_VERSION_UNSUPPORTED,
+      message: '',
+      detail: { found: bd.found, min: bd.min },
+    };
   }
   return { code: BD_NOT_FOUND, message: '' };
+}
+
+function blockedMessage(bd: BdStatus | null): string {
+  return bd === null ? CHECKING_BD : describeError(blockedError(bd)).message;
 }

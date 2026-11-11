@@ -56,6 +56,18 @@ test('stderr wins over a stdout error when both are present', () => {
   expect(described.message).not.toContain('from stdout');
 });
 
+test('unsupported bd messages use the discovered and required versions', () => {
+  const described = describeError({
+    code: 'BD_VERSION_UNSUPPORTED',
+    message: '',
+    detail: { found: '1.2.9', min: '9.8.7' },
+  });
+
+  expect(described.message).toBe(
+    'Found bd 1.2.9; bd 9.8.7 or newer is required. Update bd and try again.'
+  );
+});
+
 test('unknown codes fall back to the bridge message instead of an empty string', () => {
   const described = describeError(error('INTERNAL', 'something specific broke'));
 
@@ -74,7 +86,7 @@ test.each([
   { code: 'BD_NOT_EXECUTABLE', message: 'The configured bd path is not executable.' },
   {
     code: 'BD_VERSION_UNSUPPORTED',
-    message: 'This bd version is older than 1.3.2; update bd and try again.',
+    message: 'This bd version is unsupported; update bd and try again.',
   },
   { code: 'WS_NOT_BEADS', message: 'This directory is not a beads workspace.' },
   { code: 'WS_INACCESSIBLE', message: 'This workspace cannot be read.' },

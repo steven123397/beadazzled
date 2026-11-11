@@ -7,7 +7,7 @@ const MESSAGES: Partial<Record<BridgeErrorCode, string>> = {
   BD_EXIT_NONZERO: 'bd rejected the change.',
   BD_NOT_FOUND: 'bd was not found. Set its path in Settings or install it with winget.',
   BD_NOT_EXECUTABLE: 'The configured bd path is not executable.',
-  BD_VERSION_UNSUPPORTED: 'This bd version is older than 1.3.2; update bd and try again.',
+  BD_VERSION_UNSUPPORTED: 'This bd version is unsupported; update bd and try again.',
   WS_NOT_BEADS: 'This directory is not a beads workspace.',
   WS_INACCESSIBLE: 'This workspace cannot be read.',
   JOURNAL_DISABLED: 'Real-time updates are off; the view was refreshed after saving.',
@@ -60,10 +60,21 @@ export function describeError(error: BridgeError): {
     return { code: error.code, message: error.message };
   }
 
+  const detailText = (value: unknown): string => (typeof value === 'string' ? value.trim() : '');
+  if (error.code === 'BD_VERSION_UNSUPPORTED') {
+    const found = detailText(error.detail?.found);
+    const min = detailText(error.detail?.min);
+    if (min) {
+      return {
+        code: error.code,
+        message: `${found ? `Found bd ${found}; ` : ''}bd ${min} or newer is required. Update bd and try again.`,
+      };
+    }
+  }
+
   // bd reports some failures as JSON on stdout with an empty stderr (for
   // example a directory whose .beads folder has no database), so the bridge
   // puts that text in `bd_error` instead.
-  const detailText = (value: unknown): string => (typeof value === 'string' ? value.trim() : '');
   const stderr =
     error.code === 'BD_EXIT_NONZERO'
       ? detailText(error.detail?.stderr) || detailText(error.detail?.bd_error)
