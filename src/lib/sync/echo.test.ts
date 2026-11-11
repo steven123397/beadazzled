@@ -1,28 +1,10 @@
 import { afterEach, expect, test, vi } from 'vitest';
 
-import type { Issue, JournalRecord } from '@/bindings/bd';
+import type { JournalRecord } from '@/bindings/bd';
+import { makeIssue as issue, TEST_TS as TS } from '@/test/fixtures';
 
 import { createEchoWaiter } from './echo';
 import { createTicketStore, type TicketStore } from './store';
-
-const TS = '2026-11-01T00:00:00Z';
-
-function issue(id: string): Issue {
-  return {
-    id,
-    title: `Issue ${id}`,
-    description: '',
-    status: 'open',
-    priority: 2,
-    issue_type: 'task',
-    created_at: TS,
-    updated_at: TS,
-    labels: [],
-    dependency_count: 0,
-    dependent_count: 0,
-    comment_count: 0,
-  };
-}
 
 function record(seq: number, issueId: string): JournalRecord {
   return { seq, ts: TS, op: 'update', issue_id: issueId, issue: issue(issueId) };
