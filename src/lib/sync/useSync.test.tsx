@@ -2,31 +2,19 @@ import { act, renderHook, waitFor } from '@testing-library/react';
 import { expect, test, vi } from 'vitest';
 
 import type { Issue, JournalRecord, SyncState } from '@/bindings/bd';
+import { makeIssue, TEST_TS } from '@/test/fixtures';
 
 import type { SyncApi, SyncEvent, SyncSnapshot } from './api';
 import { useSync } from './useSync';
 
-function issue(id: string, title = `Issue ${id}`, updatedAt = '2026-11-01T00:00:00Z'): Issue {
-  return {
-    id,
-    title,
-    description: '',
-    status: 'open',
-    priority: 2,
-    issue_type: 'task',
-    created_at: '2026-11-01T00:00:00Z',
-    updated_at: updatedAt,
-    labels: [],
-    dependency_count: 0,
-    dependent_count: 0,
-    comment_count: 0,
-  };
+function issue(id: string, title = `Issue ${id}`, updatedAt = TEST_TS): Issue {
+  return makeIssue(id, { title, updated_at: updatedAt });
 }
 
 function record(seq: number, issueValue: Issue): JournalRecord {
   return {
     seq,
-    ts: '2026-11-01T00:00:00Z',
+    ts: TEST_TS,
     op: 'update',
     issue_id: issueValue.id,
     issue: issueValue,

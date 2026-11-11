@@ -1,27 +1,12 @@
 import { expect, test } from 'vitest';
 
 import type { Issue } from '@/bindings/bd';
+import { makeIssue } from '@/test/fixtures';
 
 import { changedFields, textField } from './changes';
 
-const TS = '2026-11-01T00:00:00Z';
-
 function issue(overrides: Partial<Issue> = {}): Issue {
-  return {
-    id: 'bza-b',
-    title: 'Ticket',
-    description: 'Body',
-    status: 'open',
-    priority: 2,
-    issue_type: 'task',
-    created_at: TS,
-    updated_at: TS,
-    labels: [],
-    dependency_count: 0,
-    dependent_count: 0,
-    comment_count: 0,
-    ...overrides,
-  };
+  return makeIssue('bza-b', { title: 'Ticket', description: 'Body', ...overrides });
 }
 
 test('a timestamp-only update is not a content change', () => {

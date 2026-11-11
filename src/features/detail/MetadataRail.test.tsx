@@ -2,32 +2,12 @@ import { fireEvent, screen, within } from '@testing-library/react';
 import { expect, test, vi } from 'vitest';
 
 import type { Dependency, Issue } from '@/bindings/bd';
-import { renderWithI18n } from '@/test/fixtures';
+import { makeIssue as issue, renderWithI18n, TEST_TS as TS } from '@/test/fixtures';
 import { indexIssues } from '@/lib/store/selectors';
 import type { UseWrite } from '@/lib/writes/useWrite';
 
 import { fakeWrites } from '@/test/detail-writes';
 import { MetadataRail } from './MetadataRail';
-
-const TS = '2026-11-01T00:00:00Z';
-
-function issue(id: string, overrides: Partial<Issue> = {}): Issue {
-  return {
-    id,
-    title: `Issue ${id}`,
-    description: '',
-    status: 'open',
-    priority: 2,
-    issue_type: 'task',
-    created_at: TS,
-    updated_at: TS,
-    labels: [],
-    dependency_count: 0,
-    dependent_count: 0,
-    comment_count: 0,
-    ...overrides,
-  };
-}
 
 function blockerEdge(dependsOnId: string): Dependency {
   return { issue_id: 'bza-b', depends_on_id: dependsOnId, type: 'blocks', created_at: TS };

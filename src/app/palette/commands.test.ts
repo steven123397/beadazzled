@@ -2,25 +2,12 @@ import { expect, test, vi } from 'vitest';
 
 import type { Issue } from '@/bindings/bd';
 import { translate } from '@/lib/i18n';
+import { makeIssue } from '@/test/fixtures';
 
 import { buildCommands, rankCommands, type PaletteContext } from './commands';
 
 function issue(id: string, title: string, extra: Partial<Issue> = {}): Issue {
-  return {
-    id,
-    title,
-    description: '',
-    status: 'open',
-    priority: 2,
-    issue_type: 'task',
-    created_at: '2026-11-01T00:00:00Z',
-    updated_at: '2026-11-01T00:00:00Z',
-    labels: [],
-    dependency_count: 0,
-    dependent_count: 0,
-    comment_count: 0,
-    ...extra,
-  };
+  return makeIssue(id, { title, ...extra });
 }
 
 function context(overrides: Partial<PaletteContext> = {}): PaletteContext {
