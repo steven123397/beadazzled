@@ -62,6 +62,73 @@ test('manifest generation accepts an empty release note', () => {
   assert.equal(manifest.notes, '');
 });
 
+test('manifest generation reads multiline UTF-8 notes from a file', () => {
+  const root = makeRoot();
+  writeRepo(root);
+  const dir = path.join(root, 'release');
+  const { installer } = writeInstaller(dir);
+  const notesPath = path.join(root, 'release-notes.md');
+  const notes = 'First line\n第二行\nThird line\n';
+  writeFileSync(notesPath, notes, 'utf8');
+
+  const made = spawnCheck(makeScript, [
+    '--root',
+    root,
+    '--installer',
+    installer,
+    '--notes-file',
+    notesPath,
+  ]);
+
+  assert.equal(made.status, 0, made.stdout + made.stderr);
+  const manifest = JSON.parse(readFileSync(path.join(dir, 'latest.json'), 'utf8'));
+  assert.equal(manifest.notes, notes);
+});
+
+test('--notes and --notes-file are mutually exclusive and do not write a manifest', () => {
+  const root = makeRoot();
+  writeRepo(root);
+  const dir = path.join(root, 'release');
+  const { installer } = writeInstaller(dir);
+  const notesPath = path.join(root, 'release-notes.md');
+  writeFileSync(notesPath, 'file notes', 'utf8');
+
+  const made = spawnCheck(makeScript, [
+    '--root',
+    root,
+    '--installer',
+    installer,
+    '--notes',
+    'inline notes',
+    '--notes-file',
+    notesPath,
+  ]);
+
+  assert.equal(made.status, 1);
+  assert.match(made.stderr, /mutually exclusive/);
+  assert.equal(existsSync(path.join(dir, 'latest.json')), false);
+});
+
+test('a missing --notes-file is reported instead of writing a manifest', () => {
+  const root = makeRoot();
+  writeRepo(root);
+  const dir = path.join(root, 'release');
+  const { installer } = writeInstaller(dir);
+
+  const made = spawnCheck(makeScript, [
+    '--root',
+    root,
+    '--installer',
+    installer,
+    '--notes-file',
+    path.join(root, 'missing.md'),
+  ]);
+
+  assert.equal(made.status, 1);
+  assert.match(made.stderr, /ENOENT/);
+  assert.equal(existsSync(path.join(dir, 'latest.json')), false);
+});
+
 test('required options reject empty values', () => {
   const root = makeRoot();
   const made = spawnCheck(makeScript, ['--root', root, '--installer=']);

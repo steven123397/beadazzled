@@ -7,7 +7,7 @@
 // and it never touches the private key.
 //
 // Usage: node scripts/make-latest-json.mjs --installer <exe> [--version <v>]
-//          [--url <download url>] [--notes <text>] [--root <repo>]
+//          [--url <download url>] [--notes <text> | --notes-file <path>] [--root <repo>]
 import { createHash } from 'node:crypto';
 import { readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
@@ -34,26 +34,38 @@ function usage() {
     '  --version <v>       version to publish (default: package.json)',
     '  --url <url>         must match the default canonical release asset URL',
     '  --notes <text>      release notes for the manifest',
+    '  --notes-file <path> read UTF-8 release notes from a file',
     '  --root <path>       repository root (default: this checkout)',
   ].join('\n');
 }
 
 function parseArgs(argv) {
   const options = parseOptions(argv, {
-    values: ['--installer', '--version', '--url', '--notes', '--root'],
+    values: ['--installer', '--version', '--url', '--notes', '--notes-file', '--root'],
     allowEmpty: ['--notes'],
     usage,
-    defaults: { installer: null, version: null, url: null, notes: '', root: defaultRoot },
+    defaults: {
+      installer: null,
+      version: null,
+      url: null,
+      notes: null,
+      notesFile: null,
+      root: defaultRoot,
+    },
     onValue(opts, name, value) {
       if (name === '--installer') opts.installer = path.resolve(value);
       if (name === '--version') opts.version = value;
       if (name === '--url') opts.url = value;
       if (name === '--notes') opts.notes = value;
+      if (name === '--notes-file') opts.notesFile = path.resolve(value);
       if (name === '--root') opts.root = path.resolve(value);
     },
   });
   if (options.installer === null) {
     throw new Error('--installer is required');
+  }
+  if (options.notes !== null && options.notesFile !== null) {
+    throw new Error('--notes and --notes-file are mutually exclusive');
   }
   options.version ??= readReleaseVersions(options.root)[0][1];
   return options;
@@ -65,6 +77,8 @@ runMain('make-latest-json', () => {
     throw new Error(`release version must be semantic: ${options.version}`);
   }
   const signaturePath = `${options.installer}.sig`;
+  const notes =
+    options.notesFile !== null ? readFileSync(options.notesFile, 'utf8') : (options.notes ?? '');
 
   // Error priority: a missing signature (forgot TAURI_SIGNING_PRIVATE_KEY) is
   // the more common, actionable failure, so report it before hashing.
@@ -116,7 +130,7 @@ runMain('make-latest-json', () => {
 
   const manifest = {
     version: options.version,
-    notes: options.notes,
+    notes,
     pub_date: new Date().toISOString(),
     platforms: {
       [PLATFORM]: { signature, url: url.href, sha256 },
