@@ -1,9 +1,4 @@
-import {
-  memo,
-  type KeyboardEventHandler,
-  type PointerEventHandler,
-  type ReactNode,
-} from 'react';
+import { memo, type KeyboardEventHandler, type PointerEventHandler, type ReactNode } from 'react';
 import { useDraggable } from '@dnd-kit/core';
 import { Ban, GripVertical } from 'lucide-react';
 

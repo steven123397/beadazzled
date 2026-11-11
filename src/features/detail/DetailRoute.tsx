@@ -15,11 +15,7 @@ export type DetailRouteProps = {
 };
 
 /** Read the route params and remount the view when the ticket changes. */
-export function DetailRoute({
-  issues,
-  loading,
-  writes,
-}: DetailRouteProps) {
+export function DetailRoute({ issues, loading, writes }: DetailRouteProps) {
   const { projectId = '', issueId = '' } = useParams<{ projectId: string; issueId: string }>();
   const navigate = useNavigate();
   const location = useLocation();

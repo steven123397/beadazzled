@@ -142,7 +142,6 @@ export function AboutSection() {
         </div>
       }
     >
-
       <p className="text-xs text-muted-foreground">{updateMessage()}</p>
 
       <div className="space-y-2">
@@ -213,4 +212,3 @@ function describeBd(bd: BdStatus | null): string {
   }
   return bd.kind === 'ready' ? `${bd.version} · ${bd.path}` : bd.kind;
 }
-

@@ -21,7 +21,6 @@ export function GeneralSection() {
 
   return (
     <SettingsSection id="settings-general" title={t('settings.general')}>
-
       <div className="grid gap-3 sm:grid-cols-2">
         <Field label={t('settings.language')}>
           <PopoverSelect

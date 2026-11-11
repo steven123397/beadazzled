@@ -150,13 +150,13 @@ export function MetadataRail({
       setLocalError(blockedMessage(decision.blockers));
       return;
     }
-    void submit({ status: target, ifStatus: issue.status }, `status:${target}`, [
-      'status',
-    ]).then((saved) => {
-      if (!saved) {
-        resetStatus();
+    void submit({ status: target, ifStatus: issue.status }, `status:${target}`, ['status']).then(
+      (saved) => {
+        if (!saved) {
+          resetStatus();
+        }
       }
-    });
+    );
   };
 
   const saveAssignee = async (next: string): Promise<boolean> => {
@@ -320,9 +320,7 @@ export function MetadataRail({
                       size="xs"
                       disabled={disabled}
                       onClick={() =>
-                        void submit({ removeLabels: [label] }, `label:remove:${label}`, [
-                          'labels',
-                        ])
+                        void submit({ removeLabels: [label] }, `label:remove:${label}`, ['labels'])
                       }
                       className="size-3.5 text-muted-foreground"
                     >
@@ -435,4 +433,3 @@ function PropertyRow({ label, children }: { label: string; children: ReactNode }
     </DefinitionRow>
   );
 }
-

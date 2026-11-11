@@ -41,7 +41,10 @@ export function SyncSection({ copy = copyText }: { copy?: (text: string) => Prom
     <SettingsSection id="settings-sync" title={t('settings.sync')}>
       <dl className="space-y-1 rounded-md border border-border bg-raised p-3 text-xs">
         <InfoRow label={t('settings.sync.state')} value={t(label.key, label.vars)} />
-        <InfoRow label={t('settings.sync.lastSeq')} value={lastSeq === null ? '-' : String(lastSeq)} />
+        <InfoRow
+          label={t('settings.sync.lastSeq')}
+          value={lastSeq === null ? '-' : String(lastSeq)}
+        />
         <InfoRow
           label={t('settings.sync.lastRefresh')}
           value={formatDateTime(new Date(lastRefreshAt).toISOString(), language)}
@@ -55,7 +58,10 @@ export function SyncSection({ copy = copyText }: { copy?: (text: string) => Prom
           }
         />
         {lastEventAt === null ? null : (
-          <InfoRow label={t('settings.sync.lastEvent')} value={formatDateTime(lastEventAt, language)} />
+          <InfoRow
+            label={t('settings.sync.lastEvent')}
+            value={formatDateTime(lastEventAt, language)}
+          />
         )}
       </dl>
       {shownError === null ? null : (
@@ -96,11 +102,7 @@ export function SyncSection({ copy = copyText }: { copy?: (text: string) => Prom
           <code className="block select-all rounded border border-border bg-muted px-2 py-1 font-mono text-2xs text-foreground">
             {JOURNAL_COMMAND}
           </code>
-          <Button
-            size="md"
-            variant="ghost"
-            onClick={() => void performCopy(JOURNAL_COMMAND)}
-          >
+          <Button size="md" variant="ghost" onClick={() => void performCopy(JOURNAL_COMMAND)}>
             {t('settings.sync.copyCommand')}
           </Button>
           <CopyNotice result={copyResult} />

@@ -54,7 +54,6 @@ export type PaletteContext = {
 
 export const GROUP_ORDER: CommandGroup[] = ['Navigation', 'Actions', 'Issues'];
 
-/** Builds the palette's static commands plus one entry per known ticket. */
 export function buildCommands(issues: readonly Issue[], context: PaletteContext): CommandItem[] {
   const { t } = context;
   const commands: CommandItem[] = [];

@@ -15,10 +15,7 @@ export type EchoWaiter = (
  * journal record for the issue lands past `afterSeq`. A disabled journal is
  * reported immediately so the caller can refresh instead of waiting 3s.
  */
-export function createEchoWaiter(
-  store: TicketStore,
-  isJournalDisabled: () => boolean
-): EchoWaiter {
+export function createEchoWaiter(store: TicketStore, isJournalDisabled: () => boolean): EchoWaiter {
   return (issueId, afterSeq, timeoutMs = ECHO_TIMEOUT_MS) =>
     new Promise<EchoOutcome>((resolve) => {
       let settled = false;

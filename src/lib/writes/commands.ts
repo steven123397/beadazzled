@@ -6,10 +6,7 @@ import type { AssigneeChange, CreateSpec, UpdateSpec, WriteCommand } from '@/bin
 export const MAX_ACCEPTANCE_BYTES = 16 * 1024;
 
 export type WriteValidationCode =
-  | 'ACCEPTANCE_TOO_LONG'
-  | 'LABEL_CONTAINS_COMMA'
-  | 'PRIORITY_OUT_OF_RANGE'
-  | 'EMPTY_UPDATE';
+  'ACCEPTANCE_TOO_LONG' | 'LABEL_CONTAINS_COMMA' | 'PRIORITY_OUT_OF_RANGE' | 'EMPTY_UPDATE';
 
 export type WriteValidationError = {
   code: WriteValidationCode;
@@ -17,8 +14,7 @@ export type WriteValidationError = {
 };
 
 export type CommandResult =
-  | { ok: true; command: WriteCommand }
-  | { ok: false; error: WriteValidationError };
+  { ok: true; command: WriteCommand } | { ok: false; error: WriteValidationError };
 
 export type AssigneeEdit = { set: string } | { clear: true };
 

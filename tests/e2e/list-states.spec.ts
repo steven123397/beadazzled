@@ -12,7 +12,6 @@ function issue(index: number, overrides: Record<string, unknown> = {}) {
   });
 }
 
-
 const loading = { kind: 'loading', step: 'export' };
 const healthy = { kind: 'healthy', lastSeq: 1, lastEventAt: null };
 const unavailable = {

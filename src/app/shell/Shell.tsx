@@ -36,7 +36,7 @@ export function Shell({
   onRefresh?: () => void;
   /** Journal position reported by the sync store; 0 when sync is not running. */
   lastSeq?: number;
-  /** Writes waiting behind the in-flight one; the write flow lands in bza-um8. */
+  /** Writes queued behind the in-flight one. */
   pendingWrites?: number;
 }) {
   const { t, language, setLanguage } = useI18n();
@@ -310,9 +310,15 @@ export function Shell({
           </AppRefreshProvider>
         </main>
       </div>
-      <StatusBar lastRefreshAt={lastRefreshAt} open={overlay === 'diagnostics'} onOpen={openDiagnostics} />
+      <StatusBar
+        lastRefreshAt={lastRefreshAt}
+        open={overlay === 'diagnostics'}
+        onOpen={openDiagnostics}
+      />
       {overlay === 'help' ? <HelpPanel shortcuts={shortcuts} onClose={closeOverlay} /> : null}
-      {overlay === 'palette' ? <CommandPalette commands={paletteCommands} onClose={closeOverlay} /> : null}
+      {overlay === 'palette' ? (
+        <CommandPalette commands={paletteCommands} onClose={closeOverlay} />
+      ) : null}
       {overlay === 'diagnostics' ? (
         <Diagnostics
           lastSeq={lastSeq}

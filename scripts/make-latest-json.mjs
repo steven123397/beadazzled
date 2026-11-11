@@ -63,16 +63,8 @@ runMain('make-latest-json', async () => {
   const options = parseArgs(process.argv.slice(2));
   const signaturePath = `${options.installer}.sig`;
 
-  let sha256;
-  try {
-    sha256 = await computeSha256(options.installer);
-  } catch (error) {
-    if (error.code === 'ENOENT') {
-      throw new Error(`missing installer ${options.installer}`);
-    }
-    throw error;
-  }
-
+  // Error priority: a missing signature (forgot TAURI_SIGNING_PRIVATE_KEY) is
+  // the more common, actionable failure, so report it before hashing.
   let signature;
   try {
     signature = readFileSync(signaturePath, 'utf8').trim();
@@ -81,6 +73,16 @@ runMain('make-latest-json', async () => {
       throw new Error(
         `missing signature ${signaturePath}; build with TAURI_SIGNING_PRIVATE_KEY set`
       );
+    }
+    throw error;
+  }
+
+  let sha256;
+  try {
+    sha256 = await computeSha256(options.installer);
+  } catch (error) {
+    if (error.code === 'ENOENT') {
+      throw new Error(`missing installer ${options.installer}`);
     }
     throw error;
   }

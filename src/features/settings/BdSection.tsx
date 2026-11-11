@@ -30,7 +30,6 @@ export function BdSection({ pickFile = defaultPicker, copy = copyText }: BdSecti
   const [busy, setBusy] = useState(false);
   const { copyResult, setCopyResult, copy: performCopy } = useCopy({ copy });
 
-
   const configured = snapshot?.config.bdPath ?? null;
   // The panel always describes what the app is actually running on. A rejected
   // pick is reported beside it: replacing the effective status would hide a
@@ -101,7 +100,6 @@ export function BdSection({ pickFile = defaultPicker, copy = copyText }: BdSecti
 
   return (
     <SettingsSection id="settings-bd" title={t('settings.bd')}>
-
       <div className="space-y-2 rounded-md border border-border bg-raised p-3 text-xs">
         {shown === null ? (
           <p className="text-muted-foreground">{t('settings.bd.loading')}</p>
@@ -170,6 +168,5 @@ export function BdSection({ pickFile = defaultPicker, copy = copyText }: BdSecti
         )}
       </div>
     </SettingsSection>
-
   );
 }

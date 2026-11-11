@@ -114,8 +114,14 @@ export function DiagnosticsSection({ api = defaultApi, copy = copyText }: Diagno
               </p>
             ) : (
               <>
-                <InfoRow label={t('settings.diagnostics.project')} value={report.context.projectId} />
-                <InfoRow label={t('settings.diagnostics.doltMode')} value={report.context.doltMode} />
+                <InfoRow
+                  label={t('settings.diagnostics.project')}
+                  value={report.context.projectId}
+                />
+                <InfoRow
+                  label={t('settings.diagnostics.doltMode')}
+                  value={report.context.doltMode}
+                />
                 <InfoRow
                   label={t('settings.diagnostics.schema')}
                   value={String(report.context.schemaVersion)}

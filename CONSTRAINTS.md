@@ -27,6 +27,7 @@
 | secrets | 0 | `npm run check:secrets`（配置键检查 + gitleaks） | 编辑循环 | block | 仓库公开、安装包对外分发 | 可运行 |
 | 类型 | 0 error | `npm run typecheck` | 编辑循环 | block | 无噪声、秒级 | 可运行 |
 | lint | 0 error | `npm run lint` | 编辑循环 | block | 同上 | 可运行 |
+| 格式 | 0 漂移 | `npm run format:check`（Prettier，`endOfLine=auto`） | CI | block | Windows CRLF 工作区与 CI 结果须可重复，见 [ADR-0013](docs/adr/0013-prettier-eol-auto-and-ci-format-gate.md) | 可运行 |
 | 架构边界 | 0 违规 | `npm run check:boundaries` | 交还前 | block | 防止绕开 bd 桥直读 Dolt | 可运行 |
 | 版本一致 | 3 处一致 | `npm run check:versions` | 编辑循环 | block | 安装包、Cargo 包与更新器必须看到同一个版本 | 可运行 |
 | bridge 行覆盖 | ≥ 80% | `npm run test:rust:coverage` | 交还前 | block | 只有会真坏的那层值得设门槛 | 可运行（bridge 落地后生效） |
@@ -54,8 +55,20 @@
 | 交还给人之前 | ≤ 90s | bridge 单测 + 改动行覆盖率 + 架构边界 |
 | CI / review | 不限 | 全量测试、Rust 风格、依赖扫描、构建、体积与性能测量 |
 
-CI 由 `.github/workflows/ci.yml` 执行（PR 与 main push）：`check:fast`、
-`check:rust:style`、`check:task`、`check:deps`、`build`。外部工具固定版本并经
+`check:full` 用于本地或发布前的完整验证：它在 `check:fast` 与 `check:task`
+之外额外包含 `test:rust`、`build:app`、`check:size` 与浏览器 E2E。CI **不直接
+调用它**（见 ADR-0005 的被拒绝备选），而是在 `ci.yml` 中按序分步执行阻塞门禁；
+`test:rust`、`build:app`、`check:size` 与性能测量不在 CI 中。
+
+`test:unit` 用 Vitest 双项目运行：纯逻辑套件在 node 项目（无 setup 文件），
+DOM/storage/renderHook/CSS 依赖套件在 jsdom 项目；新增 `.test.ts` 默认进
+node，需要 jsdom 的加进 `vitest.config.ts` 的 `jsdomTsSuites`；`.test.tsx`
+默认进 jsdom 项目。
+
+CI 由 `.github/workflows/ci.yml` 执行（PR 与 main push），按序为：`check:fast`、
+`format:check`、`check:rust:style`、`build`、`check:bundle`、`check:task`、
+浏览器 `e2e`（含 axe）、`check:deps`。`check:task` 中的 `test:unit` 不采集
+无阈值 Vitest 覆盖率；前端覆盖率门槛见 Exceptions。外部工具固定版本并经
 SHA256 校验：gitleaks 8.30.1、osv-scanner 2.7.0，通过 `GITLEAKS_PATH` /
 `OSV_SCANNER_PATH` 注入；CI 不解析 PATH 或 `%LOCALAPPDATA%`。显式注入的路径
 若不存在则直接失败，不回退 PATH / WinGet。见

@@ -103,7 +103,4 @@ export function makeIssue(
   overrides?: Record<string, unknown>
 ): IssueFixture;
 
-export function makeIssues(
-  count: number,
-  map?: (index: number) => IssueFixture
-): IssueFixture[];
+export function makeIssues(count: number, map?: (index: number) => IssueFixture): IssueFixture[];

@@ -1,4 +1,10 @@
-import { forwardRef, useImperativeHandle, useRef, type HTMLAttributes, type ReactNode } from 'react';
+import {
+  forwardRef,
+  useImperativeHandle,
+  useRef,
+  type HTMLAttributes,
+  type ReactNode,
+} from 'react';
 import { useFocusTrap } from '@/app/keyboard/useFocusTrap';
 import { cn } from '@/lib/utils';
 
@@ -7,14 +13,7 @@ export interface DialogSurfaceProps extends HTMLAttributes<HTMLDivElement> {
 }
 
 export const DialogSurface = forwardRef<HTMLDivElement, DialogSurfaceProps>(function DialogSurface(
-  {
-    role = 'dialog',
-    tabIndex = -1,
-    active = true,
-    className,
-    children,
-    ...props
-  },
+  { role = 'dialog', tabIndex = -1, active = true, className, children, ...props },
   forwardedRef
 ) {
   const localRef = useRef<HTMLDivElement>(null);
@@ -42,13 +41,7 @@ export interface ModalProps extends HTMLAttributes<HTMLDivElement> {
 }
 
 export const Modal = forwardRef<HTMLDivElement, ModalProps>(function Modal(
-  {
-    backdropClassName,
-    onBackdropClick,
-    className,
-    children,
-    ...props
-  },
+  { backdropClassName, onBackdropClick, className, children, ...props },
   ref
 ) {
   return (

@@ -35,4 +35,3 @@ export function textField(issue: Issue, key: 'design' | 'notes'): string | null 
   const value = issue[key];
   return typeof value === 'string' && value.trim() !== '' ? value : null;
 }
-

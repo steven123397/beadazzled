@@ -18,8 +18,7 @@ export function useFocusTrap(container: RefObject<HTMLElement | null>, active = 
       return undefined;
     }
 
-    const previous =
-      document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     const focusables = () => Array.from(node.querySelectorAll<HTMLElement>(FOCUSABLE));
     const items = focusables();
     if (!node.contains(document.activeElement)) {
