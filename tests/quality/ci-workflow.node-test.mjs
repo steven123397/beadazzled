@@ -22,6 +22,7 @@ test('CI runs on pull requests and pushes to main on Windows', () => {
 test('CI runs every blocking gate and the scripts exist', () => {
   const gates = [
     'npm run check:fast',
+    'npm run format:check',
     'npm run check:rust:style',
     'npm run build',
     'npm run check:task',
@@ -32,7 +33,14 @@ test('CI runs every blocking gate and the scripts exist', () => {
     assert.ok(workflow.includes(gate), `workflow is missing ${gate}`);
   }
 
-  for (const script of ['check:fast', 'check:rust:style', 'check:task', 'check:deps', 'build']) {
+  for (const script of [
+    'check:fast',
+    'format:check',
+    'check:rust:style',
+    'check:task',
+    'check:deps',
+    'build',
+  ]) {
     assert.equal(typeof packageJson.scripts[script], 'string', `package.json is missing ${script}`);
   }
 });

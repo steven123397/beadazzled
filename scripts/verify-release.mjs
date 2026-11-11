@@ -75,8 +75,14 @@ function readPublicKey(options, configKey) {
   if (options.publicKey !== null) {
     try {
       return readFileSync(options.publicKey, 'utf8');
-    } catch {
-      return options.publicKey;
+    } catch (error) {
+      // Only a missing file means the argument was a literal key. Anything
+      // else (EISDIR, EPERM, ...) must surface instead of being verified as
+      // the path string itself.
+      if (error.code === 'ENOENT') {
+        return options.publicKey;
+      }
+      throw error;
     }
   }
   if (configKey === null) {

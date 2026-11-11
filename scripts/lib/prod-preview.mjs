@@ -2,6 +2,7 @@ import { spawn, spawnSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { rm } from 'node:fs/promises';
 import path from 'node:path';
+import { setTimeout as sleep } from 'node:timers/promises';
 
 import { chromium } from '@playwright/test';
 
@@ -10,8 +11,6 @@ import { projectRoot } from './paths.mjs';
 const root = projectRoot();
 const outDir = path.join(root, 'dist-e2e');
 const viteBin = path.join(root, 'node_modules', 'vite', 'bin', 'vite.js');
-
-const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 export function resolvePort(raw, { envName = 'PORT', defaultPort = 1432 } = {}) {
   if (raw === undefined || raw === '') {
@@ -88,9 +87,10 @@ export async function withPreview(options, fn) {
   const { port = 1432, envName = 'PORT' } = resolvedOptions ?? {};
   await rm(outDir, { recursive: true, force: true });
   buildSeamBundle();
-  const server = await servePreview({ port, envName });
+  let server;
   let browser;
   try {
+    server = await servePreview({ port, envName });
     browser = await chromium.launch({ headless: true });
     return await runFn({ browser, port, server, outDir });
   } finally {

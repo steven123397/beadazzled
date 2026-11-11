@@ -5,7 +5,7 @@ import path from 'node:path';
 import { test } from 'node:test';
 
 import { scriptFor, spawnCheck, withTempRoots } from './helpers.mjs';
-import { writeFixture } from './release-fixtures.mjs';
+import { publicKeyBlob, writeFixture } from './release-fixtures.mjs';
 
 const scriptPath = scriptFor('verify-release');
 const { makeRoot } = withTempRoots({ prefix: 'beadazzled-release-' });
@@ -123,4 +123,25 @@ test('an expected SHA-256 that does not match fails', () => {
 
   assert.equal(result.status, 1);
   assert.match(result.stderr, /SHA-256 is/);
+});
+
+test('a literal --public-key falls back when no such file exists', () => {
+  const root = makeRoot();
+  const { installer } = writeFixture(root);
+
+  const result = run(root, installer, ['--public-key', publicKeyBlob]);
+
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.equal(JSON.parse(result.stdout).signature.verified, true);
+});
+
+test('a --public-key that names a directory fails instead of falling back', () => {
+  const root = makeRoot();
+  const { installer, dir } = writeFixture(root);
+
+  const result = run(root, installer, ['--public-key', dir]);
+
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /signature check failed: /);
+  assert.equal(JSON.parse(result.stdout).passed, false);
 });

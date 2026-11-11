@@ -16,12 +16,15 @@ PR 不会自动跑 `check:fast` / `check:task` / `check:deps`；`cargo fmt --che
 
 - 使用 **GitHub Actions**，`windows-latest` 单 job（`Quality gates (Windows)`），
   在 `pull_request` 与 `push` 到 `main` 时运行；产品只支持 Windows。
-- 顺序执行以下阻塞门禁：
-  1. `npm run check:fast`（typecheck、lint、secrets）
-  2. `npm run check:rust:style`（`cargo fmt --check` + `cargo clippy --all-targets -- -D warnings`）
-  3. `npm run build`（前端生产构建）
-  4. `npm run check:task`（架构边界、质量脚本单测、Vitest 覆盖率、bridge 覆盖率）
-  5. `npm run check:deps`（osv-scanner）
+- 顺序执行以下阻塞门禁（2026-11-11 与 workflow 实际步骤对齐）：
+  1. `npm run check:fast`（typecheck、lint、版本一致、secrets）
+  2. `npm run format:check`（Prettier；2026-11-11 接入，见 ADR-0013）
+  3. `npm run check:rust:style`（`cargo fmt --check` + `cargo clippy --all-targets -- -D warnings`）
+  4. `npm run build`（前端生产构建）
+  5. `npm run check:bundle`（bundle seam 与首屏预算，读取构建产物）
+  6. `npm run check:task`（check:bindings、架构边界、质量脚本单测、Vitest 单测、bridge 行覆盖率）
+  7. `npm run e2e`（浏览器套件，fake bridge；含 axe）
+  8. `npm run check:deps`（osv-scanner）
 - **外部工具固定版本并从官方 release 下载**，workflow 内校验 SHA256 后才使用：
   - gitleaks 8.30.1，`gitleaks_8.30.1_windows_x64.zip`，
     SHA256 `d29144deff3a68aa93ced33dddf84b7fdc26070add4aa0f4513094c8332afc4e`
@@ -43,8 +46,8 @@ PR 不会自动跑 `check:fast` / `check:task` / `check:deps`；`cargo fmt --che
   独立 job 优化，不降低门禁强度。
 - 升级 gitleaks / osv-scanner / cargo-llvm-cov 时，必须同时更新 workflow 中
   的版本与 SHA256，并同步 CONSTRAINTS 与本节记录。
-- E2E、安装包体积、性能与 a11y 检查仍不在本 workflow 中；它们由各自阶段的
-  issue 接线，CONSTRAINTS 的 Exceptions 保持登记。
+- E2E（含 axe）已于 2026-11-04 接入本 workflow；安装包体积与性能测量仍不在
+  本 workflow 中，由各自阶段的 issue 接线，CONSTRAINTS 的 Exceptions 保持登记。
 
 ## 被拒绝的备选
 
@@ -74,3 +77,12 @@ PR 不会自动跑 `check:fast` / `check:task` / `check:deps`；`cargo fmt --che
   （`endOfLine=auto`）与存量修复见 [ADR-0013](0013-prettier-eol-auto-and-ci-format-gate.md)。
 - 格式检查不并入 `check:fast`：编辑循环保持 ≤5s 预算，全仓格式检查只在
   CI 层执行。
+
+## 附注：2026-11-11 check:task 描述同步（bza-pzb.1）
+
+- `check:task` 中的 `test:unit` 为纯 Vitest 单测运行，**不采集无阈值的
+  Vitest 覆盖率**；上文门禁清单已据此修正。前端覆盖率门槛仍按
+  CONSTRAINTS 的 Exceptions 登记（无门槛、待基线），bridge 行覆盖率
+  ≥80% 门禁不变；本附注不恢复采集，也不弱化任何现有检查。
+- 同次把门禁清单与 `ci.yml` 实际步骤对齐：`format:check`、`check:bundle`
+  与浏览器 `e2e` 均早已或现已接入，旧清单未反映。

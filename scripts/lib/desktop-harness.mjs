@@ -9,12 +9,13 @@ import { randomUUID } from 'node:crypto';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { setTimeout as sleep } from 'node:timers/promises';
 
 import { chromium } from '@playwright/test';
 
 import { makeIssue, makeIssues } from './seam.mjs';
 
-export const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+export { sleep };
 
 /** Deterministic tickets close to a real workspace; every one is unblocked. */
 export function fixtureIssueLines(count) {

@@ -55,8 +55,10 @@
 | 交还给人之前 | ≤ 90s | bridge 单测 + 改动行覆盖率 + 架构边界 |
 | CI / review | 不限 | 全量测试、Rust 风格、依赖扫描、构建、体积与性能测量 |
 
-CI 由 `.github/workflows/ci.yml` 执行（PR 与 main push）：`check:fast`、
-`format:check`、`check:rust:style`、`check:task`、`check:deps`、`build`。外部工具固定版本并经
+CI 由 `.github/workflows/ci.yml` 执行（PR 与 main push），按序为：`check:fast`、
+`format:check`、`check:rust:style`、`build`、`check:bundle`、`check:task`、
+浏览器 `e2e`（含 axe）、`check:deps`。`check:task` 中的 `test:unit` 不采集
+无阈值 Vitest 覆盖率；前端覆盖率门槛见 Exceptions。外部工具固定版本并经
 SHA256 校验：gitleaks 8.30.1、osv-scanner 2.7.0，通过 `GITLEAKS_PATH` /
 `OSV_SCANNER_PATH` 注入；CI 不解析 PATH 或 `%LOCALAPPDATA%`。显式注入的路径
 若不存在则直接失败，不回退 PATH / WinGet。见

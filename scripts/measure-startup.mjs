@@ -22,10 +22,10 @@ import { createReadStream, existsSync, readdirSync, readFileSync, statSync } fro
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { setTimeout as sleep } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
 
 import { parseOptions, runMain } from './lib/cli.mjs';
-import { sleep } from './lib/desktop-harness.mjs';
 import { DEFAULT_RELEASE_EXE_REL, releaseExe } from './lib/paths.mjs';
 import { round, summarize } from './lib/startup-stats.mjs';
 

@@ -80,3 +80,15 @@ test('a missing signature is reported instead of writing a manifest', () => {
   assert.equal(made.status, 1);
   assert.match(made.stderr, /missing signature/);
 });
+
+test('the signature is checked before the installer is hashed', () => {
+  const root = makeRoot();
+  writeRepo(root);
+  // Neither the installer nor its .sig exists: the signature error wins.
+  const installer = path.join(root, 'beadazzled_0.1.0_x64-setup.exe');
+
+  const made = spawnCheck(makeScript, ['--root', root, '--installer', installer]);
+
+  assert.equal(made.status, 1);
+  assert.match(made.stderr, /missing signature/);
+});
