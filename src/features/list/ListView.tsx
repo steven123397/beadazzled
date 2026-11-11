@@ -7,7 +7,13 @@ import type { Issue, SyncState } from '@/bindings/bd';
 import { Button } from '@/components/ui/button';
 import { StateBadge } from '@/components/ui/state-badge';
 import { FilterBar } from '@/components/filter-bar';
-import { EmptyState, ErrorState, HEALTHY, StaleBanner, useOpenIssue } from '@/components/view-states';
+import {
+  EmptyState,
+  ErrorState,
+  HEALTHY,
+  StaleBanner,
+  useOpenIssue,
+} from '@/components/view-states';
 import { isEditableTarget, isOverlayOpen, isViewTarget } from '@/lib/dom/focus';
 import { useI18n } from '@/lib/i18n/I18nProvider';
 import { indexById } from '@/lib/issues';
@@ -26,7 +32,6 @@ import { Row, rowId } from './Row';
 const ROW_HEIGHT = 42;
 const OVERSCAN = 10;
 const INITIAL_RECT = { width: 0, height: 600 };
-
 
 type ListItem = { kind: 'header'; key: string; count: number } | { kind: 'row'; issue: Issue };
 
@@ -340,7 +345,6 @@ export function ListView({ projectId, issues, syncState = HEALTHY, onRefresh }: 
       ) : syncState.kind === 'bd-unavailable' && total === 0 ? (
         <ErrorState message={syncState.error.message} onRefresh={onRefresh} />
       ) : visible.length === 0 && activeFilters ? (
-
         <NoMatchState onClear={clearFilters} />
       ) : (
         <div

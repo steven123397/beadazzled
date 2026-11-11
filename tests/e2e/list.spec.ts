@@ -61,10 +61,7 @@ test('a 1000-issue list virtualizes, navigates with J/K and restores focus', asy
 
 test('typing a multi-word query keeps its spaces', async ({ page }) => {
   await installFakeBridge(page, {
-    issues: [
-      makeIssue(1, { title: 'Fix scroll' }),
-      makeIssue(2, { title: 'Fix board' }),
-    ],
+    issues: [makeIssue(1, { title: 'Fix scroll' }), makeIssue(2, { title: 'Fix board' })],
   });
   await page.goto('/#/w/p1/list');
 

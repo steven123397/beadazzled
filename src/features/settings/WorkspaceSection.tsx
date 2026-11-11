@@ -122,7 +122,6 @@ export function WorkspaceSection({ pickDirectory = defaultPicker }: WorkspaceSec
         </Button>
       }
     >
-
       {shownError === null ? null : (
         <p role="alert" className="text-xs text-destructive">
           {shownError}

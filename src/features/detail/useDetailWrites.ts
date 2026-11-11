@@ -18,12 +18,7 @@ export interface UseDetailWritesOptions {
   onBack: () => void;
 }
 
-export function useDetailWrites({
-  issue,
-  writes,
-  loading,
-  onBack,
-}: UseDetailWritesOptions) {
+export function useDetailWrites({ issue, writes, loading, onBack }: UseDetailWritesOptions) {
   const { t } = useI18n();
   const [editing, setEditing] = useState<EditableField | null>(null);
   // Every local draft on the page reports up, so navigation asks once no

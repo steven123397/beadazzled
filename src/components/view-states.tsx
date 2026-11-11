@@ -46,7 +46,10 @@ export function StateScreen({
   return (
     <div
       role={role}
-      className={cn('flex flex-1 flex-col items-center justify-center gap-2.5 p-6 text-center', className)}
+      className={cn(
+        'flex flex-1 flex-col items-center justify-center gap-2.5 p-6 text-center',
+        className
+      )}
     >
       <StateBadge tone={tone} icon={icon} />
       <p className={cn('text-sm font-medium', tone === 'danger' && 'text-destructive')}>{title}</p>

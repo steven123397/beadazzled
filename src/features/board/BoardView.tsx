@@ -15,7 +15,13 @@ import { useParams } from 'react-router-dom';
 
 import type { Issue, SyncState } from '@/bindings/bd';
 import { FilterBar } from '@/components/filter-bar';
-import { EmptyState, ErrorState, HEALTHY, StaleBanner, useOpenIssue } from '@/components/view-states';
+import {
+  EmptyState,
+  ErrorState,
+  HEALTHY,
+  StaleBanner,
+  useOpenIssue,
+} from '@/components/view-states';
 import { isEditableTarget, isOverlayOpen, isViewTarget } from '@/lib/dom/focus';
 import { describeError } from '@/lib/errors';
 import type { MessageKey } from '@/lib/i18n';
@@ -39,7 +45,6 @@ import { BoardDragOverlay } from './DragOverlay';
 import { firstCardId, focusedCard, moveFocus, type FocusKey } from './keyboard';
 import { adjacentDroppableColumn, planMove, type MoveRejection } from './move';
 import { loadBoardPosition, saveBoardPosition } from './position';
-
 
 type BoardState = 'loading' | 'empty' | 'bd-unavailable' | 'ready';
 
@@ -364,7 +369,16 @@ export function BoardView({
 
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [activeDrag, attemptMove, board.columns, focusedId, layout.positions, openIssue, requestFocus, t]);
+  }, [
+    activeDrag,
+    attemptMove,
+    board.columns,
+    focusedId,
+    layout.positions,
+    openIssue,
+    requestFocus,
+    t,
+  ]);
 
   const total = issues.length;
   const state: BoardState =
@@ -403,7 +417,6 @@ export function BoardView({
       {syncState.kind === 'bd-unavailable' && total > 0 ? (
         <StaleBanner onRefresh={onRefresh} />
       ) : null}
-
 
       {/* Both live regions stay mounted: a region inserted together with its
           text is not announced by most screen readers. The visible bar below
@@ -512,4 +525,3 @@ function LoadingBoard() {
     </div>
   );
 }
-

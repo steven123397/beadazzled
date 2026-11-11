@@ -155,7 +155,5 @@ export function makeIssue(idOrOverrides = {}, maybeOverrides = {}) {
 }
 
 export function makeIssues(count, map) {
-  return Array.from({ length: count }, (_, index) =>
-    map ? map(index) : makeIssue(index)
-  );
+  return Array.from({ length: count }, (_, index) => (map ? map(index) : makeIssue(index)));
 }

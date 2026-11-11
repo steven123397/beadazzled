@@ -145,8 +145,5 @@ test('a passing check restores the timestamp as well as the content', async () =
   assert.equal(result.status, 0, result.stdout + result.stderr);
   assert.equal(readFileSync(bindingsPath(root), 'utf8'), committed);
   const after = statSync(bindingsPath(root)).mtimeMs;
-  assert.ok(
-    Math.abs(after - before) < 5,
-    `check must not bump the mtime: ${before} -> ${after}`
-  );
+  assert.ok(Math.abs(after - before) < 5, `check must not bump the mtime: ${before} -> ${after}`);
 });

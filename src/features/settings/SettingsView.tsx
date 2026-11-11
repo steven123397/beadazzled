@@ -64,10 +64,7 @@ export function SettingsView() {
         <ul className="mt-3 flex flex-col gap-0.5">
           {SECTIONS.map((key) => (
             <li key={key}>
-              <NavLink
-                to={`/settings/${key}`}
-                className={({ isActive }) => navLinkClass(isActive)}
-              >
+              <NavLink to={`/settings/${key}`} className={({ isActive }) => navLinkClass(isActive)}>
                 {t(SECTION_LABELS[key])}
               </NavLink>
             </li>

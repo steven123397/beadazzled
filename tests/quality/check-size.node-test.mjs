@@ -1,11 +1,5 @@
 import assert from 'node:assert/strict';
-import {
-  closeSync,
-  ftruncateSync,
-  mkdirSync,
-  openSync,
-  writeSync,
-} from 'node:fs';
+import { closeSync, ftruncateSync, mkdirSync, openSync, writeSync } from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
 

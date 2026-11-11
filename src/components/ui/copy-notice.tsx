@@ -40,12 +40,7 @@ export interface CopyNoticeProps extends HTMLAttributes<HTMLParagraphElement> {
   variant?: 'inline' | 'toast';
 }
 
-export function CopyNotice({
-  result,
-  variant = 'inline',
-  className,
-  ...props
-}: CopyNoticeProps) {
+export function CopyNotice({ result, variant = 'inline', className, ...props }: CopyNoticeProps) {
   const { t } = useI18n();
 
   if (variant === 'toast') {

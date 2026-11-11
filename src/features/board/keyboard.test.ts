@@ -75,4 +75,3 @@ test('resolves focus using lookup map and falls back gracefully', () => {
   // Stale/missing lookup entry falls back to linear search
   expect(findFocus(columns, 'bza-4', lookup)).toEqual({ columnIndex: 3, cardIndex: 0 });
 });
-

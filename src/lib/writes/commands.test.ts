@@ -97,8 +97,9 @@ test('update carries the conflict guards used by board drags', () => {
     commandOf(updateIssue('bza-1', { status: 'closed', ifStatus: 'in_progress' }))
   ).toMatchObject({ Update: { if_status: 'in_progress' } });
 
-  expect(commandOf(updateIssue('bza-1', { assignee: { set: 'ada' }, ifAssignee: '' })))
-    .toMatchObject({ Update: { if_assignee: '' } });
+  expect(
+    commandOf(updateIssue('bza-1', { assignee: { set: 'ada' }, ifAssignee: '' }))
+  ).toMatchObject({ Update: { if_assignee: '' } });
 });
 
 test('update rejects an action with no field changes', () => {

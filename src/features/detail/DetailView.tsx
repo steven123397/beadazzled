@@ -180,7 +180,10 @@ export function DetailView({
   const collapsibleFields = [
     { key: 'design' as const, label: t('detail.design'), content: design },
     { key: 'notes' as const, label: t('detail.notes'), content: notes },
-  ].filter((item): item is { key: 'design' | 'notes'; label: string; content: string } => item.content !== null);
+  ].filter(
+    (item): item is { key: 'design' | 'notes'; label: string; content: string } =>
+      item.content !== null
+  );
 
   return (
     <div className="w-full pb-8">
@@ -329,12 +332,7 @@ function EditableSection({
           {config.label}
         </h2>
         {canEdit && editing === null ? (
-          <Button
-            variant="ghost"
-            size="xs"
-            onClick={onBeginEdit}
-            className="text-muted-foreground"
-          >
+          <Button variant="ghost" size="xs" onClick={onBeginEdit} className="text-muted-foreground">
             {editText}
           </Button>
         ) : null}

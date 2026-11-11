@@ -310,9 +310,15 @@ export function Shell({
           </AppRefreshProvider>
         </main>
       </div>
-      <StatusBar lastRefreshAt={lastRefreshAt} open={overlay === 'diagnostics'} onOpen={openDiagnostics} />
+      <StatusBar
+        lastRefreshAt={lastRefreshAt}
+        open={overlay === 'diagnostics'}
+        onOpen={openDiagnostics}
+      />
       {overlay === 'help' ? <HelpPanel shortcuts={shortcuts} onClose={closeOverlay} /> : null}
-      {overlay === 'palette' ? <CommandPalette commands={paletteCommands} onClose={closeOverlay} /> : null}
+      {overlay === 'palette' ? (
+        <CommandPalette commands={paletteCommands} onClose={closeOverlay} />
+      ) : null}
       {overlay === 'diagnostics' ? (
         <Diagnostics
           lastSeq={lastSeq}

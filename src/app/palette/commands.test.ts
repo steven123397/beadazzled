@@ -137,7 +137,10 @@ test('ranks 1200 candidates in under 50ms', () => {
 
 test('builds no issue commands while no workspace is open', () => {
   const navigate = vi.fn();
-  const commands = buildCommands([issue('bza-1', 'Fix the shell')], context({ project: null, navigate }));
+  const commands = buildCommands(
+    [issue('bza-1', 'Fix the shell')],
+    context({ project: null, navigate })
+  );
 
   expect(commands.some((command) => command.group === 'Issues')).toBe(false);
   expect(commands.some((command) => command.id === 'issue:bza-1')).toBe(false);

@@ -35,10 +35,11 @@ test('an explicit empty value differs from a missing one', () => {
 });
 
 test('textField extracts non-empty string and ignores missing or whitespace values', () => {
-  expect(textField(issue({ design: 'Architecture diagram' }), 'design')).toBe('Architecture diagram');
+  expect(textField(issue({ design: 'Architecture diagram' }), 'design')).toBe(
+    'Architecture diagram'
+  );
   expect(textField(issue({ notes: 'Note text' }), 'notes')).toBe('Note text');
   expect(textField(issue(), 'design')).toBeNull();
   expect(textField(issue({ design: '' }), 'design')).toBeNull();
   expect(textField(issue({ design: '   ' }), 'design')).toBeNull();
 });
-

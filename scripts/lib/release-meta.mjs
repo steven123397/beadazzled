@@ -53,4 +53,3 @@ export function readReleaseMeta(root) {
 export function readReleaseVersions(root) {
   return readReleaseMeta(root).versions;
 }
-

@@ -227,10 +227,7 @@ export async function installFakeBridge(
 
 /** Commands recorded since the page loaded (or since the last reset). */
 export function invokeLog(page: Page): Promise<string[]> {
-  return page.evaluate(
-    (key) => (window as unknown as Record<string, string[]>)[key],
-    INVOKE_LOG
-  );
+  return page.evaluate((key) => (window as unknown as Record<string, string[]>)[key], INVOKE_LOG);
 }
 
 export async function clearInvokeLog(page: Page): Promise<void> {
