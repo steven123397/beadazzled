@@ -5,6 +5,29 @@ import { readJson } from './paths.mjs';
 
 export const SEMVER = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/;
 export const UPDATER_PLATFORM = 'windows-x86_64';
+export const RELEASE_URL_PREFIX = 'https://github.com/steven123397/beadazzled/releases/';
+
+/** Accept only the canonical URL of this version's installer in our release. */
+export function requireReleaseUrl(value, { version, installerName }) {
+  if (!SEMVER.test(version)) {
+    throw new Error(`release version must be semantic: ${version}`);
+  }
+  const expected = new URL(`${RELEASE_URL_PREFIX}download/v${version}/${installerName}`);
+  let url;
+  try {
+    if (typeof value === 'string') {
+      url = new URL(value);
+    }
+  } catch {
+    // The validation error below is more actionable than a parser exception.
+  }
+  // Comparing canonical hrefs pins scheme, host, version directory and asset
+  // name together; raw-prefix checks miss dot-segment repository escapes.
+  if (url === undefined || url.href !== expected.href) {
+    throw new Error(`release URL must use https and match ${expected.href}: ${value}`);
+  }
+  return url;
+}
 
 export function cargoVersion(root) {
   const text = readFileSync(path.join(root, 'src-tauri/Cargo.toml'), 'utf8');

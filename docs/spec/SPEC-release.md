@@ -63,14 +63,17 @@
 沿用 paper-30min 的经验，每层证据单独记录，未执行的项目写明「未验证」，不因一次放行永久降低门槛。
 
 1. **源码可交付**：目标版本在 `main`；代码审查收敛；版本号三处一致；CONSTRAINTS 全部检查通过（CI 或本地等效证据）。
-2. **本地产物一致**：从最终源码重新构建并签名；核对安装包文件名、实际字节与 `.sig`、`latest.json` 中的版本与 URL；运行 `npm run verify:release`。
+2. **本地产物一致**：从最终源码重新构建并签名；核对安装包文件名、实际字节与 `.sig`、`latest.json` 中的版本与 URL；`npm run make:latest` 在写 manifest 前用 updater 公钥验签，并只接受与版本及安装包名一致的规范 GitHub Releases HTTPS URL；生成后运行 `npm run verify:release` 独立复核。
 3. **远端附件一致**：上传后从 GitHub 下载回 `.exe`、`.sig`、`latest.json`，重新验签并比较哈希；确认 `latest` 端点实际返回目标版本。
 4. **安装行为可用**：在真实 Windows 上走查：全新安装、原地升级（从上一版本）、应用内更新、卸载；列出未覆盖的组合。
 
 `npm run verify:release` 至少检查：
 
 - `.sig` 与安装包字节匹配（用公钥验证）；
-- `latest.json` 的版本、平台条目、URL、`signature` 与实际产物一致；
+- `latest.json` 的版本、平台条目、URL、`signature` 与实际产物一致；URL 规范化后必须与
+  `https://github.com/steven123397/beadazzled/releases/download/v<version>/<installer>`
+  完全一致，防止点段逃逸到非预期仓库；安装包版本号按分隔符精确匹配，避免
+  `0.1.10` 误配 `0.1.1`；
 - 安装包 SHA-256 与清单记录一致；
 - 版本号三处一致且与 `latest.json` 相同；
 - 输出可粘贴的证据摘要（不写文件、不含私钥）。
@@ -80,8 +83,10 @@
 - 发布在 GitHub Releases（公开仓库），tag 形如 `v0.1.0`。
 - `docs/releases/<version>.md` 是**给用户的发布说明**（`gh release create --notes-file`
   直接使用）：这个版本是什么、安装与卸载、SmartScreen、变更、已知限制。
-- `docs/releases/<version>-evidence.md` 记录内部证据：四层验证、发布步骤、性能数字、
-  未验证项与回滚说明。两者分开，避免把内部检查清单放进 Release 页面。
+- 内部证据记录在 OpenViking peer resource
+  `viking://user/win-dev/peers/github.com-steven123397-beadazzled/resources/releases/`：
+  四层验证、发布步骤、性能数字、未验证项与回滚说明按版本归档。仓库只保留
+  用户可见的 `docs/releases/<version>.md`，不再创建 `<version>-evidence.md`。
 - CI（GitHub Actions）负责检查；发布构建在本机完成（签名密钥不进入仓库），上传用 `gh release upload`。
 - 首个正式版 v0.1.0 之前允许 `v0.1.0-beta.N` 预发布，但不得占用 `latest` 端点。
 
@@ -97,7 +102,7 @@ CONSTRAINTS 中的以下检查在发布前必须跑过并留证据：
 - 3 条真实 E2E 全绿
 - 依赖高危漏洞 0、secrets 0
 
-测量脚本产出的数字写入 `docs/releases/<version>-evidence.md`；未达标按 CONSTRAINTS 的 block/warn 规则处理，不得改预算迁就结果。
+测量脚本产出的数字写入上述 OpenViking 发布证据；未达标按 CONSTRAINTS 的 block/warn 规则处理，不得改预算迁就结果。
 
 ## Acceptance Criteria
 
@@ -108,7 +113,7 @@ CONSTRAINTS 中的以下检查在发布前必须跑过并留证据：
 5. **清单一致**：`verify:release` 对正确产物通过；对错误签名、版本不一致、URL 不匹配分别失败。
 6. **密钥不泄露**：gitleaks 0；仓库历史与诊断输出中无私有密钥或口令。
 7. **SmartScreen 如实说明**：README 与发布说明写明「未做 Authenticode 签名，系统可能提示未知发布者」，不暗示已获信任。
-8. **启动预算**：冷启动 ≤2.0s（P95）、热启动 ≤800ms，数字记录在发布说明。
+8. **启动预算**：冷启动 ≤2.0s（P95）、热启动 ≤800ms，数字记录在 OpenViking 发布证据。
 9. **E2E**：安装→列表、详情阅读、改状态并持久化三条真实 E2E 全绿。
 10. **无 bd 阻塞**：更新检查与启动不调用 bd；bd 不可用时更新流程仍可用。
 
@@ -116,6 +121,7 @@ CONSTRAINTS 中的以下检查在发布前必须跑过并留证据：
 
 - `npm run build:app` — 构建 NSIS 安装包
 - `npm run check:size` — 体积预算
+- `npm run make:latest` — 验签并生成更新清单
 - `npm run verify:release` — 本地产物与清单校验
 - `npm run e2e:real -- --installer <exe>` — 真实安装 → 列表 → 详情 → 改状态 → 卸载
 - `npm run measure:startup|memory|navigation|scroll`
@@ -132,7 +138,7 @@ scripts/verify-release.mjs       签名、清单、哈希校验
 scripts/make-latest-json.mjs     生成更新清单
 scripts/e2e-real.mjs             真实安装 → 列表 → 详情 → 改状态 → 卸载
 scripts/measure-*.mjs            启动/内存/导航/滚动
-docs/releases/                   版本发布记录
+docs/releases/                   用户可见的版本发布说明
 .github/workflows/ci.yml         typecheck / lint / tests / gitleaks / osv / e2e
 ```
 

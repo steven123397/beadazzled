@@ -68,6 +68,19 @@ test('a manifest version that differs from the sources fails', () => {
   assert.match(result.stderr, /latest\.json is 0\.1\.1/);
 });
 
+test('an installer version must match between separators', () => {
+  const root = makeRoot();
+  const { installer } = writeFixture(root, {
+    version: '0.1.1',
+    installerName: 'beadazzled_0.1.10_x64-setup.exe',
+  });
+
+  const result = run(root, installer);
+
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /does not name version 0\.1\.1/);
+});
+
 test('a manifest URL that names another file fails', () => {
   const root = makeRoot();
   const { installer } = writeFixture(root);
@@ -80,7 +93,28 @@ test('a manifest URL that names another file fails', () => {
   const result = run(root, installer);
 
   assert.equal(result.status, 1);
-  assert.match(result.stderr, /names other\.exe/);
+  assert.match(result.stderr, /release URL must use https and match/);
+});
+
+test('a manifest URL outside the pinned GitHub release prefix fails', () => {
+  for (const url of [
+    'http://github.com/steven123397/beadazzled/releases/download/v0.1.0/beadazzled_0.1.0_x64-setup.exe',
+    'https://example.com/steven123397/beadazzled/releases/download/v0.1.0/beadazzled_0.1.0_x64-setup.exe',
+    'https://github.com/steven123397/beadazzled/releases/../../../attacker/repo/releases/download/v0.1.0/beadazzled_0.1.0_x64-setup.exe',
+    'https://github.com/steven123397/beadazzled/releases/%2e%2e/%2e%2e/%2e%2e/attacker/repo/releases/download/v0.1.0/beadazzled_0.1.0_x64-setup.exe',
+  ]) {
+    const root = makeRoot();
+    const { installer } = writeFixture(root);
+    const manifestPath = path.join(path.dirname(installer), 'latest.json');
+    const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
+    manifest.platforms['windows-x86_64'].url = url;
+    writeFileSync(manifestPath, JSON.stringify(manifest));
+
+    const result = run(root, installer);
+
+    assert.equal(result.status, 1, url);
+    assert.match(result.stderr, /release URL must use https and match/);
+  }
 });
 
 test('a manifest missing the windows-x86_64 platform entry fails', () => {
@@ -125,7 +159,7 @@ test('an expected SHA-256 that does not match fails', () => {
   assert.match(result.stderr, /SHA-256 is/);
 });
 
-test('a literal --public-key falls back when no such file exists', () => {
+test('a literal --public-key is accepted as key material', () => {
   const root = makeRoot();
   const { installer } = writeFixture(root);
 
@@ -135,11 +169,50 @@ test('a literal --public-key falls back when no such file exists', () => {
   assert.equal(JSON.parse(result.stdout).signature.verified, true);
 });
 
-test('a --public-key that names a directory fails instead of falling back', () => {
+test('--public-key-file reads key material from the named file', () => {
+  const root = makeRoot();
+  const { installer, dir } = writeFixture(root);
+  const keyFile = path.join(dir, 'updater.pub');
+  writeFileSync(keyFile, publicKeyBlob);
+
+  const result = run(root, installer, ['--public-key-file', keyFile]);
+
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.equal(JSON.parse(result.stdout).signature.verified, true);
+});
+
+test('--public-key never treats a path as a key file', () => {
+  const root = makeRoot();
+  const { installer, dir } = writeFixture(root);
+  const keyFile = path.join(dir, 'updater.pub');
+  writeFileSync(keyFile, publicKeyBlob);
+
+  const result = run(root, installer, ['--public-key', keyFile]);
+
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /signature check failed:/);
+});
+
+test('the two public key options are mutually exclusive', () => {
   const root = makeRoot();
   const { installer, dir } = writeFixture(root);
 
-  const result = run(root, installer, ['--public-key', dir]);
+  const result = run(root, installer, [
+    '--public-key',
+    publicKeyBlob,
+    '--public-key-file',
+    path.join(dir, 'updater.pub'),
+  ]);
+
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /mutually exclusive/);
+});
+
+test('a --public-key-file that names a directory fails instead of falling back', () => {
+  const root = makeRoot();
+  const { installer, dir } = writeFixture(root);
+
+  const result = run(root, installer, ['--public-key-file', dir]);
 
   assert.equal(result.status, 1);
   // The filesystem error itself must surface. If EISDIR were swallowed into

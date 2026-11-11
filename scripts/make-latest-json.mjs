@@ -1,19 +1,26 @@
 #!/usr/bin/env node
 // Builds the latest.json manifest the updater endpoint serves.
 //
-// It only describes an artifact that already exists: the installer and the
-// `.sig` produced by `tauri build` with TAURI_SIGNING_PRIVATE_KEY set. The
-// script never signs or uploads anything, and it never touches the private key.
+// It only describes an artifact that already exists and verifies against the
+// updater public key: the installer and the `.sig` produced by `tauri build`
+// with TAURI_SIGNING_PRIVATE_KEY set. The script never signs or uploads anything,
+// and it never touches the private key.
 //
 // Usage: node scripts/make-latest-json.mjs --installer <exe> [--version <v>]
 //          [--url <download url>] [--notes <text>] [--root <repo>]
 import { createHash } from 'node:crypto';
-import { createReadStream, readFileSync, writeFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 
 import { parseOptions, runMain } from './lib/cli.mjs';
+import { verifyMinisign } from './lib/minisign.mjs';
 import { projectRoot } from './lib/paths.mjs';
-import { UPDATER_PLATFORM, readReleaseVersions } from './lib/release-meta.mjs';
+import {
+  readReleaseMeta,
+  readReleaseVersions,
+  requireReleaseUrl,
+  UPDATER_PLATFORM,
+} from './lib/release-meta.mjs';
 
 const defaultRoot = projectRoot(import.meta.url);
 const PLATFORM = UPDATER_PLATFORM;
@@ -24,7 +31,7 @@ function usage() {
     '',
     '  --installer <path>  signed installer (required; reads <installer>.sig)',
     '  --version <v>       version to publish (default: package.json)',
-    '  --url <url>         download URL (default: GitHub release for the version)',
+    '  --url <url>         must match the default canonical release asset URL',
     '  --notes <text>      release notes for the manifest',
     '  --root <path>       repository root (default: this checkout)',
   ].join('\n');
@@ -51,15 +58,7 @@ function parseArgs(argv) {
   return options;
 }
 
-async function computeSha256(filePath) {
-  const hash = createHash('sha256');
-  for await (const chunk of createReadStream(filePath)) {
-    hash.update(chunk);
-  }
-  return hash.digest('hex');
-}
-
-runMain('make-latest-json', async () => {
+runMain('make-latest-json', () => {
   const options = parseArgs(process.argv.slice(2));
   const signaturePath = `${options.installer}.sig`;
 
@@ -77,9 +76,9 @@ runMain('make-latest-json', async () => {
     throw error;
   }
 
-  let sha256;
+  let installerBytes;
   try {
-    sha256 = await computeSha256(options.installer);
+    installerBytes = readFileSync(options.installer);
   } catch (error) {
     if (error.code === 'ENOENT') {
       throw new Error(`missing installer ${options.installer}`);
@@ -87,17 +86,34 @@ runMain('make-latest-json', async () => {
     throw error;
   }
 
+  // Never publish a manifest for bytes the updater itself would reject.
+  const { publicKey } = readReleaseMeta(options.root);
+  if (publicKey === null) {
+    throw new Error('no updater public key: set plugins.updater.pubkey in tauri.conf.json');
+  }
+  const verification = verifyMinisign({
+    publicKey,
+    signature,
+    data: installerBytes,
+  });
+  if (!verification.ok) {
+    throw new Error(`signature verification failed: ${verification.reason}`);
+  }
+  const sha256 = createHash('sha256').update(installerBytes).digest('hex');
+
   const installerName = path.basename(options.installer);
-  const url =
+  const url = requireReleaseUrl(
     options.url ??
-    `https://github.com/steven123397/beadazzled/releases/download/v${options.version}/${installerName}`;
+      `https://github.com/steven123397/beadazzled/releases/download/v${options.version}/${installerName}`,
+    { version: options.version, installerName }
+  );
 
   const manifest = {
     version: options.version,
     notes: options.notes,
     pub_date: new Date().toISOString(),
     platforms: {
-      [PLATFORM]: { signature, url, sha256 },
+      [PLATFORM]: { signature, url: url.href, sha256 },
     },
   };
   const target = path.join(path.dirname(options.installer), 'latest.json');

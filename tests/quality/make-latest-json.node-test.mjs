@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
 
@@ -91,6 +91,101 @@ test('the signature is checked before the installer is hashed', () => {
 
   assert.equal(made.status, 1);
   assert.match(made.stderr, /missing signature/);
+});
+
+test('an invalid signature is rejected instead of writing a manifest', () => {
+  const root = makeRoot();
+  writeRepo(root);
+  const dir = path.join(root, 'release');
+  const { installer } = writeInstaller(dir, {
+    signature: signatureBlob(Buffer.from('different installer bytes')),
+  });
+
+  const made = spawnCheck(makeScript, ['--root', root, '--installer', installer]);
+
+  assert.equal(made.status, 1);
+  assert.match(made.stderr, /signature does not match the artifact/);
+  assert.equal(existsSync(path.join(dir, 'latest.json')), false);
+});
+
+test('a download URL outside the pinned GitHub release prefix is rejected', () => {
+  const root = makeRoot();
+  writeRepo(root);
+  const dir = path.join(root, 'release');
+  const { installer } = writeInstaller(dir);
+
+  const made = spawnCheck(makeScript, [
+    '--root',
+    root,
+    '--installer',
+    installer,
+    '--url',
+    'https://example.com/beadazzled_0.1.0_x64-setup.exe',
+  ]);
+
+  assert.equal(made.status, 1);
+  assert.match(made.stderr, /release URL must use https and match/);
+  assert.equal(existsSync(path.join(dir, 'latest.json')), false);
+});
+
+test('a canonicalized URL cannot escape the pinned repository', () => {
+  const root = makeRoot();
+  writeRepo(root);
+  const dir = path.join(root, 'release');
+  const { installer, installerName } = writeInstaller(dir);
+
+  const made = spawnCheck(makeScript, [
+    '--root',
+    root,
+    '--installer',
+    installer,
+    '--url',
+    `https://github.com/steven123397/beadazzled/releases/%2e%2e/%2e%2e/%2e%2e/attacker/repo/releases/download/v0.1.0/${installerName}`,
+  ]);
+
+  assert.equal(made.status, 1);
+  assert.match(made.stderr, /release URL must use https and match/);
+  assert.equal(existsSync(path.join(dir, 'latest.json')), false);
+});
+
+test('a custom URL must match the version directory and installer name', () => {
+  for (const url of [
+    'https://github.com/steven123397/beadazzled/releases/download/v0.1.0/other.exe',
+    'https://github.com/steven123397/beadazzled/releases/download/v0.1.1/beadazzled_0.1.0_x64-setup.exe',
+  ]) {
+    const root = makeRoot();
+    writeRepo(root);
+    const dir = path.join(root, 'release');
+    const { installer } = writeInstaller(dir);
+
+    const made = spawnCheck(makeScript, ['--root', root, '--installer', installer, '--url', url]);
+
+    assert.equal(made.status, 1, url);
+    assert.match(made.stderr, /release URL must use https and match/);
+    assert.equal(existsSync(path.join(dir, 'latest.json')), false);
+  }
+});
+
+test('a path-like version cannot redirect the expected release URL', () => {
+  const root = makeRoot();
+  writeRepo(root);
+  const dir = path.join(root, 'release');
+  const { installer, installerName } = writeInstaller(dir);
+
+  const made = spawnCheck(makeScript, [
+    '--root',
+    root,
+    '--installer',
+    installer,
+    '--version',
+    '/../../../../../attacker/repo/releases/download/v0.1.0',
+    '--url',
+    `https://github.com/attacker/repo/releases/download/v0.1.0/${installerName}`,
+  ]);
+
+  assert.equal(made.status, 1);
+  assert.match(made.stderr, /release version must be semantic/);
+  assert.equal(existsSync(path.join(dir, 'latest.json')), false);
 });
 
 test('a missing installer with a present signature is still reported', () => {
