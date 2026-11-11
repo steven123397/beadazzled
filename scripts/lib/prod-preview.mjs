@@ -86,16 +86,21 @@ export async function withPreview(options, fn) {
   }
   const { port = 1432, envName = 'PORT' } = resolvedOptions ?? {};
   await rm(outDir, { recursive: true, force: true });
-  buildSeamBundle();
   let server;
   let browser;
   try {
+    buildSeamBundle();
     server = await servePreview({ port, envName });
     browser = await chromium.launch({ headless: true });
     return await runFn({ browser, port, server, outDir });
   } finally {
-    await browser?.close();
-    server?.kill();
-    await rm(outDir, { recursive: true, force: true });
+    // Each cleanup step must run even when the previous one rejects; the
+    // original error still propagates.
+    try {
+      await browser?.close();
+    } finally {
+      server?.kill();
+      await rm(outDir, { recursive: true, force: true });
+    }
   }
 }

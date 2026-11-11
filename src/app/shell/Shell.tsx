@@ -36,6 +36,7 @@ export function Shell({
   onRefresh?: () => void;
   /** Journal position reported by the sync store; 0 when sync is not running. */
   lastSeq?: number;
+  /** Writes queued behind the in-flight one. */
   pendingWrites?: number;
 }) {
   const { t, language, setLanguage } = useI18n();

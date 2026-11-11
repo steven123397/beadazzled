@@ -1,6 +1,6 @@
 import react from '@vitejs/plugin-react';
 import { fileURLToPath } from 'node:url';
-import { defineConfig } from 'vitest/config';
+import { configDefaults, defineConfig } from 'vitest/config';
 
 // .ts suites that need the jsdom project: they touch the DOM, browser
 // storage, renderHook, or import the CSS tokens (css is only enabled there).
@@ -48,7 +48,7 @@ export default defineConfig({
           environment: 'node',
           setupFiles: [],
           include: ['src/**/*.test.ts', 'src/app/shell/SyncStatus.test.tsx'],
-          exclude: jsdomTsSuites,
+          exclude: [...configDefaults.exclude, ...jsdomTsSuites],
         },
       },
       {
@@ -59,7 +59,7 @@ export default defineConfig({
           setupFiles: ['src/test/setup.ts'],
           include: ['src/**/*.test.tsx', ...jsdomTsSuites],
           // SyncStatus.test.tsx exercises pure label logic, not the DOM.
-          exclude: ['src/app/shell/SyncStatus.test.tsx'],
+          exclude: [...configDefaults.exclude, 'src/app/shell/SyncStatus.test.tsx'],
         },
       },
     ],

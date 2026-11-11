@@ -9,8 +9,8 @@
 仓库 Git 配置为 `core.autocrlf=true`，Windows 工作区跟踪文件为 CRLF，
 而 `.prettierrc` 未声明 `endOfLine`，Prettier 3 默认按 `lf` 检查。结果是
 `npm run format:check` 在本机一次性报告 286 个文件，检查事实上不可用；
-CI（`windows-latest`，checkout 后同样为 CRLF 工作区）也因此从未接入该
-门禁。Phase 1–5 期间积累了 55 个存在真实格式漂移的文件（24 个末尾缺换行，
+CI 也因此从未接入该门禁（无论 runner 检出为何种行尾，`auto` 均不依赖
+对 CI 工作区行尾的假设）。Phase 1–5 期间积累了 55 个存在真实格式漂移的文件（24 个末尾缺换行，
 31 个有换行/宽度差异），与行尾问题混在一起无法区分。
 
 ## 决策

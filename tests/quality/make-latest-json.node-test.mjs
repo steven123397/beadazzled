@@ -92,3 +92,15 @@ test('the signature is checked before the installer is hashed', () => {
   assert.equal(made.status, 1);
   assert.match(made.stderr, /missing signature/);
 });
+
+test('a missing installer with a present signature is still reported', () => {
+  const root = makeRoot();
+  writeRepo(root);
+  const installer = path.join(root, 'beadazzled_0.1.0_x64-setup.exe');
+  writeFileSync(`${installer}.sig`, 'signature bytes');
+
+  const made = spawnCheck(makeScript, ['--root', root, '--installer', installer]);
+
+  assert.equal(made.status, 1);
+  assert.match(made.stderr, /missing installer/);
+});

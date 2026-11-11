@@ -142,6 +142,9 @@ test('a --public-key that names a directory fails instead of falling back', () =
   const result = run(root, installer, ['--public-key', dir]);
 
   assert.equal(result.status, 1);
-  assert.match(result.stderr, /signature check failed: /);
+  // The filesystem error itself must surface. If EISDIR were swallowed into
+  // the literal-key fallback, decoding would fail later with a different
+  // message and this assertion would not hold.
+  assert.match(result.stderr, /signature check failed: .*EISDIR/);
   assert.equal(JSON.parse(result.stdout).passed, false);
 });
