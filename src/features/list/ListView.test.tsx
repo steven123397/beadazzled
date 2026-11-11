@@ -1,10 +1,9 @@
-import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { Link, MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { beforeEach, expect, test, vi } from 'vitest';
 
 import type { Issue, SyncState } from '@/bindings/bd';
-import { I18nProvider } from '@/lib/i18n/I18nProvider';
-import { makeIssue as issue } from '@/test/fixtures';
+import { makeIssue as issue, renderWithI18n } from '@/test/fixtures';
 
 import { ListView } from './ListView';
 import { LIST_POSITION_PREFIX, saveListPosition } from './position';
@@ -44,23 +43,21 @@ function renderList({
   withLink?: boolean;
 }) {
   const refresh = onRefresh ?? vi.fn();
-  render(
-    <I18nProvider initialLanguage="en">
-      <MemoryRouter initialEntries={[entry]}>
-        {withInput ? <input aria-label="Other input" /> : null}
-        {withLink ? <Link to="/w/p1/list">Go to list</Link> : null}
-        <Routes>
-          <Route
-            path="/w/:projectId/list"
-            element={
-              <ListView projectId="p1" issues={issues} syncState={syncState} onRefresh={refresh} />
-            }
-          />
-          <Route path="/w/:projectId/issue/:issueId" element={<div>detail</div>} />
-        </Routes>
-        <LocationProbe />
-      </MemoryRouter>
-    </I18nProvider>
+  renderWithI18n(
+    <MemoryRouter initialEntries={[entry]}>
+      {withInput ? <input aria-label="Other input" /> : null}
+      {withLink ? <Link to="/w/p1/list">Go to list</Link> : null}
+      <Routes>
+        <Route
+          path="/w/:projectId/list"
+          element={
+            <ListView projectId="p1" issues={issues} syncState={syncState} onRefresh={refresh} />
+          }
+        />
+        <Route path="/w/:projectId/issue/:issueId" element={<div>detail</div>} />
+      </Routes>
+      <LocationProbe />
+    </MemoryRouter>
   );
   return { refresh };
 }
@@ -189,17 +186,15 @@ test('a saved focus that is filtered out does not steal focus later', async () =
 });
 
 test('saves the scroll offset and focused row on unmount', async () => {
-  const view = render(
-    <I18nProvider initialLanguage="en">
-      <MemoryRouter initialEntries={['/w/p1/list']}>
-        <Routes>
-          <Route
-            path="/w/:projectId/list"
-            element={<ListView projectId="p1" issues={[issue('bza-1'), issue('bza-2')]} />}
-          />
-        </Routes>
-      </MemoryRouter>
-    </I18nProvider>
+  const view = renderWithI18n(
+    <MemoryRouter initialEntries={['/w/p1/list']}>
+      <Routes>
+        <Route
+          path="/w/:projectId/list"
+          element={<ListView projectId="p1" issues={[issue('bza-1'), issue('bza-2')]} />}
+        />
+      </Routes>
+    </MemoryRouter>
   );
 
   fireEvent.keyDown(window, { key: 'j' });

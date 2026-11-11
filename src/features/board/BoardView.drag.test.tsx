@@ -1,14 +1,13 @@
-import { act, render, screen, waitFor } from '@testing-library/react';
+import { act, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, expect, test, vi } from 'vitest';
 import type { ComponentProps } from 'react';
 import type { DragEndEvent } from '@dnd-kit/core';
 
 import type { Issue } from '@/bindings/bd';
-import { I18nProvider } from '@/lib/i18n/I18nProvider';
 import type { UseWrite } from '@/lib/writes/useWrite';
 import { fakeEchoWrites as fakeWrites } from '@/test/detail-writes';
-import { makeIssue as issue } from '@/test/fixtures';
+import { makeIssue as issue, renderWithI18n } from '@/test/fixtures';
 
 import { BoardView } from './BoardView';
 
@@ -35,17 +34,15 @@ vi.mock('@tanstack/react-virtual', async () => {
 });
 
 function renderBoard(issues: readonly Issue[], writes?: UseWrite) {
-  return render(
-    <I18nProvider initialLanguage="en">
-      <MemoryRouter initialEntries={['/w/p1/board']}>
-        <Routes>
-          <Route
-            path="/w/:projectId/board"
-            element={<BoardView projectId="p1" issues={issues} writes={writes} />}
-          />
-        </Routes>
-      </MemoryRouter>
-    </I18nProvider>
+  return renderWithI18n(
+    <MemoryRouter initialEntries={['/w/p1/board']}>
+      <Routes>
+        <Route
+          path="/w/:projectId/board"
+          element={<BoardView projectId="p1" issues={issues} writes={writes} />}
+        />
+      </Routes>
+    </MemoryRouter>
   );
 }
 

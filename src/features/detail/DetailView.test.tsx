@@ -6,6 +6,7 @@ import { I18nProvider } from '@/lib/i18n/I18nProvider';
 import { MAX_ACCEPTANCE_BYTES } from '@/lib/writes/commands';
 import type { UseWrite } from '@/lib/writes/useWrite';
 import { fakeWrites } from '@/test/detail-writes';
+import { renderWithI18n } from '@/test/fixtures';
 
 import { DetailView } from './DetailView';
 
@@ -51,10 +52,8 @@ function comment(id: string, text: string, createdAt: string): Comment {
 
 function renderDetail(target: Issue, issues: readonly Issue[] = [target], writes?: UseWrite) {
   const onBack = vi.fn();
-  render(
-    <I18nProvider initialLanguage="en">
-      <DetailView issueId={target.id} issues={issues} onBack={onBack} writes={writes} />
-    </I18nProvider>
+  renderWithI18n(
+    <DetailView issueId={target.id} issues={issues} onBack={onBack} writes={writes} />
   );
   return { onBack };
 }
@@ -115,10 +114,8 @@ test('blocked by and blocks both resolve from the dependency edges', () => {
   const b = issue('bza-b', { dependencies: [edge('bza-b', 'bza-a'), edge('bza-b', 'bza-c')] });
   const c = issue('bza-c');
 
-  const { unmount } = render(
-    <I18nProvider initialLanguage="en">
-      <DetailView issueId="bza-b" issues={[a, b, c]} onBack={vi.fn()} />
-    </I18nProvider>
+  const { unmount } = renderWithI18n(
+    <DetailView issueId="bza-b" issues={[a, b, c]} onBack={vi.fn()} />
   );
 
   const blockedBy = screen.getByRole('region', { name: 'Blocked by' });
@@ -158,11 +155,7 @@ test('a dependency target outside the store is shown and marked not found', () =
 });
 
 test('an id that is no longer in the store shows a not-found state instead of crashing', () => {
-  render(
-    <I18nProvider initialLanguage="en">
-      <DetailView issueId="bza-gone" issues={[issue('bza-b')]} onBack={vi.fn()} />
-    </I18nProvider>
-  );
+  renderWithI18n(<DetailView issueId="bza-gone" issues={[issue('bza-b')]} onBack={vi.fn()} />);
 
   expect(screen.getByRole('heading', { name: 'Ticket not found' })).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Back to list' })).toBeInTheDocument();
@@ -192,10 +185,9 @@ test('design and notes are folded away when present', () => {
 });
 
 test('the page follows the language setting', () => {
-  render(
-    <I18nProvider initialLanguage="zh-CN">
-      <DetailView issueId="bza-b" issues={[issue('bza-b')]} onBack={vi.fn()} />
-    </I18nProvider>
+  renderWithI18n(
+    <DetailView issueId="bza-b" issues={[issue('bza-b')]} onBack={vi.fn()} />,
+    'zh-CN'
   );
 
   expect(screen.getByText('正文')).toBeInTheDocument();
@@ -204,11 +196,7 @@ test('the page follows the language setting', () => {
 });
 
 test('a missing id while the baseline is loading is not reported as deleted', () => {
-  render(
-    <I18nProvider initialLanguage="en">
-      <DetailView issueId="bza-gone" issues={[]} onBack={vi.fn()} loading />
-    </I18nProvider>
-  );
+  renderWithI18n(<DetailView issueId="bza-gone" issues={[]} onBack={vi.fn()} loading />);
 
   expect(screen.getByRole('status')).toHaveTextContent('Loading ticket…');
   expect(screen.queryByRole('heading', { name: 'Ticket not found' })).toBeNull();

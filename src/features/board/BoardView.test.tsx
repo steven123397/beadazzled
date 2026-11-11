@@ -6,7 +6,7 @@ import type { Issue, SyncState } from '@/bindings/bd';
 import { I18nProvider } from '@/lib/i18n/I18nProvider';
 import type { UseWrite } from '@/lib/writes/useWrite';
 import { fakeEchoWrites as fakeWrites } from '@/test/detail-writes';
-import { makeIssue as issue, TEST_TS as TS } from '@/test/fixtures';
+import { makeIssue as issue, renderWithI18n, TEST_TS as TS } from '@/test/fixtures';
 
 import { BoardView } from './BoardView';
 
@@ -49,21 +49,19 @@ function renderBoard({
   syncState?: SyncState;
   writes?: UseWrite;
 }) {
-  return render(
-    <I18nProvider initialLanguage="en">
-      <MemoryRouter initialEntries={[entry]}>
-        <Routes>
-          <Route
-            path="/w/:projectId/board"
-            element={
-              <BoardView projectId="p1" issues={issues} syncState={syncState} writes={writes} />
-            }
-          />
-          <Route path="/w/:projectId/issue/:issueId" element={<div>detail</div>} />
-        </Routes>
-        <LocationProbe />
-      </MemoryRouter>
-    </I18nProvider>
+  return renderWithI18n(
+    <MemoryRouter initialEntries={[entry]}>
+      <Routes>
+        <Route
+          path="/w/:projectId/board"
+          element={
+            <BoardView projectId="p1" issues={issues} syncState={syncState} writes={writes} />
+          }
+        />
+        <Route path="/w/:projectId/issue/:issueId" element={<div>detail</div>} />
+      </Routes>
+      <LocationProbe />
+    </MemoryRouter>
   );
 }
 
@@ -169,17 +167,15 @@ test('clicking a card opens its detail route', () => {
 });
 
 test('loading and empty states are distinct', () => {
-  const { unmount } = render(
-    <I18nProvider initialLanguage="en">
-      <MemoryRouter initialEntries={['/w/p1/board']}>
-        <Routes>
-          <Route
-            path="/w/:projectId/board"
-            element={<BoardView projectId="p1" issues={[]} syncState={loading} />}
-          />
-        </Routes>
-      </MemoryRouter>
-    </I18nProvider>
+  const { unmount } = renderWithI18n(
+    <MemoryRouter initialEntries={['/w/p1/board']}>
+      <Routes>
+        <Route
+          path="/w/:projectId/board"
+          element={<BoardView projectId="p1" issues={[]} syncState={loading} />}
+        />
+      </Routes>
+    </MemoryRouter>
   );
   expect(screen.getByRole('status', { name: 'Loading tickets' })).toBeInTheDocument();
   unmount();
