@@ -6,6 +6,7 @@ import type { Issue, SyncState } from '@/bindings/bd';
 import { I18nProvider } from '@/lib/i18n/I18nProvider';
 import type { UseWrite } from '@/lib/writes/useWrite';
 import { fakeEchoWrites as fakeWrites } from '@/test/detail-writes';
+import { makeIssue as issue, TEST_TS as TS } from '@/test/fixtures';
 
 import { BoardView } from './BoardView';
 
@@ -37,27 +38,8 @@ vi.mock('@tanstack/react-virtual', () => ({
   },
 }));
 
-const TS = '2026-11-01T00:00:00Z';
 const healthy: SyncState = { kind: 'healthy', lastSeq: 1, lastEventAt: null };
 const loading: SyncState = { kind: 'loading', step: 'export' };
-
-function issue(id: string, overrides: Partial<Issue> = {}): Issue {
-  return {
-    id,
-    title: `Issue ${id}`,
-    description: '',
-    status: 'open',
-    priority: 2,
-    issue_type: 'task',
-    created_at: TS,
-    updated_at: TS,
-    labels: [],
-    dependency_count: 0,
-    dependent_count: 0,
-    comment_count: 0,
-    ...overrides,
-  };
-}
 
 function LocationProbe() {
   const location = useLocation();

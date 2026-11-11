@@ -4,6 +4,7 @@ import { beforeEach, expect, test, vi } from 'vitest';
 
 import type { Issue, SyncState } from '@/bindings/bd';
 import { I18nProvider } from '@/lib/i18n/I18nProvider';
+import { makeIssue as issue } from '@/test/fixtures';
 
 import { ListView } from './ListView';
 import { LIST_POSITION_PREFIX, saveListPosition } from './position';
@@ -38,31 +39,12 @@ vi.mock('@tanstack/react-virtual', () => ({
   },
 }));
 
-const TS = '2026-11-01T00:00:00Z';
 const healthy: SyncState = { kind: 'healthy', lastSeq: 1, lastEventAt: null };
 const loading: SyncState = { kind: 'loading', step: 'export' };
 const unavailable: SyncState = {
   kind: 'bd-unavailable',
   error: { code: 'BD_NOT_FOUND', message: 'bd missing' },
 };
-
-function issue(id: string, overrides: Partial<Issue> = {}): Issue {
-  return {
-    id,
-    title: `Issue ${id}`,
-    description: '',
-    status: 'open',
-    priority: 2,
-    issue_type: 'task',
-    created_at: TS,
-    updated_at: TS,
-    labels: [],
-    dependency_count: 0,
-    dependent_count: 0,
-    comment_count: 0,
-    ...overrides,
-  };
-}
 
 function LocationProbe() {
   const location = useLocation();
