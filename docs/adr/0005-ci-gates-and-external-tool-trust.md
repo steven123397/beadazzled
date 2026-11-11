@@ -86,3 +86,11 @@ PR 不会自动跑 `check:fast` / `check:task` / `check:deps`；`cargo fmt --che
   ≥80% 门禁不变；本附注不恢复采集，也不弱化任何现有检查。
 - 同次把门禁清单与 `ci.yml` 实际步骤对齐：`format:check`、`check:bundle`
   与浏览器 `e2e` 均早已或现已接入，旧清单未反映。
+
+## 附注：2026-11-11 两路并行与汇总门禁（bza-q7w）
+
+本文最初的单 job 结构由 [ADR-0015](0015-parallel-ci-with-aggregate-gate.md)
+调整：Rust 与 frontend/browser 两路并行，同名 `Quality gates (Windows)` 汇总
+job 以 `needs` + `always()` 保持 branch protection 和发布 preflight 兼容。
+上述检查清单、阈值与触发事件不变。`cargo-llvm-cov` 只缓存固定版本的二进制；
+`src-tauri/target` 不缓存的结论本轮不变。

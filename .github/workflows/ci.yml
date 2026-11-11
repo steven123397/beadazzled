@@ -14,43 +14,39 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+defaults:
+  run:
+    shell: pwsh
+
 jobs:
-  quality:
-    name: Quality gates (Windows)
+  frontend:
+    name: Frontend and browser (Windows)
     runs-on: windows-latest
     timeout-minutes: 45
-    env:
-      CARGO_TERM_COLOR: always
-      RUST_BACKTRACE: 1
-
     steps:
       - name: Check out repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
           # gitleaks scans the full history.
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Set up Node.js
-        uses: actions/setup-node@v5
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
         with:
           node-version: 24
           cache: npm
 
-      - name: Show toolchain versions
+      - name: Show Node.js versions
         run: |
           node --version
           npm --version
-          rustc --version
-          cargo --version
-
-      - name: Add Rust components
-        run: rustup component add rustfmt clippy llvm-tools-preview
-
-      - name: Install cargo-llvm-cov
-        run: cargo install cargo-llvm-cov --version 0.9.1 --locked
 
       - name: Install pinned external tools
-        shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
           $ProgressPreference = 'SilentlyContinue'
@@ -84,8 +80,9 @@ jobs:
           "OSV_SCANNER_PATH=$osvScanner" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
       - name: Verify external tools
-        shell: pwsh
         run: |
+          $ErrorActionPreference = 'Stop'
+          $PSNativeCommandUseErrorActionPreference = $true
           & $env:GITLEAKS_PATH version
           & $env:OSV_SCANNER_PATH --version
 
@@ -100,9 +97,6 @@ jobs:
       - name: Format check
         run: npm run format:check
 
-      - name: Rust formatting and lints
-        run: npm run check:rust:style
-
       - name: Frontend build
         run: npm run build
 
@@ -111,15 +105,17 @@ jobs:
       - name: Bundle checks
         run: npm run check:bundle
 
-      # check:task starts with check:bindings. The export_bindings test rewrites
-      # src/bindings/bd.ts on every cargo test, so the drift check has to run
-      # before test:rust:coverage or it can never see a stale file.
-      - name: Task checks
-        run: npm run check:task
+      - name: Architecture boundaries
+        run: npm run check:boundaries
 
-      # The browser suite runs the real bundle against a fake bridge. It is
-      # separate from e2e:real, which needs an interactive Windows session and
-      # a bd workspace and is recorded as release evidence instead.
+      - name: Script quality tests
+        run: npm run test:quality
+
+      - name: Frontend unit tests
+        run: npm run test:unit
+
+      # The browser suite starts Vite's dev server with a fake bridge. It is
+      # independent of e2e:real, which remains local release evidence.
       - name: Install Playwright Chromium
         run: npx playwright install chromium
 
@@ -128,3 +124,78 @@ jobs:
 
       - name: Dependency audit
         run: npm run check:deps
+
+  rust:
+    name: Rust and bridge (Windows)
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+
+      # These scripts use Node's built-in modules and cargo only; no npm ci.
+      - name: Set up Node.js
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version: 24
+
+      - name: Show Rust versions
+        run: |
+          rustc --version
+          cargo --version
+
+      - name: Add Rust components
+        run: rustup component add rustfmt clippy llvm-tools-preview
+
+      - name: Restore cargo-llvm-cov
+        id: llvm-cov-cache
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ~/.cargo/bin/cargo-llvm-cov.exe
+          key: ${{ runner.os }}-${{ runner.arch }}-cargo-llvm-cov-0.9.1
+
+      - name: Install cargo-llvm-cov
+        if: steps.llvm-cov-cache.outputs.cache-hit != 'true'
+        run: cargo install cargo-llvm-cov --version 0.9.1 --locked
+
+      - name: Verify cargo-llvm-cov
+        run: cargo llvm-cov --version
+
+      # export_bindings rewrites src/bindings/bd.ts during cargo test, so the
+      # drift check must run before any later cargo test in this workspace.
+      - name: Bindings drift
+        run: npm run check:bindings
+
+      - name: Rust formatting and lints
+        run: npm run check:rust:style
+
+      - name: Bridge coverage
+        run: npm run test:rust:coverage
+
+  quality:
+    name: Quality gates (Windows)
+    needs: [frontend, rust]
+    if: always()
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - name: Require all parallel gates
+        env:
+          FRONTEND_RESULT: ${{ needs.frontend.result }}
+          RUST_RESULT: ${{ needs.rust.result }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $results = @{
+            frontend = $env:FRONTEND_RESULT
+            rust = $env:RUST_RESULT
+          }
+          $failed = @($results.GetEnumerator() | Where-Object { $_.Value -ne 'success' })
+          if ($failed.Count -gt 0) {
+            $failed | ForEach-Object {
+              [Console]::Error.WriteLine("$($_.Key) gate is $($_.Value)")
+            }
+            exit 1
+          }
+          Write-Output 'frontend and Rust gates passed'

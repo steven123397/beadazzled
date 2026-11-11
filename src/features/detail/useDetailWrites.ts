@@ -201,11 +201,9 @@ export function useDetailWrites({ issue, writes, loading, onBack }: UseDetailWri
 
   return {
     editing,
-    setEditing,
     canEdit,
     pending,
     deleted,
-    hasDraft,
     notice,
     setNotice,
     validationError,

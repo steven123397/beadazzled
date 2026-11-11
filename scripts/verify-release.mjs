@@ -8,14 +8,14 @@
 //
 // Usage:
 //   node scripts/verify-release.mjs --installer <exe> [--signature <sig>]
-//     [--manifest <latest.json>] [--public-key <base64|path>] [--sha256 <hex>]
-//     [--root <repo>] [--json]
+//     [--manifest <latest.json>] [--public-key <base64> | --public-key-file <path>]
+//     [--sha256 <hex>] [--root <repo>] [--json]
 import { createHash } from 'node:crypto';
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 
 import { decodeSignature, verifyMinisign } from './lib/minisign.mjs';
-import { UPDATER_PLATFORM, readReleaseMeta } from './lib/release-meta.mjs';
+import { UPDATER_PLATFORM, readReleaseMeta, requireReleaseUrl } from './lib/release-meta.mjs';
 import { parseOptions, runMain } from './lib/cli.mjs';
 import { projectRoot } from './lib/paths.mjs';
 
@@ -29,7 +29,9 @@ function usage() {
     '  --installer <path>   installer to verify (required)',
     '  --signature <path>   minisign signature (default: <installer>.sig)',
     '  --manifest <path>    latest.json (default: next to the installer)',
-    '  --public-key <value> base64 updater key or a file containing it',
+    '  --public-key <base64>  literal base64 updater key',
+    '  --public-key-file <path>',
+    '                       read the updater key from this file',
     '                       (default: plugins.updater.pubkey in tauri.conf.json)',
     '  --sha256 <hex>       expected SHA-256 of the installer',
     '  --root <path>        repository root (default: this checkout)',
@@ -40,13 +42,22 @@ function usage() {
 function parseArgs(argv) {
   const options = parseOptions(argv, {
     flags: ['--json'],
-    values: ['--installer', '--signature', '--manifest', '--public-key', '--sha256', '--root'],
+    values: [
+      '--installer',
+      '--signature',
+      '--manifest',
+      '--public-key',
+      '--public-key-file',
+      '--sha256',
+      '--root',
+    ],
     usage,
     defaults: {
       installer: null,
       signature: null,
       manifest: null,
       publicKey: null,
+      publicKeyFile: null,
       sha256: null,
       root: defaultRoot,
       json: false,
@@ -59,6 +70,7 @@ function parseArgs(argv) {
       if (name === '--signature') opts.signature = path.resolve(value);
       if (name === '--manifest') opts.manifest = path.resolve(value);
       if (name === '--public-key') opts.publicKey = value;
+      if (name === '--public-key-file') opts.publicKeyFile = path.resolve(value);
       if (name === '--sha256') opts.sha256 = value.toLowerCase();
       if (name === '--root') opts.root = path.resolve(value);
     },
@@ -66,28 +78,24 @@ function parseArgs(argv) {
   if (options.installer === null) {
     throw new Error('--installer is required');
   }
+  if (options.publicKey !== null && options.publicKeyFile !== null) {
+    throw new Error('--public-key and --public-key-file are mutually exclusive');
+  }
   options.signature ??= `${options.installer}.sig`;
   options.manifest ??= path.join(path.dirname(options.installer), 'latest.json');
   return options;
 }
 
 function readPublicKey(options, configKey) {
+  if (options.publicKeyFile !== null) {
+    return readFileSync(options.publicKeyFile, 'utf8');
+  }
   if (options.publicKey !== null) {
-    try {
-      return readFileSync(options.publicKey, 'utf8');
-    } catch (error) {
-      // Only a missing file means the argument was a literal key. Anything
-      // else (EISDIR, EPERM, ...) must surface instead of being verified as
-      // the path string itself.
-      if (error.code === 'ENOENT') {
-        return options.publicKey;
-      }
-      throw error;
-    }
+    return options.publicKey;
   }
   if (configKey === null) {
     throw new Error(
-      'no updater public key: set plugins.updater.pubkey in tauri.conf.json or pass --public-key'
+      'no updater public key: set plugins.updater.pubkey in tauri.conf.json or pass --public-key/--public-key-file'
     );
   }
   return configKey;
@@ -106,38 +114,36 @@ function checkVersions(versions, manifestVersion, installerName, errors) {
       errors.push(`${source} is ${version}, latest.json is ${manifestVersion}`);
     }
   }
-  if (!installerName.includes(manifestVersion)) {
+  if (!installerName.includes(`_${manifestVersion}_`)) {
     errors.push(`installer ${installerName} does not name version ${manifestVersion}`);
   }
 }
 
-function checkManifest(entry, installerName, signatureFile, errors) {
+function checkManifest(entry, installerName, signatureFile, manifestVersion, errors) {
   if (entry === undefined) {
     errors.push(`latest.json has no platforms.${PLATFORM} entry`);
   } else {
-    let urlName = '';
     try {
-      urlName = decodeURIComponent(new URL(entry.url).pathname.split('/').pop() ?? '');
-    } catch {
-      errors.push(`latest.json url is not a URL: ${entry.url}`);
+      requireReleaseUrl(entry.url, { version: manifestVersion, installerName });
+    } catch (error) {
+      errors.push(`latest.json ${error.message}`);
     }
-    if (urlName !== installerName) {
-      errors.push(`latest.json url names ${urlName || '(none)'}, not ${installerName}`);
-    }
-    if (typeof entry.signature !== 'string' || entry.signature.trim() !== signatureFile) {
+    if (typeof entry.signature !== 'string' || entry.signature !== signatureFile) {
       errors.push('latest.json signature does not match the .sig file');
     }
   }
 }
 
-function checkSignature(options, configKey, signatureFile, installerBytes, errors) {
+function checkSignature(options, release, signatureFile, installerBytes, manifestVersion, errors) {
   let keyId = null;
   let signatureOk = false;
   try {
     const result = verifyMinisign({
-      publicKey: readPublicKey(options, configKey),
+      publicKey: readPublicKey(options, release.publicKey),
       signature: signatureFile,
       data: installerBytes,
+      announcedVersion: manifestVersion,
+      requireSignedVersion: release.requireSignedVersion,
     });
     signatureOk = result.ok;
     if (!result.ok) {
@@ -202,17 +208,19 @@ runMain('verify-release', () => {
   const installerName = path.basename(options.installer);
   const signatureFile = readFileSync(options.signature, 'utf8').trim();
   const manifest = JSON.parse(readFileSync(options.manifest, 'utf8'));
-  const { versions, publicKey: configKey } = readReleaseMeta(options.root);
+  const release = readReleaseMeta(options.root);
+  const { versions } = release;
   const manifestVersion = manifest.version;
   const entry = manifest.platforms?.[PLATFORM];
 
   checkVersions(versions, manifestVersion, installerName, errors);
-  checkManifest(entry, installerName, signatureFile, errors);
+  checkManifest(entry, installerName, signatureFile, manifestVersion, errors);
   const { signatureOk, keyId } = checkSignature(
     options,
-    configKey,
+    release,
     signatureFile,
     installerBytes,
+    manifestVersion,
     errors
   );
   const sha256 = checkHash(installerBytes, options.sha256, manifest, entry, errors);

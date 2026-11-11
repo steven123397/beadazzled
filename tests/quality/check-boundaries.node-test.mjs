@@ -159,7 +159,7 @@ test('lib/store imports from lib/sync fail through aliases and relative paths', 
     'src/lib/store/alias.ts': "import { createTicketState } from '@/lib/sync/reducer';\n",
     'src/lib/store/relative.ts': "import { createTicketState } from '../sync/reducer';\n",
     'src/lib/store/nested/relative.ts':
-      "import { createTicketState } from '../../../lib/sync/reducer';\n",
+      "import { createTicketState } from '../../../lib/sync/reducer';\nimport { refresh } from '../../sync/api';\n",
   });
 
   const result = run(root);
@@ -168,6 +168,16 @@ test('lib/store imports from lib/sync fail through aliases and relative paths', 
   assert.match(result.stdout, /alias\.ts:1.*lib-store-to-sync/);
   assert.match(result.stdout, /relative\.ts:1.*lib-store-to-sync/);
   assert.match(result.stdout, /nested\/relative\.ts:1.*lib-store-to-sync/);
+});
+
+test('nested lib/store files can import their own sync directory', () => {
+  const root = makeRoot({
+    'src/lib/store/nested/selectors.ts': "import { helper } from '../sync/helpers';\n",
+  });
+
+  const result = run(root);
+
+  assert.equal(result.status, 0, result.stdout + result.stderr);
 });
 
 test('lib/store can import neutral issues and records leaves', () => {

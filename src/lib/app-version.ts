@@ -20,13 +20,20 @@ export function useAppVersion(): string | null {
 
   useEffect(() => {
     let alive = true;
-    void (versionPromise ??= getVersion())
+    const request = (versionPromise ??= getVersion());
+    void request
       .then((value) => {
         if (alive) {
           setVersion(value);
         }
       })
-      .catch(() => null);
+      .catch(() => {
+        // A transient IPC failure must not poison every later mount. Do not
+        // clear a newer request installed by the test reset hook.
+        if (versionPromise === request) {
+          versionPromise = null;
+        }
+      });
     return () => {
       alive = false;
     };

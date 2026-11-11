@@ -56,23 +56,37 @@
 | CI / review | 不限 | 全量测试、Rust 风格、依赖扫描、构建、体积与性能测量 |
 
 `check:full` 用于本地或发布前的完整验证：它在 `check:fast` 与 `check:task`
-之外额外包含 `test:rust`、`build:app`、`check:size` 与浏览器 E2E。CI **不直接
-调用它**（见 ADR-0005 的被拒绝备选），而是在 `ci.yml` 中按序分步执行阻塞门禁；
-`test:rust`、`build:app`、`check:size` 与性能测量不在 CI 中。
+之外额外包含 `test:rust`、`build:app`、`check:size` 与浏览器 E2E。PR/main 的
+质量 CI **不直接调用它**（见 ADR-0005 的被拒绝备选），而是在 `ci.yml` 中分两路
+并行执行阻塞门禁；完整 `test:rust` 与性能测量不在该质量 CI 中。`build:app` 与
+`check:size` 由人工触发的 `release.yml` 执行，不向普通 CI 暴露发布密钥。
 
 `test:unit` 用 Vitest 双项目运行：纯逻辑套件在 node 项目（无 setup 文件），
 DOM/storage/renderHook/CSS 依赖套件在 jsdom 项目；新增 `.test.ts` 默认进
 node，需要 jsdom 的加进 `vitest.config.ts` 的 `jsdomTsSuites`；`.test.tsx`
 默认进 jsdom 项目。
 
-CI 由 `.github/workflows/ci.yml` 执行（PR 与 main push），按序为：`check:fast`、
-`format:check`、`check:rust:style`、`build`、`check:bundle`、`check:task`、
-浏览器 `e2e`（含 axe）、`check:deps`。`check:task` 中的 `test:unit` 不采集
-无阈值 Vitest 覆盖率；前端覆盖率门槛见 Exceptions。外部工具固定版本并经
-SHA256 校验：gitleaks 8.30.1、osv-scanner 2.7.0，通过 `GITLEAKS_PATH` /
-`OSV_SCANNER_PATH` 注入；CI 不解析 PATH 或 `%LOCALAPPDATA%`。显式注入的路径
-若不存在则直接失败，不回退 PATH / WinGet。见
-[ADR-0005](docs/adr/0005-ci-gates-and-external-tool-trust.md)。
+CI 由 `.github/workflows/ci.yml` 执行（PR 与 main push），分两路并行：
+`frontend` 运行 `check:fast`、`format:check`、`build`、`check:bundle`、
+`check:boundaries`、`test:quality`、`test:unit`、浏览器 `e2e`（含 axe）与
+`check:deps`；`rust` 依次运行 `check:bindings`、`check:rust:style` 与
+`test:rust:coverage`。同名 `Quality gates (Windows)` 汇总 job 以 `needs` +
+`always()` 检查两路结果，branch protection 与发布 preflight 的门禁名称不变。
+本地 `check:task` 的内容和顺序不变，其中 `test:unit` 不采集无阈值 Vitest
+覆盖率；前端覆盖率门槛见 Exceptions。外部工具固定版本并经 SHA256 校验：
+gitleaks 8.30.1、osv-scanner 2.7.0，通过 `GITLEAKS_PATH` / `OSV_SCANNER_PATH`
+注入；CI 不解析 PATH 或 `%LOCALAPPDATA%`。显式注入的路径若不存在则直接失败，
+不回退 PATH / WinGet。`cargo-llvm-cov` 0.9.1 只缓存固定版本的二进制，恢复后
+仍须验证可执行。见 [ADR-0005](docs/adr/0005-ci-gates-and-external-tool-trust.md)
+与 [ADR-0015](docs/adr/0015-parallel-ci-with-aggregate-gate.md)。
+
+`release.yml` 是独立的半自动发布边界，不是 PR/main 的必需检查：只允许人工从
+main 触发，preflight 要求同一提交的 `ci.yml` main push 运行及其中
+`Quality gates (Windows)` job 已成功；签名密钥
+只来自 `release` Environment secrets，构建、manifest、独立验签和体积检查全部
+通过后只能创建 Draft Release。不得自动 Publish、覆盖或删除 Release，最终放行与
+真实安装/更新验证仍由人完成，见
+[ADR-0014](docs/adr/0014-manual-draft-release-workflow.md)。
 
 bridge 测试**禁止真的 spawn `bd`**：单次调用 1.0–1.4s，几十个用例就能把 90 秒预算吃穿，还会把测试绑死在本机 bd 版本上。用录制好的真实 JSON 样本（`bd export` / `bd events`）跑纯逻辑；真实 `bd` 只出现在 3 条 E2E 里。
 

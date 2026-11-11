@@ -158,6 +158,7 @@ export function ListView({ projectId, issues, syncState = HEALTHY, onRefresh }: 
   const openIssue = useOpenIssue(projectId);
 
   const { focusItem } = useVirtualFocus(virtualizer, items, {
+    resolveIndex: (id) => rowMetaRef.current.byId.get(id)?.itemIndex ?? -1,
     getItemId: (item) => (item.kind === 'row' ? item.issue.id : undefined),
     getElementId: rowId,
   });

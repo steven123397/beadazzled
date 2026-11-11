@@ -65,6 +65,8 @@ function parseArgs(argv) {
     const inline = separator === -1 ? undefined : arg.slice(separator + 1);
     if (name === '--keep') {
       options.keep = true;
+    } else if (name === '--force-install') {
+      options.forceInstall = true;
     } else if (name === '--help' || name === '-h') {
       console.log(usage());
       process.exit(0);

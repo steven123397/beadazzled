@@ -1,0 +1,181 @@
+name: Release
+
+# Manual build/sign/verify/upload automation. Publishing and real Windows
+# install/update verification remain human decisions.
+# Sources:
+# https://v2.tauri.app/distribute/pipelines/github/
+# https://v2.tauri.app/plugin/updater/#signing-updates
+# https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#workflow_dispatch
+on:
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: release-${{ github.repository }}
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: pwsh
+
+jobs:
+  preflight:
+    name: Verify main and Quality gates
+    runs-on: windows-latest
+    timeout-minutes: 5
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - name: Require main and successful Quality gates
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_REF: ${{ github.ref }}
+          RELEASE_SHA: ${{ github.sha }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $PSNativeCommandUseErrorActionPreference = $true
+          if ($env:RELEASE_REF -ne 'refs/heads/main') {
+            throw "Release must be dispatched from the main branch, not $env:RELEASE_REF"
+          }
+
+          $runsJson = gh run list --workflow ci.yml --commit "$env:RELEASE_SHA" --event push --branch main --limit 20 --json databaseId,status,conclusion,headSha,workflowName,event,createdAt
+          $runs = @($runsJson | ConvertFrom-Json)
+          if ($runs.Count -eq 0) {
+            throw "No main push CI run exists for $env:RELEASE_SHA"
+          }
+          $latest = $runs | Sort-Object -Property createdAt -Descending | Select-Object -First 1
+          if ($latest.headSha -ne $env:RELEASE_SHA -or $latest.event -ne 'push' -or $latest.workflowName -ne 'CI') {
+            throw "The latest run is not the main push CI run for $env:RELEASE_SHA"
+          }
+          if ($latest.status -ne 'completed' -or $latest.conclusion -ne 'success') {
+            throw "Quality gates (Windows) is $($latest.status)/$($latest.conclusion) for $env:RELEASE_SHA"
+          }
+          $run = gh run view "$($latest.databaseId)" --json jobs | ConvertFrom-Json
+          $quality = @($run.jobs | Where-Object { $_.name -eq 'Quality gates (Windows)' })
+          if ($quality.Count -ne 1) {
+            throw "Expected exactly one Quality gates (Windows) job for $env:RELEASE_SHA"
+          }
+          if ($quality[0].status -ne 'completed' -or $quality[0].conclusion -ne 'success') {
+            throw "Quality gates (Windows) job is $($quality[0].status)/$($quality[0].conclusion)"
+          }
+
+  draft:
+    name: Build and upload Draft Release
+    needs: preflight
+    runs-on: windows-latest
+    timeout-minutes: 60
+    environment: release
+    permissions:
+      contents: write
+    env:
+      RELEASE_SHA: ${{ github.sha }}
+    steps:
+      - name: Check out the dispatched commit
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Select stable Rust
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $PSNativeCommandUseErrorActionPreference = $true
+          rustup default stable
+          rustc --version
+          cargo --version
+
+      - name: Install npm dependencies
+        run: npm ci
+
+      - name: Resolve and reserve release metadata
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $PSNativeCommandUseErrorActionPreference = $true
+          npm run check:versions
+          $version = (node -p "require('./package.json').version").Trim()
+          if ($version.Contains('-')) {
+            throw 'Release workflow only supports stable x.y.z versions; beta requires a separate channel decision'
+          }
+          $tag = "v$version"
+          $notesPath = Join-Path $env:GITHUB_WORKSPACE "docs/releases/$tag.md"
+          if (-not (Test-Path -LiteralPath $notesPath -PathType Leaf)) {
+            throw "Missing user release notes: $notesPath"
+          }
+
+          $remoteTag = git ls-remote --tags "https://github.com/$env:GITHUB_REPOSITORY.git" "refs/tags/$tag"
+          if (-not [string]::IsNullOrWhiteSpace(($remoteTag | Out-String))) {
+            throw "Tag $tag already exists; refusing to replace or reuse it"
+          }
+
+          $bundleDirectory = Join-Path $env:GITHUB_WORKSPACE 'src-tauri/target/release/bundle/nsis'
+          $installerPath = Join-Path $bundleDirectory "beadazzled_${version}_x64-setup.exe"
+          @(
+            "RELEASE_VERSION=$version"
+            "RELEASE_TAG=$tag"
+            "RELEASE_NOTES_SOURCE_PATH=$notesPath"
+            "INSTALLER_PATH=$installerPath"
+            "MANIFEST_PATH=$(Join-Path $bundleDirectory 'latest.json')"
+          ) | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+      - name: Build signed installer
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: npm run build:app
+
+      - name: Generate and verify updater manifest
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $PSNativeCommandUseErrorActionPreference = $true
+          if (-not (Test-Path -LiteralPath $env:INSTALLER_PATH -PathType Leaf)) {
+            throw "Expected installer was not produced: $env:INSTALLER_PATH"
+          }
+
+          $sourceNotes = Get-Content -Raw -LiteralPath $env:RELEASE_NOTES_SOURCE_PATH
+          if ($sourceNotes -match '(?i)\b[0-9a-f]{64}\b') {
+            throw 'Release notes must not contain a hard-coded SHA-256; the workflow appends the actual build hash'
+          }
+          $installer = Get-Item -LiteralPath $env:INSTALLER_PATH
+          $sha256 = (Get-FileHash -Algorithm SHA256 -LiteralPath $installer.FullName).Hash.ToLowerInvariant()
+          $notesPath = Join-Path $env:RUNNER_TEMP "$env:RELEASE_TAG-notes.md"
+          $verification = @"
+
+          ## Build verification
+
+          ``$env:RELEASE_TAG`` was built and signed by GitHub Actions from ``$env:RELEASE_SHA``.
+          The installer, signature, and ``latest.json`` passed ``verify-release`` before upload.
+
+          ``````
+          $($installer.Name)  ($($installer.Length) bytes)
+          sha256 $sha256
+          ``````
+          "@
+          [System.IO.File]::WriteAllText($notesPath, "$sourceNotes`n$verification`n")
+          "RELEASE_NOTES_PATH=$notesPath" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+          npm run make:latest -- --installer "$env:INSTALLER_PATH" --notes-file "$env:RELEASE_NOTES_PATH"
+          npm run verify:release -- --installer "$env:INSTALLER_PATH"
+
+      - name: Check installer size
+        run: npm run check:size
+
+      - name: Create Draft Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $PSNativeCommandUseErrorActionPreference = $true
+          gh api --method POST "repos/$env:GITHUB_REPOSITORY/git/refs" -f "ref=refs/tags/$env:RELEASE_TAG" -f "sha=$env:RELEASE_SHA"
+          gh release create "$env:RELEASE_TAG" "$env:INSTALLER_PATH" "$($env:INSTALLER_PATH).sig" "$env:MANIFEST_PATH" --draft --verify-tag --title "beadazzled $env:RELEASE_TAG" --notes-file "$env:RELEASE_NOTES_PATH" --repo "$env:GITHUB_REPOSITORY"
+          $releasedTag = gh api "repos/$env:GITHUB_REPOSITORY/git/ref/tags/$env:RELEASE_TAG" | ConvertFrom-Json
+          if ($releasedTag.object.sha -ne $env:RELEASE_SHA) {
+            throw "Tag $env:RELEASE_TAG moved during Draft creation; do not publish it"
+          }
