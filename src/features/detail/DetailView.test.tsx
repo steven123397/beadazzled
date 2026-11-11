@@ -1,15 +1,15 @@
-import { act, fireEvent, render, screen, within } from '@testing-library/react';
-import { expect, test, vi } from 'vitest';
+import { act, fireEvent, screen, within } from '@testing-library/react';
+import { afterEach, expect, test, vi } from 'vitest';
 
 import type { Comment, Dependency, Issue } from '@/bindings/bd';
+import type { Language } from '@/lib/i18n';
 import { I18nProvider } from '@/lib/i18n/I18nProvider';
 import { MAX_ACCEPTANCE_BYTES } from '@/lib/writes/commands';
-import type { UseWrite } from '@/lib/writes/useWrite';
 import { fakeWrites } from '@/test/detail-writes';
 import { chooseStatus } from '@/test/detail-ui';
 import { makeIssue, renderWithI18n, TEST_TS as TS } from '@/test/fixtures';
 
-import { DetailView } from './DetailView';
+import { DetailView, type DetailViewProps } from './DetailView';
 
 // The plugin cannot open a URL inside jsdom: every link click here is a
 // failure path, which is what the feedback test needs.
@@ -35,13 +35,30 @@ function comment(id: string, text: string, createdAt: string): Comment {
   return { id, issue_id: 'b', author: 'ada', text, created_at: createdAt };
 }
 
-function renderDetail(target: Issue, issues: readonly Issue[] = [target], writes?: UseWrite) {
-  const onBack = vi.fn();
-  renderWithI18n(
-    <DetailView issueId={target.id} issues={issues} onBack={onBack} writes={writes} />
+type RenderDetailOptions = Omit<DetailViewProps, 'issueId' | 'issues' | 'onBack'> & {
+  target: Issue;
+  issues?: readonly Issue[];
+  onBack?: () => void;
+  initialLanguage?: Language;
+};
+
+function renderDetail({
+  target,
+  issues = [target],
+  onBack = vi.fn(),
+  initialLanguage = 'en',
+  ...props
+}: RenderDetailOptions) {
+  const renderResult = renderWithI18n(
+    <DetailView {...props} issueId={target.id} issues={issues} onBack={onBack} />,
+    initialLanguage
   );
-  return { onBack };
+  return { ...renderResult, onBack };
 }
+
+afterEach(() => {
+  vi.useRealTimers();
+});
 
 test('the page shows title, markdown body, acceptance, metadata and comments', () => {
   const target = issue('bza-b', {
@@ -54,7 +71,7 @@ test('the page shows title, markdown body, acceptance, metadata and comments', (
     comment_count: 1,
   });
 
-  renderDetail(target);
+  renderDetail({ target });
 
   expect(screen.getByRole('heading', { level: 1, name: 'Document reading' })).toBeInTheDocument();
   expect(screen.getByText('Some', { exact: false })).toContainHTML('<strong>bold</strong>');
@@ -75,7 +92,7 @@ test('comments are listed oldest first even when the payload is unordered', () =
     ],
   });
 
-  renderDetail(target);
+  renderDetail({ target });
 
   const items = within(screen.getByRole('list', { name: 'Comments' })).getAllByRole('listitem');
   expect(items.map((item) => item.textContent)).toEqual([
@@ -89,16 +106,14 @@ test('blocked by and blocks both resolve from the dependency edges', () => {
   const b = issue('bza-b', { dependencies: [edge('bza-b', 'bza-a'), edge('bza-b', 'bza-c')] });
   const c = issue('bza-c');
 
-  const { unmount } = renderWithI18n(
-    <DetailView issueId="bza-b" issues={[a, b, c]} onBack={vi.fn()} />
-  );
+  const { unmount } = renderDetail({ target: b, issues: [a, b, c] });
 
   const blockedBy = screen.getByRole('region', { name: 'Blocked by' });
   expect(within(blockedBy).getByText('bza-a')).toBeInTheDocument();
   expect(within(blockedBy).getByText('bza-c')).toBeInTheDocument();
   unmount();
 
-  renderDetail(a, [a, b, c]);
+  renderDetail({ target: a, issues: [a, b, c] });
 
   const blocks = screen.getByRole('region', { name: 'Blocks' });
   expect(within(blocks).getByText('bza-b')).toBeInTheDocument();
@@ -113,7 +128,7 @@ test('a parent-child or related edge is not shown as a blocker', () => {
     ],
   });
 
-  renderDetail(child, [parent, child]);
+  renderDetail({ target: child, issues: [parent, child] });
 
   expect(screen.queryByRole('region', { name: 'Blocked by' })).toBeNull();
   expect(screen.getByText('No dependencies.')).toBeInTheDocument();
@@ -122,7 +137,7 @@ test('a parent-child or related edge is not shown as a blocker', () => {
 test('a dependency target outside the store is shown and marked not found', () => {
   const target = issue('bza-b', { dependencies: [edge('bza-b', 'bza-gone')] });
 
-  renderDetail(target);
+  renderDetail({ target });
 
   const blockedBy = screen.getByRole('region', { name: 'Blocked by' });
   expect(within(blockedBy).getByText('bza-gone')).toBeInTheDocument();
@@ -130,14 +145,14 @@ test('a dependency target outside the store is shown and marked not found', () =
 });
 
 test('an id that is no longer in the store shows a not-found state instead of crashing', () => {
-  renderWithI18n(<DetailView issueId="bza-gone" issues={[issue('bza-b')]} onBack={vi.fn()} />);
+  renderDetail({ target: issue('bza-gone'), issues: [issue('bza-b')] });
 
   expect(screen.getByRole('heading', { name: 'Ticket not found' })).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Back to list' })).toBeInTheDocument();
 });
 
 test('empty description, acceptance and comments use muted placeholders', () => {
-  renderDetail(issue('bza-b', { description: '', acceptance_criteria: undefined }));
+  renderDetail({ target: issue('bza-b', { description: '', acceptance_criteria: undefined }) });
 
   expect(screen.getByText('No description yet.')).toBeInTheDocument();
   expect(screen.getByText('No acceptance criteria yet.')).toBeInTheDocument();
@@ -147,7 +162,7 @@ test('empty description, acceptance and comments use muted placeholders', () => 
 test('design and notes are folded away when present', () => {
   const target = issue('bza-b', { design: 'Design body', notes: 'Note body' });
 
-  renderDetail(target);
+  renderDetail({ target });
 
   expect(screen.getByText('Design')).toBeInTheDocument();
   expect(screen.getByText('Design body')).toBeInTheDocument();
@@ -160,10 +175,7 @@ test('design and notes are folded away when present', () => {
 });
 
 test('the page follows the language setting', () => {
-  renderWithI18n(
-    <DetailView issueId="bza-b" issues={[issue('bza-b')]} onBack={vi.fn()} />,
-    'zh-CN'
-  );
+  renderDetail({ target: issue('bza-b'), initialLanguage: 'zh-CN' });
 
   expect(screen.getByText('正文')).toBeInTheDocument();
   expect(screen.getByText('验收条件')).toBeInTheDocument();
@@ -171,14 +183,14 @@ test('the page follows the language setting', () => {
 });
 
 test('a missing id while the baseline is loading is not reported as deleted', () => {
-  renderWithI18n(<DetailView issueId="bza-gone" issues={[]} onBack={vi.fn()} loading />);
+  renderDetail({ target: issue('bza-gone'), issues: [], loading: true });
 
   expect(screen.getByRole('status')).toHaveTextContent('Loading ticket…');
   expect(screen.queryByRole('heading', { name: 'Ticket not found' })).toBeNull();
 });
 
 test('the back control calls the route callback', () => {
-  const { onBack } = renderDetail(issue('bza-b'));
+  const { onBack } = renderDetail({ target: issue('bza-b') });
 
   fireEvent.click(screen.getByRole('button', { name: 'Back to list' }));
 
@@ -187,7 +199,7 @@ test('the back control calls the route callback', () => {
 
 test('editing the title submits one update and closes the editor after success', async () => {
   const writes = fakeWrites();
-  renderDetail(issue('bza-b', { title: 'Old title' }), undefined, writes);
+  renderDetail({ target: issue('bza-b', { title: 'Old title' }), writes });
 
   fireEvent.click(screen.getByRole('button', { name: 'Old title' }));
   fireEvent.change(screen.getByRole('textbox', { name: 'Title' }), {
@@ -205,7 +217,7 @@ test('editing the title submits one update and closes the editor after success',
 
 test('an empty title is rejected locally without a bd call', () => {
   const writes = fakeWrites();
-  renderDetail(issue('bza-b', { title: 'Old title' }), undefined, writes);
+  renderDetail({ target: issue('bza-b', { title: 'Old title' }), writes });
 
   fireEvent.click(screen.getByRole('button', { name: 'Old title' }));
   fireEvent.change(screen.getByRole('textbox', { name: 'Title' }), {
@@ -224,7 +236,7 @@ test('a failed save keeps the title editor and its draft', async () => {
       error: { code: 'BD_TIMEOUT' as const, message: 'bd timed out' },
     })),
   });
-  renderDetail(issue('bza-b', { title: 'Old title' }), undefined, writes);
+  renderDetail({ target: issue('bza-b', { title: 'Old title' }), writes });
 
   fireEvent.click(screen.getByRole('button', { name: 'Old title' }));
   fireEvent.change(screen.getByRole('textbox', { name: 'Title' }), {
@@ -238,11 +250,10 @@ test('a failed save keeps the title editor and its draft', async () => {
 
 test('the body and acceptance editors submit their own fields', async () => {
   const writes = fakeWrites();
-  renderDetail(
-    issue('bza-b', { description: 'Old body', acceptance_criteria: 'Old acceptance' }),
-    undefined,
-    writes
-  );
+  renderDetail({
+    target: issue('bza-b', { description: 'Old body', acceptance_criteria: 'Old acceptance' }),
+    writes,
+  });
 
   const description = screen.getByRole('region', { name: 'Description' });
   fireEvent.click(within(description).getByRole('button', { name: 'Edit' }));
@@ -272,7 +283,7 @@ test('the body and acceptance editors submit their own fields', async () => {
 
 test('a comment submits through the write controller', async () => {
   const writes = fakeWrites();
-  renderDetail(issue('bza-b'), undefined, writes);
+  renderDetail({ target: issue('bza-b'), writes });
 
   fireEvent.change(screen.getByRole('textbox', { name: 'Write a comment…' }), {
     target: { value: 'Nice work' },
@@ -286,7 +297,7 @@ test('a comment submits through the write controller', async () => {
 });
 
 test('without a write controller the reading page stays read-only', () => {
-  renderDetail(issue('bza-b'));
+  renderDetail({ target: issue('bza-b') });
 
   expect(screen.queryByRole('button', { name: 'Edit' })).toBeNull();
 });
@@ -295,11 +306,7 @@ test('a deleted ticket shows a banner and closes after three seconds', () => {
   vi.useFakeTimers();
   const onBack = vi.fn();
   const target = issue('bza-b');
-  const { rerender } = render(
-    <I18nProvider initialLanguage="en">
-      <DetailView issueId="bza-b" issues={[target]} onBack={onBack} />
-    </I18nProvider>
-  );
+  const { rerender } = renderDetail({ target, onBack });
 
   rerender(
     <I18nProvider initialLanguage="en">
@@ -314,17 +321,12 @@ test('a deleted ticket shows a banner and closes after three seconds', () => {
   });
 
   expect(onBack).toHaveBeenCalledTimes(1);
-  vi.useRealTimers();
 });
 
 test('an update from elsewhere is announced without overwriting the draft', () => {
   const writes = fakeWrites();
   const target = issue('bza-b', { title: 'Old title' });
-  const { rerender } = render(
-    <I18nProvider initialLanguage="en">
-      <DetailView issueId="bza-b" issues={[target]} onBack={vi.fn()} writes={writes} />
-    </I18nProvider>
-  );
+  const { rerender } = renderDetail({ target, writes });
 
   fireEvent.click(screen.getByRole('button', { name: 'Old title' }));
   fireEvent.change(screen.getByRole('textbox', { name: 'Title' }), {
@@ -349,7 +351,7 @@ test('an update from elsewhere is announced without overwriting the draft', () =
 });
 
 test('detail single-key shortcuts open editors and focus controls', () => {
-  renderDetail(issue('bza-b'), undefined, fakeWrites());
+  renderDetail({ target: issue('bza-b'), writes: fakeWrites() });
 
   fireEvent.keyDown(window, { key: 'e' });
   expect(screen.getByRole('textbox', { name: 'Title' })).toBeInTheDocument();
@@ -375,7 +377,7 @@ test('detail single-key shortcuts open editors and focus controls', () => {
 });
 
 test('single-key shortcuts stay out of a focused metadata dropdown', () => {
-  renderDetail(issue('bza-b'), undefined, fakeWrites());
+  renderDetail({ target: issue('bza-b'), writes: fakeWrites() });
   const status = document.getElementById('detail-status');
   if (status === null) {
     throw new Error('no status trigger');
@@ -391,11 +393,7 @@ test('single-key shortcuts stay out of a focused metadata dropdown', () => {
 test('a saved title stays old until the journal echo updates the store', async () => {
   const writes = fakeWrites();
   const target = issue('bza-b', { title: 'Old title' });
-  const { rerender } = render(
-    <I18nProvider initialLanguage="en">
-      <DetailView issueId="bza-b" issues={[target]} onBack={vi.fn()} writes={writes} />
-    </I18nProvider>
-  );
+  const { rerender } = renderDetail({ target, writes });
 
   fireEvent.click(screen.getByRole('button', { name: 'Old title' }));
   fireEvent.change(screen.getByRole('textbox', { name: 'Title' }), {
@@ -420,29 +418,104 @@ test('a saved title stays old until the journal echo updates the store', async (
   expect(screen.getByRole('heading', { level: 1, name: 'New title' })).toBeInTheDocument();
 });
 
-test('leaving with an open draft asks before discarding it', () => {
+test.each([
+  {
+    name: 'leaving with an open draft asks before discarding it',
+    target: issue('bza-b', { title: 'Old title' }),
+    blocked: true,
+    retry: true,
+    arrange: () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Old title' }));
+      fireEvent.change(screen.getByRole('textbox', { name: 'Title' }), {
+        target: { value: 'Draft title' },
+      });
+    },
+  },
+  {
+    name: 'a comment draft asks before the page is left',
+    target: issue('bza-b'),
+    blocked: true,
+    retry: false,
+    arrange: () => {
+      fireEvent.change(screen.getByRole('textbox', { name: 'Write a comment…' }), {
+        target: { value: 'Half a thought' },
+      });
+    },
+  },
+  {
+    name: 'an empty comment composer does not block navigation',
+    target: issue('bza-b'),
+    blocked: false,
+    retry: false,
+    arrange: () => {
+      fireEvent.change(screen.getByRole('textbox', { name: 'Write a comment…' }), {
+        target: { value: '   ' },
+      });
+    },
+  },
+  {
+    name: 'an unchanged assignee editor does not block navigation',
+    target: issue('bza-b'),
+    blocked: false,
+    retry: false,
+    arrange: () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Edit assignee' }));
+    },
+  },
+  {
+    name: 'the assignee editor asks before the page is left once its draft differs',
+    target: issue('bza-b'),
+    blocked: true,
+    retry: false,
+    arrange: () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Edit assignee' }));
+      fireEvent.change(screen.getByRole('textbox', { name: 'Assignee' }), {
+        target: { value: 'ada' },
+      });
+    },
+  },
+  {
+    name: 'a half-typed label asks before the page is left',
+    target: issue('bza-b'),
+    blocked: true,
+    retry: false,
+    arrange: () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Edit labels' }));
+      fireEvent.change(screen.getByRole('textbox', { name: 'New label' }), {
+        target: { value: 'ui' },
+      });
+    },
+  },
+])('$name', ({ target, blocked, retry, arrange }) => {
   const writes = fakeWrites();
-  const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
-  const { onBack } = renderDetail(issue('bza-b', { title: 'Old title' }), undefined, writes);
+  const confirm = vi.spyOn(window, 'confirm');
+  if (blocked) {
+    confirm.mockReturnValue(false);
+  }
+  const { onBack } = renderDetail({ target, writes });
 
-  fireEvent.click(screen.getByRole('button', { name: 'Old title' }));
-  fireEvent.change(screen.getByRole('textbox', { name: 'Title' }), {
-    target: { value: 'Draft title' },
-  });
+  arrange();
   fireEvent.click(screen.getByRole('button', { name: 'Back to list' }));
 
-  expect(confirm).toHaveBeenCalledWith('Discard the unsaved draft?');
-  expect(onBack).not.toHaveBeenCalled();
+  if (blocked) {
+    expect(confirm).toHaveBeenCalledWith('Discard the unsaved draft?');
+    expect(onBack).not.toHaveBeenCalled();
+  } else {
+    expect(confirm).not.toHaveBeenCalled();
+    expect(onBack).toHaveBeenCalledTimes(1);
+  }
 
-  confirm.mockReturnValue(true);
-  fireEvent.click(screen.getByRole('button', { name: 'Back to list' }));
+  if (retry) {
+    confirm.mockReturnValue(true);
+    fireEvent.click(screen.getByRole('button', { name: 'Back to list' }));
 
-  expect(onBack).toHaveBeenCalledTimes(1);
+    expect(onBack).toHaveBeenCalledTimes(1);
+  }
   confirm.mockRestore();
 });
 
 test('escape outside the input cancels the draft instead of leaving the page', () => {
-  const { onBack } = renderDetail(issue('bza-b'), undefined, fakeWrites());
+  const { onBack } = renderDetail({ target: issue('bza-b'), writes: fakeWrites() });
 
   fireEvent.keyDown(window, { key: 'e' });
   expect(screen.getByRole('textbox', { name: 'Title' })).toBeInTheDocument();
@@ -455,7 +528,7 @@ test('escape outside the input cancels the draft instead of leaving the page', (
 
 test('an open modal owns Escape, so the draft behind it survives', () => {
   const writes = fakeWrites();
-  renderDetail(issue('bza-b', { title: 'Old title' }), undefined, writes);
+  renderDetail({ target: issue('bza-b', { title: 'Old title' }), writes });
 
   fireEvent.click(screen.getByRole('button', { name: 'Old title' }));
   fireEvent.change(screen.getByRole('textbox', { name: 'Title' }), {
@@ -487,80 +560,6 @@ test('an open modal owns Escape, so the draft behind it survives', () => {
   expect(screen.queryByRole('textbox', { name: 'Title' })).toBeNull();
 });
 
-test('a comment draft asks before the page is left', () => {
-  const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
-  const writes = fakeWrites();
-  const { onBack } = renderDetail(issue('bza-b'), undefined, writes);
-
-  fireEvent.change(screen.getByRole('textbox', { name: 'Write a comment…' }), {
-    target: { value: 'Half a thought' },
-  });
-  fireEvent.click(screen.getByRole('button', { name: 'Back to list' }));
-
-  expect(confirm).toHaveBeenCalledWith('Discard the unsaved draft?');
-  expect(onBack).not.toHaveBeenCalled();
-
-  confirm.mockRestore();
-});
-
-test('an empty comment composer does not block navigation', () => {
-  const confirm = vi.spyOn(window, 'confirm');
-  const { onBack } = renderDetail(issue('bza-b'), undefined, fakeWrites());
-
-  fireEvent.change(screen.getByRole('textbox', { name: 'Write a comment…' }), {
-    target: { value: '   ' },
-  });
-  fireEvent.click(screen.getByRole('button', { name: 'Back to list' }));
-
-  expect(confirm).not.toHaveBeenCalled();
-  expect(onBack).toHaveBeenCalledTimes(1);
-  confirm.mockRestore();
-});
-
-test('an unchanged assignee editor does not block navigation', () => {
-  const confirm = vi.spyOn(window, 'confirm');
-  const { onBack } = renderDetail(issue('bza-b'), undefined, fakeWrites());
-
-  fireEvent.click(screen.getByRole('button', { name: 'Edit assignee' }));
-  fireEvent.click(screen.getByRole('button', { name: 'Back to list' }));
-
-  expect(confirm).not.toHaveBeenCalled();
-  expect(onBack).toHaveBeenCalledTimes(1);
-  confirm.mockRestore();
-});
-
-test('the assignee editor asks before the page is left once its draft differs', () => {
-  const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
-  const { onBack } = renderDetail(issue('bza-b'), undefined, fakeWrites());
-
-  fireEvent.click(screen.getByRole('button', { name: 'Edit assignee' }));
-  fireEvent.change(screen.getByRole('textbox', { name: 'Assignee' }), {
-    target: { value: 'ada' },
-  });
-  fireEvent.click(screen.getByRole('button', { name: 'Back to list' }));
-
-  expect(confirm).toHaveBeenCalledWith('Discard the unsaved draft?');
-  expect(onBack).not.toHaveBeenCalled();
-
-  confirm.mockRestore();
-});
-
-test('a half-typed label asks before the page is left', () => {
-  const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
-  const { onBack } = renderDetail(issue('bza-b'), undefined, fakeWrites());
-
-  fireEvent.click(screen.getByRole('button', { name: 'Edit labels' }));
-  fireEvent.change(screen.getByRole('textbox', { name: 'New label' }), {
-    target: { value: 'ui' },
-  });
-  fireEvent.click(screen.getByRole('button', { name: 'Back to list' }));
-
-  expect(confirm).toHaveBeenCalledWith('Discard the unsaved draft?');
-  expect(onBack).not.toHaveBeenCalled();
-
-  confirm.mockRestore();
-});
-
 test('a failed comment shows the error and keeps the text', async () => {
   const writes = fakeWrites({
     submit: vi.fn(async () => ({
@@ -568,7 +567,7 @@ test('a failed comment shows the error and keeps the text', async () => {
       error: { code: 'BD_TIMEOUT' as const, message: 'bd hung' },
     })),
   });
-  renderDetail(issue('bza-b'), undefined, writes);
+  renderDetail({ target: issue('bza-b'), writes });
 
   const composer = screen.getByRole('textbox', { name: 'Write a comment…' });
   fireEvent.change(composer, { target: { value: 'Do not lose me' } });
@@ -582,7 +581,7 @@ test('a failed comment shows the error and keeps the text', async () => {
 test('an acceptance draft over the 16 KiB limit is rejected before any write', () => {
   const writes = fakeWrites();
   const tooLong = 'x'.repeat(MAX_ACCEPTANCE_BYTES + 1);
-  renderDetail(issue('bza-b', { acceptance_criteria: 'Old acceptance' }), undefined, writes);
+  renderDetail({ target: issue('bza-b', { acceptance_criteria: 'Old acceptance' }), writes });
 
   const acceptance = screen.getByRole('region', { name: 'Acceptance criteria' });
   fireEvent.click(within(acceptance).getByRole('button', { name: 'Edit' }));
@@ -598,7 +597,7 @@ test('an acceptance draft over the 16 KiB limit is rejected before any write', (
 
 test('an acceptance draft exactly at the limit is submitted', async () => {
   const writes = fakeWrites();
-  renderDetail(issue('bza-b', { acceptance_criteria: 'Old acceptance' }), undefined, writes);
+  renderDetail({ target: issue('bza-b', { acceptance_criteria: 'Old acceptance' }), writes });
 
   const acceptance = screen.getByRole('region', { name: 'Acceptance criteria' });
   fireEvent.click(within(acceptance).getByRole('button', { name: 'Edit' }));
@@ -614,11 +613,7 @@ test('an acceptance draft exactly at the limit is submitted', async () => {
 test('a write from this page does not claim the ticket changed elsewhere', () => {
   const writes = fakeWrites();
   const target = issue('bza-b', { title: 'Old title' });
-  const { rerender } = render(
-    <I18nProvider initialLanguage="en">
-      <DetailView issueId="bza-b" issues={[target]} onBack={vi.fn()} writes={writes} />
-    </I18nProvider>
-  );
+  const { rerender } = renderDetail({ target, writes });
 
   fireEvent.click(screen.getByRole('button', { name: 'Old title' }));
   chooseStatus(/In progress/);
@@ -648,11 +643,7 @@ test('a write from this page does not claim the ticket changed elsewhere', () =>
 test('an outside edit is still announced after a write from this page', () => {
   const writes = fakeWrites();
   const target = issue('bza-b', { title: 'Old title' });
-  const { rerender } = render(
-    <I18nProvider initialLanguage="en">
-      <DetailView issueId="bza-b" issues={[target]} onBack={vi.fn()} writes={writes} />
-    </I18nProvider>
-  );
+  const { rerender } = renderDetail({ target, writes });
 
   fireEvent.click(screen.getByRole('button', { name: 'Old title' }));
   chooseStatus(/In progress/);
@@ -696,7 +687,9 @@ test('an outside edit is still announced after a write from this page', () => {
 });
 
 test('a link the system refuses to open says so instead of failing silently', async () => {
-  renderDetail(issue('bza-b', { description: 'See [the docs](https://example.com/docs).' }));
+  renderDetail({
+    target: issue('bza-b', { description: 'See [the docs](https://example.com/docs).' }),
+  });
 
   fireEvent.click(screen.getByRole('link', { name: 'the docs' }));
 
@@ -709,7 +702,7 @@ test('a write that misses its echo says the view was refreshed', async () => {
   const writes = fakeWrites({
     submit: vi.fn(async () => ({ status: 'ok' as const, echo: 'timeout' as const })),
   });
-  renderDetail(issue('bza-b', { title: 'Old title' }), undefined, writes);
+  renderDetail({ target: issue('bza-b', { title: 'Old title' }), writes });
 
   fireEvent.click(screen.getByRole('button', { name: 'Old title' }));
   fireEvent.change(screen.getByRole('textbox', { name: 'Title' }), {
