@@ -11,33 +11,10 @@ import { LIST_POSITION_PREFIX, saveListPosition } from './position';
 import { createListViewState } from '@/lib/view/state';
 import { saveSavedView } from '@/lib/view/storage';
 
-vi.mock('@tanstack/react-virtual', () => ({
-  useVirtualizer: (options: {
-    count: number;
-    estimateSize: (index: number) => number;
-    getItemKey: (index: number) => string | number;
-  }) => {
-    const sizes = Array.from({ length: options.count }, (_, index) => options.estimateSize(index));
-    const starts: number[] = [];
-    let total = 0;
-    for (const size of sizes) {
-      starts.push(total);
-      total += size;
-    }
-    return {
-      getTotalSize: () => total,
-      getVirtualItems: () =>
-        sizes.map((size, index) => ({
-          index,
-          start: starts[index] ?? 0,
-          size,
-          key: options.getItemKey(index),
-        })),
-      scrollToIndex: vi.fn(),
-      scrollToOffset: vi.fn(),
-    };
-  },
-}));
+vi.mock('@tanstack/react-virtual', async () => {
+  const { makeVirtualizer } = await import('@/test/virtualizer');
+  return { useVirtualizer: makeVirtualizer };
+});
 
 const healthy: SyncState = { kind: 'healthy', lastSeq: 1, lastEventAt: null };
 const loading: SyncState = { kind: 'loading', step: 'export' };
