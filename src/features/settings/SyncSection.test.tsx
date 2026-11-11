@@ -6,7 +6,7 @@ import { AppRefreshProvider } from '@/app/shell/AppRefresh';
 import { SyncStatusProvider, type SyncErrorRecord } from '@/app/shell/SyncStatus';
 import { WorkspaceProvider } from '@/app/shell/WorkspaceProvider';
 import { I18nProvider } from '@/lib/i18n/I18nProvider';
-import type { UseWorkspace } from '@/lib/workspace/useWorkspace';
+import { makeEntry, makeWorkspace, makeWorkspaceSnapshot } from '@/test/workspace';
 
 import { SyncSection } from './SyncSection';
 import './messages';
@@ -14,44 +14,13 @@ import './messages';
 const NOW = Date.UTC(2026, 10, 2, 12, 0, 0);
 
 function snapshot(checkpoint: { seq: number; savedAt: string } | null): WorkspaceSnapshot {
-  return {
+  return makeWorkspaceSnapshot({
     config: {
-      schemaVersion: 1,
-      bdPath: null,
-      language: 'en',
-      theme: 'system',
       lastWorkspacePath: '/repo/alpha',
-      workspaces: [
-        {
-          path: '/repo/alpha',
-          name: 'alpha',
-          projectId: 'p1',
-          isWorktree: false,
-          lastOpenedAt: '2026-11-01T00:00:00Z',
-          checkpoint,
-        },
-      ],
+      workspaces: [makeEntry({ checkpoint })],
     },
-    missing: [],
     active: '/repo/alpha',
-    corruptBackup: null,
-  };
-}
-
-function workspace(value: WorkspaceSnapshot): UseWorkspace {
-  return {
-    snapshot: value,
-    bd: { kind: 'ready', path: 'bd', version: '1.3.2' },
-    loading: false,
-    error: null,
-    reload: vi.fn(),
-    refreshBd: vi.fn(),
-    add: vi.fn(),
-    switchTo: vi.fn(),
-    remove: vi.fn(),
-    relocate: vi.fn(),
-    setBdPath: vi.fn(),
-  };
+  });
 }
 
 function renderSection(
@@ -66,7 +35,7 @@ function renderSection(
   render(
     <I18nProvider initialLanguage="en">
       <SyncStatusProvider state={state} lastError={lastError}>
-        <WorkspaceProvider workspace={workspace(value)}>
+        <WorkspaceProvider workspace={makeWorkspace({ snapshot: value })}>
           <AppRefreshProvider value={{ lastRefreshAt: NOW, refresh }}>
             <SyncSection copy={copy} />
           </AppRefreshProvider>

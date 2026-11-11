@@ -1,13 +1,13 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, expect, test, vi } from 'vitest';
 
-import type { DiagnosticsSnapshot, SyncState, WorkspaceSnapshot } from '@/bindings/bd';
+import type { DiagnosticsSnapshot, SyncState } from '@/bindings/bd';
 import { AppRefreshProvider } from '@/app/shell/AppRefresh';
 import { SyncStatusProvider } from '@/app/shell/SyncStatus';
 import { WorkspaceProvider } from '@/app/shell/WorkspaceProvider';
 import { resetAppVersion } from '@/lib/app-version';
 import { I18nProvider } from '@/lib/i18n/I18nProvider';
-import type { UseWorkspace } from '@/lib/workspace/useWorkspace';
+import { makeWorkspace, makeWorkspaceSnapshot } from '@/test/workspace';
 
 const getVersion = vi.fn();
 
@@ -48,35 +48,10 @@ const REPORT: DiagnosticsSnapshot = {
   ],
 };
 
-const SNAPSHOT: WorkspaceSnapshot = {
-  config: {
-    schemaVersion: 1,
-    bdPath: null,
-    language: 'en',
-    theme: 'system',
-    lastWorkspacePath: '/repo/alpha',
-    workspaces: [],
-  },
-  missing: [],
+const SNAPSHOT = makeWorkspaceSnapshot({
+  config: { lastWorkspacePath: '/repo/alpha' },
   active: '/repo/alpha',
-  corruptBackup: null,
-};
-
-function workspace(): UseWorkspace {
-  return {
-    snapshot: SNAPSHOT,
-    bd: { kind: 'ready', path: 'bd', version: '1.3.2' },
-    loading: false,
-    error: null,
-    reload: vi.fn(),
-    refreshBd: vi.fn(),
-    add: vi.fn(),
-    switchTo: vi.fn(),
-    remove: vi.fn(),
-    relocate: vi.fn(),
-    setBdPath: vi.fn(),
-  };
-}
+});
 
 function renderSection(
   api: { load: () => Promise<DiagnosticsSnapshot> },
@@ -90,7 +65,7 @@ function renderSection(
       <SyncStatusProvider
         state={{ kind: 'healthy', lastSeq: 42, lastEventAt: null } satisfies SyncState}
       >
-        <WorkspaceProvider workspace={workspace()}>
+        <WorkspaceProvider workspace={makeWorkspace({ snapshot: SNAPSHOT })}>
           <AppRefreshProvider value={{ lastRefreshAt: NOW, refresh: vi.fn() }}>
             <DiagnosticsSection api={api} copy={copy} />
           </AppRefreshProvider>

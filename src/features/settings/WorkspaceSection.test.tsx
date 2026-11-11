@@ -6,22 +6,13 @@ import type { WorkspaceEntry, WorkspaceSnapshot } from '@/bindings/bd';
 import { WorkspaceProvider } from '@/app/shell/WorkspaceProvider';
 import { I18nProvider } from '@/lib/i18n/I18nProvider';
 import type { UseWorkspace } from '@/lib/workspace/useWorkspace';
+import { makeEntry, makeWorkspace as workspace, makeWorkspaceSnapshot } from '@/test/workspace';
 
 import { WorkspaceSection } from './WorkspaceSection';
 import './messages';
 
-const TS = '2026-11-01T00:00:00Z';
-
 function entry(path: string, overrides: Partial<WorkspaceEntry> = {}): WorkspaceEntry {
-  return {
-    path,
-    name: path.split('/').pop() ?? path,
-    projectId: 'project-1-abcdef',
-    isWorktree: false,
-    lastOpenedAt: TS,
-    checkpoint: null,
-    ...overrides,
-  };
+  return makeEntry({ path, projectId: 'project-1-abcdef', ...overrides });
 }
 
 function snapshot(
@@ -29,36 +20,11 @@ function snapshot(
   active: string | null,
   missing: string[] = []
 ): WorkspaceSnapshot {
-  return {
-    config: {
-      schemaVersion: 1,
-      bdPath: null,
-      language: 'en',
-      theme: 'system',
-      lastWorkspacePath: active,
-      workspaces,
-    },
-    missing,
+  return makeWorkspaceSnapshot({
+    config: { lastWorkspacePath: active, workspaces },
     active,
-    corruptBackup: null,
-  };
-}
-
-function workspace(overrides: Partial<UseWorkspace> = {}): UseWorkspace {
-  return {
-    snapshot: snapshot([], null),
-    bd: { kind: 'ready', path: 'bd', version: '1.3.2' },
-    loading: false,
-    error: null,
-    reload: vi.fn(),
-    refreshBd: vi.fn(),
-    add: vi.fn(async () => true),
-    switchTo: vi.fn(async () => true),
-    remove: vi.fn(async () => true),
-    relocate: vi.fn(async () => true),
-    setBdPath: vi.fn(async () => null),
-    ...overrides,
-  };
+    missing,
+  });
 }
 
 function LocationProbe() {

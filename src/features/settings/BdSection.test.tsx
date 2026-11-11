@@ -5,6 +5,7 @@ import type { BdStatus, WorkspaceSnapshot } from '@/bindings/bd';
 import { WorkspaceProvider } from '@/app/shell/WorkspaceProvider';
 import { I18nProvider } from '@/lib/i18n/I18nProvider';
 import type { UseWorkspace } from '@/lib/workspace/useWorkspace';
+import { makeWorkspace, makeWorkspaceSnapshot } from '@/test/workspace';
 
 import { BdSection } from './BdSection';
 import './messages';
@@ -12,36 +13,15 @@ import './messages';
 const READY: BdStatus = { kind: 'ready', path: 'C:/tools/bd.exe', version: '1.3.2' };
 
 function snapshot(bdPath: string | null): WorkspaceSnapshot {
-  return {
-    config: {
-      schemaVersion: 1,
-      bdPath,
-      language: 'en',
-      theme: 'system',
-      lastWorkspacePath: null,
-      workspaces: [],
-    },
-    missing: [],
-    active: null,
-    corruptBackup: null,
-  };
+  return makeWorkspaceSnapshot({ config: { bdPath } });
 }
 
 function workspace(overrides: Partial<UseWorkspace> = {}): UseWorkspace {
-  return {
-    snapshot: snapshot(null),
+  return makeWorkspace({
     bd: READY,
-    loading: false,
-    error: null,
-    reload: vi.fn(),
-    refreshBd: vi.fn(),
-    add: vi.fn(),
-    switchTo: vi.fn(),
-    remove: vi.fn(),
-    relocate: vi.fn(),
     setBdPath: vi.fn(async () => READY),
     ...overrides,
-  };
+  });
 }
 
 function renderSection(
