@@ -162,7 +162,7 @@ test('restores the saved scroll offset and focused row', async () => {
 });
 
 test('a saved focus that is filtered out does not steal focus later', async () => {
-  saveListPosition('p1', { scrollTop: 0, focusedId: 'bza-2' });
+  saveListPosition('p1', { scrollTop: 40, focusedId: 'bza-2' });
 
   renderList({
     issues: [issue('bza-1', { title: 'Keep me' }), issue('bza-2', { title: 'Other work' })],
@@ -170,7 +170,8 @@ test('a saved focus that is filtered out does not steal focus later', async () =
   });
 
   // Let the restore pass finish while bza-2 is excluded by the deep link.
-  await waitFor(() => expect(document.querySelector('[data-issue-id="bza-2"]')).toBeNull());
+  await waitFor(() => expect(screen.getByRole('list')).toHaveProperty('scrollTop', 40));
+  expect(document.querySelector('[data-issue-id="bza-2"]')).toBeNull();
 
   fireEvent.change(screen.getByRole('searchbox', { name: 'Search tickets' }), {
     target: { value: '' },
