@@ -33,9 +33,7 @@ import {
 
 export type AppProps = {
   workspaceApi?: WorkspaceApi;
-  /** Wired to the sync engine later; the shell only renders it. */
   syncState?: SyncState;
-  /** Palettes search these; the sync engine supplies them later. */
   issues?: readonly Issue[];
   initialLanguage?: Language;
   initialTheme?: Theme;
@@ -45,7 +43,6 @@ export type AppProps = {
    */
   syncEnabled?: boolean;
   syncApi?: SyncApi;
-  /** Injected by tests; production talks to the Tauri command layer. */
   writesApi?: WritesApi;
 };
 
@@ -63,7 +60,7 @@ const DetailRoute = lazy(() =>
 
 /**
  * The board is a second-screen view; loading it as a route chunk keeps it and
- * (from phase 6's drag task on) dnd-kit out of the first-screen budget.
+ * dnd-kit out of the first-screen budget.
  */
 const BoardRoute = lazy(() =>
   import('@/features/board/BoardView').then((module) => ({ default: module.BoardRoute }))
@@ -179,7 +176,6 @@ function AppFrame({
   });
   const shellIssues = syncEnabled ? sync.issues : issues;
   const shellSyncState = syncEnabled ? (bdUnavailable(bd) ?? sync.state) : syncState;
-  // The injected state is what unit tests and the browser e2e seam provide.
   const shellLastSeq = syncEnabled
     ? sync.lastSeq
     : syncState.kind === 'healthy'

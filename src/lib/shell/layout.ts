@@ -1,4 +1,3 @@
-/** Sidebar width preference, persisted in the webview profile. */
 export const SIDEBAR_STORAGE_KEY = 'beadazzled.sidebar.collapsed';
 
 /**

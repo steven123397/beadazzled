@@ -118,7 +118,6 @@ export function resolveShortcut<T extends Shortcut>(
   return { binding: null, pending: null };
 }
 
-/** Human-readable key label for the help panel. */
 export function formatKeys(keys: string | readonly string[]): string {
   const list = typeof keys === 'string' ? [keys] : keys;
 

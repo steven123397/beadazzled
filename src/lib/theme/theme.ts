@@ -5,9 +5,6 @@ export const THEMES: Theme[] = ['light', 'dark', 'system'];
 
 export const THEME_STORAGE_KEY = 'beadazzled.theme';
 
-// Persisted in the webview profile for now; Settings (bza-gkx) will reconcile
-// this with the Rust AppConfig theme field once it gets a command.
-
 export function isTheme(value: unknown): value is Theme {
   return value === 'light' || value === 'dark' || value === 'system';
 }

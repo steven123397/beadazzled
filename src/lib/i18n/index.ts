@@ -22,9 +22,6 @@ export const LANGUAGES: Language[] = ['en', 'zh-CN'];
 
 export const LANGUAGE_STORAGE_KEY = 'beadazzled.language';
 
-// Persisted in the webview profile for now; Settings (bza-gkx) will reconcile
-// this with the Rust AppConfig language field once it gets a command.
-
 export function isLanguage(value: unknown): value is Language {
   return value === 'en' || value === 'zh-CN';
 }

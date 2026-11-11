@@ -36,7 +36,6 @@ export function Shell({
   onRefresh?: () => void;
   /** Journal position reported by the sync store; 0 when sync is not running. */
   lastSeq?: number;
-  /** Writes waiting behind the in-flight one; the write flow lands in bza-um8. */
   pendingWrites?: number;
 }) {
   const { t, language, setLanguage } = useI18n();

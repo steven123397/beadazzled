@@ -6,7 +6,6 @@ import { isEditableTarget } from '@/lib/dom/focus';
 import { resolveShortcut, type PendingSequence, type ResolveOptions } from './resolve';
 import type { Shortcut, ShortcutContext } from './types';
 
-/** Binds the window keydown listener and dispatches to the registered shortcut. */
 export function useShortcuts(shortcuts: readonly Shortcut[], context: ShortcutContext): void {
   const shortcutsRef = useRef(shortcuts);
   const contextRef = useRef(context);

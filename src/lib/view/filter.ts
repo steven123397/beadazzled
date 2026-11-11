@@ -12,11 +12,9 @@ export type FilterContext = {
    * callers may omit it and pay for the scan.
    */
   searchText?: ReadonlyMap<string, string>;
-  /** Complete issue lookup used by the Ready filter; defaults to the input. */
   issuesById?: Readonly<Record<string, Issue>>;
 };
 
-/** The text a v0.1.0 search matches: id, title and labels, lower-cased. */
 export function issueSearchText(issue: Issue): string {
   return `${issue.id} ${issue.title} ${issue.labels.join(' ')}`.toLowerCase();
 }
