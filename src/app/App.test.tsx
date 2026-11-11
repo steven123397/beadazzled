@@ -5,6 +5,7 @@ import type { BdStatus, Issue, SyncState, WorkspaceEntry, WorkspaceSnapshot } fr
 import { setDraftGuard } from '@/lib/draft-guard';
 import type { SyncApi, SyncEvent, SyncSnapshot } from '@/lib/sync/api';
 import type { WorkspaceApi } from '@/lib/workspace/api';
+import { chooseStatus } from '@/test/detail-ui';
 import { makeIssue } from '@/test/fixtures';
 import { makeEntry, makeWorkspaceSnapshot } from '@/test/workspace';
 
@@ -12,16 +13,6 @@ import { App } from './App';
 
 function issue(id: string, title: string): Issue {
   return makeIssue(id, { title });
-}
-
-/** Pick a status from the detail rail's popover. */
-function chooseStatus(option: RegExp) {
-  const details = document.querySelector<HTMLDetailsElement>('details[aria-label="Status"]');
-  if (details === null) {
-    throw new Error('no Status menu');
-  }
-  details.open = true;
-  fireEvent.click(within(details).getByRole('radio', { name: option }));
 }
 
 function entry(projectId: string, name = projectId): WorkspaceEntry {

@@ -6,6 +6,7 @@ import { I18nProvider } from '@/lib/i18n/I18nProvider';
 import { MAX_ACCEPTANCE_BYTES } from '@/lib/writes/commands';
 import type { UseWrite } from '@/lib/writes/useWrite';
 import { fakeWrites } from '@/test/detail-writes';
+import { chooseStatus } from '@/test/detail-ui';
 import { makeIssue, renderWithI18n, TEST_TS as TS } from '@/test/fixtures';
 
 import { DetailView } from './DetailView';
@@ -40,16 +41,6 @@ function renderDetail(target: Issue, issues: readonly Issue[] = [target], writes
     <DetailView issueId={target.id} issues={issues} onBack={onBack} writes={writes} />
   );
   return { onBack };
-}
-
-/** Pick a status from the rail's popover (its radios live inside `<details>`). */
-function chooseStatus(option: RegExp) {
-  const details = document.querySelector<HTMLDetailsElement>('details[aria-label="Status"]');
-  if (details === null) {
-    throw new Error('no Status menu');
-  }
-  details.open = true;
-  fireEvent.click(within(details).getByRole('radio', { name: option }));
 }
 
 test('the page shows title, markdown body, acceptance, metadata and comments', () => {
