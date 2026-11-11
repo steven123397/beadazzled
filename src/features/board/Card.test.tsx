@@ -1,9 +1,9 @@
 import { DndContext } from '@dnd-kit/core';
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import { fireEvent, screen, within } from '@testing-library/react';
 import { expect, test, vi } from 'vitest';
 
 import type { Issue } from '@/bindings/bd';
-import { I18nProvider } from '@/lib/i18n/I18nProvider';
+import { renderWithI18n } from '@/test/fixtures';
 
 import { Card } from './Card';
 import type { BoardCard } from './columns';
@@ -35,20 +35,18 @@ function card(overrides: Partial<BoardCard> = {}): BoardCard {
 function renderCard(value: BoardCard, props: { pending?: boolean; focused?: boolean } = {}) {
   const onOpen = vi.fn();
   const onFocus = vi.fn();
-  render(
-    <I18nProvider initialLanguage="en">
-      <DndContext>
-        <Card
-          card={value}
-          column="ready"
-          start={0}
-          focused={props.focused ?? false}
-          pending={props.pending}
-          onOpen={onOpen}
-          onFocus={onFocus}
-        />
-      </DndContext>
-    </I18nProvider>
+  renderWithI18n(
+    <DndContext>
+      <Card
+        card={value}
+        column="ready"
+        start={0}
+        focused={props.focused ?? false}
+        pending={props.pending}
+        onOpen={onOpen}
+        onFocus={onFocus}
+      />
+    </DndContext>
   );
   return { onOpen, onFocus };
 }

@@ -1,8 +1,8 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, screen } from '@testing-library/react';
 import { expect, test, vi } from 'vitest';
 
 import type { Issue } from '@/bindings/bd';
-import { I18nProvider } from '@/lib/i18n/I18nProvider';
+import { renderWithI18n } from '@/test/fixtures';
 
 import { Row } from './Row';
 
@@ -30,17 +30,15 @@ function issue(overrides: Partial<Issue> = {}): Issue {
 function renderRow(overrides: Partial<Issue> = {}, focused = false, showType = true) {
   const onOpen = vi.fn();
   const onFocus = vi.fn();
-  render(
-    <I18nProvider initialLanguage="en">
-      <Row
-        issue={issue(overrides)}
-        start={36}
-        focused={focused}
-        showType={showType}
-        onOpen={onOpen}
-        onFocus={onFocus}
-      />
-    </I18nProvider>
+  renderWithI18n(
+    <Row
+      issue={issue(overrides)}
+      start={36}
+      focused={focused}
+      showType={showType}
+      onOpen={onOpen}
+      onFocus={onFocus}
+    />
   );
   return { row: screen.getByRole('listitem'), onOpen, onFocus };
 }

@@ -1,23 +1,15 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, screen } from '@testing-library/react';
 import { expect, test, vi } from 'vitest';
 
-import { I18nProvider } from '@/lib/i18n/I18nProvider';
+import { renderWithI18n } from '@/test/fixtures';
 
 import { Editor } from './Editor';
 
 function renderEditor(props: Partial<Parameters<typeof Editor>[0]> = {}) {
   const onSave = vi.fn(async () => true);
   const onCancel = vi.fn();
-  render(
-    <I18nProvider initialLanguage="en">
-      <Editor
-        label="Title"
-        value="Original title"
-        onSave={onSave}
-        onCancel={onCancel}
-        {...props}
-      />
-    </I18nProvider>
+  renderWithI18n(
+    <Editor label="Title" value="Original title" onSave={onSave} onCancel={onCancel} {...props} />
   );
   return { onSave, onCancel };
 }
