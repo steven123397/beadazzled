@@ -4,6 +4,8 @@ mod common;
 
 use std::fs;
 use std::path::Path;
+use std::sync::mpsc;
+use std::time::Duration;
 
 use beadazzled_lib::bridge::{BdBridge, BridgeErrorCode};
 
@@ -82,4 +84,27 @@ fn a_truncation_marker_in_follow_mode_is_journal_truncated() {
         .expect_err("a truncation marker is not a record");
 
     assert_eq!(error.code, BridgeErrorCode::JournalTruncated);
+}
+
+#[test]
+fn a_truncation_marker_on_stderr_is_detected_before_the_stream_ends() {
+    let dir = common::temp_dir("follow-stderr-truncated");
+    let workspace = common::workspace(&dir);
+    fs::write(workspace.join("journal-stderr-truncated"), b"").expect("mark stderr truncation");
+
+    let (result_tx, result_rx) = mpsc::channel();
+    let handle = std::thread::spawn(move || {
+        let mut reader = bridge_at(&workspace)
+            .journal(0, true)
+            .expect("follow starts");
+        let result = reader.next_batch();
+        result_tx.send(result).expect("send the follow result");
+    });
+
+    let error = result_rx
+        .recv_timeout(Duration::from_secs(5))
+        .expect("stderr_contains detects the marker before the child exits")
+        .expect_err("the stderr marker is not a journal record");
+    assert_eq!(error.code, BridgeErrorCode::JournalTruncated);
+    handle.join().expect("follow reader thread");
 }

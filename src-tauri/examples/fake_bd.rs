@@ -74,6 +74,8 @@ fn main() {
                         println!(
                             "{{\"code\":\"events_journal_truncated\",\"since\":1,\"floor\":5,\"head\":9}}"
                         );
+                    } else if root.join("journal-stderr-truncated").exists() {
+                        stream_journal_stderr_truncated();
                     } else if root.join("journal-hang").exists() {
                         stream_journal_hang(workspace);
                     } else if root.join("journal-split").exists() {
@@ -317,6 +319,18 @@ fn write_journal_argv(workspace: &str, args: &[String]) {
     let path = std::path::Path::new(workspace).join("journal-argv.json");
     let record = serde_json::json!({ "args": args });
     fs::write(path, record.to_string()).expect("write argv capture");
+}
+
+/// Reports truncation on stderr, then emits a blank stdout line and stays open.
+/// The delay lets the follow-side stderr reader observe the marker first, so a
+/// successful test must take the prefilter path rather than waiting for EOF.
+fn stream_journal_stderr_truncated() {
+    eprintln!("{{\"code\":\"events_journal_truncated\",\"since\":1,\"floor\":5,\"head\":9}}");
+    io::stderr().flush().expect("flush truncation marker");
+    std::thread::sleep(Duration::from_millis(100));
+    io::stdout().write_all(b"\n").expect("wake stdout reader");
+    io::stdout().flush().expect("flush stdout wake");
+    sleep_ms(10_000);
 }
 
 /// Writes the first journal record, then holds stdout open and stays silent.
