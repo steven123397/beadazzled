@@ -1,10 +1,10 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter, useLocation } from 'react-router-dom';
 import { expect, test, vi } from 'vitest';
 
 import type { WorkspaceEntry, WorkspaceSnapshot } from '@/bindings/bd';
 import { WorkspaceProvider } from '@/app/shell/WorkspaceProvider';
-import { I18nProvider } from '@/lib/i18n/I18nProvider';
+import { renderWithI18n } from '@/test/fixtures';
 import type { UseWorkspace } from '@/lib/workspace/useWorkspace';
 import { makeEntry, makeWorkspace as workspace, makeWorkspaceSnapshot } from '@/test/workspace';
 
@@ -36,15 +36,13 @@ function renderSection(
   value: UseWorkspace,
   pickDirectory: () => Promise<string | null> = async () => null
 ) {
-  return render(
-    <I18nProvider initialLanguage="en">
-      <MemoryRouter initialEntries={['/settings']}>
-        <WorkspaceProvider workspace={value}>
-          <WorkspaceSection pickDirectory={pickDirectory} />
-          <LocationProbe />
-        </WorkspaceProvider>
-      </MemoryRouter>
-    </I18nProvider>
+  return renderWithI18n(
+    <MemoryRouter initialEntries={['/settings']}>
+      <WorkspaceProvider workspace={value}>
+        <WorkspaceSection pickDirectory={pickDirectory} />
+        <LocationProbe />
+      </WorkspaceProvider>
+    </MemoryRouter>
   );
 }
 

@@ -1,10 +1,10 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, expect, test, vi } from 'vitest';
 
 import { WorkspaceProvider } from '@/app/shell/WorkspaceProvider';
 import { resetAppVersion } from '@/lib/app-version';
-import { I18nProvider } from '@/lib/i18n/I18nProvider';
+import { renderWithI18n } from '@/test/fixtures';
 import { ThemeProvider } from '@/lib/theme/ThemeProvider';
 import { resetUpdates } from '@/lib/updates';
 import { makeEntry, makeWorkspace, makeWorkspaceSnapshot } from '@/test/workspace';
@@ -43,16 +43,14 @@ const snapshot = makeWorkspaceSnapshot({
 });
 
 function renderSection() {
-  return render(
-    <I18nProvider initialLanguage="en">
-      <ThemeProvider initialPreference="system">
-        <MemoryRouter>
-          <WorkspaceProvider workspace={makeWorkspace({ snapshot })}>
-            <AboutSection />
-          </WorkspaceProvider>
-        </MemoryRouter>
-      </ThemeProvider>
-    </I18nProvider>
+  return renderWithI18n(
+    <ThemeProvider initialPreference="system">
+      <MemoryRouter>
+        <WorkspaceProvider workspace={makeWorkspace({ snapshot })}>
+          <AboutSection />
+        </WorkspaceProvider>
+      </MemoryRouter>
+    </ThemeProvider>
   );
 }
 

@@ -1,11 +1,11 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, screen, waitFor } from '@testing-library/react';
 import { expect, test, vi } from 'vitest';
 
 import type { SyncState, WorkspaceSnapshot } from '@/bindings/bd';
 import { AppRefreshProvider } from '@/app/shell/AppRefresh';
 import { SyncStatusProvider, type SyncErrorRecord } from '@/app/shell/SyncStatus';
 import { WorkspaceProvider } from '@/app/shell/WorkspaceProvider';
-import { I18nProvider } from '@/lib/i18n/I18nProvider';
+import { renderWithI18n } from '@/test/fixtures';
 import { makeEntry, makeWorkspace, makeWorkspaceSnapshot } from '@/test/workspace';
 
 import { SyncSection } from './SyncSection';
@@ -32,16 +32,14 @@ function renderSection(
     lastError = null as SyncErrorRecord | null,
   } = {}
 ) {
-  render(
-    <I18nProvider initialLanguage="en">
-      <SyncStatusProvider state={state} lastError={lastError}>
-        <WorkspaceProvider workspace={makeWorkspace({ snapshot: value })}>
-          <AppRefreshProvider value={{ lastRefreshAt: NOW, refresh }}>
-            <SyncSection copy={copy} />
-          </AppRefreshProvider>
-        </WorkspaceProvider>
-      </SyncStatusProvider>
-    </I18nProvider>
+  renderWithI18n(
+    <SyncStatusProvider state={state} lastError={lastError}>
+      <WorkspaceProvider workspace={makeWorkspace({ snapshot: value })}>
+        <AppRefreshProvider value={{ lastRefreshAt: NOW, refresh }}>
+          <SyncSection copy={copy} />
+        </AppRefreshProvider>
+      </WorkspaceProvider>
+    </SyncStatusProvider>
   );
   return { copy, refresh };
 }

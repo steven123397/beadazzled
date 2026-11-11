@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, screen, waitFor } from '@testing-library/react';
 import { beforeEach, expect, test, vi } from 'vitest';
 
 import type { DiagnosticsSnapshot, SyncState } from '@/bindings/bd';
@@ -6,7 +6,7 @@ import { AppRefreshProvider } from '@/app/shell/AppRefresh';
 import { SyncStatusProvider } from '@/app/shell/SyncStatus';
 import { WorkspaceProvider } from '@/app/shell/WorkspaceProvider';
 import { resetAppVersion } from '@/lib/app-version';
-import { I18nProvider } from '@/lib/i18n/I18nProvider';
+import { renderWithI18n } from '@/test/fixtures';
 import { makeWorkspace, makeWorkspaceSnapshot } from '@/test/workspace';
 
 const getVersion = vi.fn();
@@ -60,18 +60,16 @@ function renderSection(
     return 'copied' as const;
   })
 ) {
-  render(
-    <I18nProvider initialLanguage="en">
-      <SyncStatusProvider
-        state={{ kind: 'healthy', lastSeq: 42, lastEventAt: null } satisfies SyncState}
-      >
-        <WorkspaceProvider workspace={makeWorkspace({ snapshot: SNAPSHOT })}>
-          <AppRefreshProvider value={{ lastRefreshAt: NOW, refresh: vi.fn() }}>
-            <DiagnosticsSection api={api} copy={copy} />
-          </AppRefreshProvider>
-        </WorkspaceProvider>
-      </SyncStatusProvider>
-    </I18nProvider>
+  renderWithI18n(
+    <SyncStatusProvider
+      state={{ kind: 'healthy', lastSeq: 42, lastEventAt: null } satisfies SyncState}
+    >
+      <WorkspaceProvider workspace={makeWorkspace({ snapshot: SNAPSHOT })}>
+        <AppRefreshProvider value={{ lastRefreshAt: NOW, refresh: vi.fn() }}>
+          <DiagnosticsSection api={api} copy={copy} />
+        </AppRefreshProvider>
+      </WorkspaceProvider>
+    </SyncStatusProvider>
   );
   return { copy };
 }

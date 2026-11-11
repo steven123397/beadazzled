@@ -1,9 +1,9 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, screen, waitFor } from '@testing-library/react';
 import { expect, test, vi } from 'vitest';
 
 import type { BdStatus, WorkspaceSnapshot } from '@/bindings/bd';
 import { WorkspaceProvider } from '@/app/shell/WorkspaceProvider';
-import { I18nProvider } from '@/lib/i18n/I18nProvider';
+import { renderWithI18n } from '@/test/fixtures';
 import type { UseWorkspace } from '@/lib/workspace/useWorkspace';
 import { makeWorkspace, makeWorkspaceSnapshot } from '@/test/workspace';
 
@@ -31,15 +31,13 @@ function renderSection(
     copy?: () => Promise<'copied' | 'failed'>;
   } = {}
 ) {
-  return render(
-    <I18nProvider initialLanguage="en">
-      <WorkspaceProvider workspace={value}>
-        <BdSection
-          pickFile={props.pickFile ?? (async () => null)}
-          copy={props.copy ?? (async () => 'copied' as const)}
-        />
-      </WorkspaceProvider>
-    </I18nProvider>
+  return renderWithI18n(
+    <WorkspaceProvider workspace={value}>
+      <BdSection
+        pickFile={props.pickFile ?? (async () => null)}
+        copy={props.copy ?? (async () => 'copied' as const)}
+      />
+    </WorkspaceProvider>
   );
 }
 
