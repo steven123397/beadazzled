@@ -70,7 +70,8 @@ export function readReleaseMeta(root) {
     ['src-tauri/tauri.conf.json', tauri.version],
   ];
   const publicKey = readUpdaterPublicKey(tauri);
-  return { versions, publicKey };
+  const requireSignedVersion = tauri.plugins?.updater?.requireSignedVersion === true;
+  return { versions, publicKey, requireSignedVersion };
 }
 
 export function readReleaseVersions(root) {

@@ -11,11 +11,29 @@ export const publicKeyBlob = Buffer.concat([Buffer.from('Ed'), keyId, rawPublicK
   'base64'
 );
 
-export function signatureBlob(data) {
+export function rawSignatureBlob(data) {
   const digest = createHash('blake2b512').update(data).digest();
   return Buffer.concat([Buffer.from('ED'), keyId, sign(null, digest, keyPair.privateKey)]).toString(
     'base64'
   );
+}
+
+export function signatureBlob(data, version = '0.1.0') {
+  const signature = rawSignatureBlob(data);
+  const trustedComment = `timestamp:1793757252\tfile:app.exe\tversion:${version}`;
+  const globalSignature = sign(
+    null,
+    Buffer.concat([Buffer.from(signature, 'base64').subarray(10), Buffer.from(trustedComment)]),
+    keyPair.privateKey
+  ).toString('base64');
+  const file = [
+    'untrusted comment: signature from tauri secret key',
+    signature,
+    `trusted comment: ${trustedComment}`,
+    globalSignature,
+    '',
+  ].join('\n');
+  return Buffer.from(file, 'utf8').toString('base64');
 }
 
 export function writeRepo(root, options = {}) {
@@ -30,7 +48,7 @@ export function writeRepo(root, options = {}) {
   );
   writeFileSync(
     path.join(root, 'src-tauri/tauri.conf.json'),
-    JSON.stringify({ version, plugins: { updater: { pubkey } } })
+    JSON.stringify({ version, plugins: { updater: { pubkey, requireSignedVersion: true } } })
   );
 }
 
@@ -38,7 +56,10 @@ export function writeInstaller(dir, overrides = {}) {
   const version = overrides.version ?? '0.1.0';
   const installerName = overrides.installerName ?? `beadazzled_${version}_x64-setup.exe`;
   const bytes = overrides.bytes ?? Buffer.from('installer bytes');
-  const signature = overrides.signature !== undefined ? overrides.signature : signatureBlob(bytes);
+  const signature =
+    overrides.signature !== undefined
+      ? overrides.signature
+      : signatureBlob(bytes, overrides.signedVersion ?? version);
   mkdirSync(dir, { recursive: true });
   const installer = path.join(dir, installerName);
   writeFileSync(installer, bytes);

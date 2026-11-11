@@ -128,20 +128,22 @@ function checkManifest(entry, installerName, signatureFile, manifestVersion, err
     } catch (error) {
       errors.push(`latest.json ${error.message}`);
     }
-    if (typeof entry.signature !== 'string' || entry.signature.trim() !== signatureFile) {
+    if (typeof entry.signature !== 'string' || entry.signature !== signatureFile) {
       errors.push('latest.json signature does not match the .sig file');
     }
   }
 }
 
-function checkSignature(options, configKey, signatureFile, installerBytes, errors) {
+function checkSignature(options, release, signatureFile, installerBytes, manifestVersion, errors) {
   let keyId = null;
   let signatureOk = false;
   try {
     const result = verifyMinisign({
-      publicKey: readPublicKey(options, configKey),
+      publicKey: readPublicKey(options, release.publicKey),
       signature: signatureFile,
       data: installerBytes,
+      announcedVersion: manifestVersion,
+      requireSignedVersion: release.requireSignedVersion,
     });
     signatureOk = result.ok;
     if (!result.ok) {
@@ -206,7 +208,8 @@ runMain('verify-release', () => {
   const installerName = path.basename(options.installer);
   const signatureFile = readFileSync(options.signature, 'utf8').trim();
   const manifest = JSON.parse(readFileSync(options.manifest, 'utf8'));
-  const { versions, publicKey: configKey } = readReleaseMeta(options.root);
+  const release = readReleaseMeta(options.root);
+  const { versions } = release;
   const manifestVersion = manifest.version;
   const entry = manifest.platforms?.[PLATFORM];
 
@@ -214,9 +217,10 @@ runMain('verify-release', () => {
   checkManifest(entry, installerName, signatureFile, manifestVersion, errors);
   const { signatureOk, keyId } = checkSignature(
     options,
-    configKey,
+    release,
     signatureFile,
     installerBytes,
+    manifestVersion,
     errors
   );
   const sha256 = checkHash(installerBytes, options.sha256, manifest, entry, errors);

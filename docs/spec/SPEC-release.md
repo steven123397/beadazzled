@@ -69,7 +69,9 @@
 
 `npm run verify:release` 至少检查：
 
-- `.sig` 与安装包字节匹配（用公钥验证）；
+- `.sig` 与安装包字节匹配（用公钥验证）；armored 签名还必须通过 global
+  signature 校验，trusted comment 中的 `version:` 与 `latest.json` 一致；
+  `requireSignedVersion: true` 时缺失签名版本同样失败；
 - `latest.json` 的版本、平台条目、URL、`signature` 与实际产物一致；URL 规范化后必须与
   `https://github.com/steven123397/beadazzled/releases/download/v<version>/<installer>`
   完全一致，防止点段逃逸到非预期仓库；安装包版本号按分隔符精确匹配，避免

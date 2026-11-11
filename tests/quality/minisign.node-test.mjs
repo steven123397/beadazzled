@@ -19,6 +19,24 @@ function signatureBlob(data, algorithm = 'ED') {
   );
 }
 
+function armoredSignature(data, version = '0.1.0') {
+  const signature = signatureBlob(data);
+  const trustedComment = `timestamp:1793757252\tfile:app.exe\tversion:${version}`;
+  const globalSignature = sign(
+    null,
+    Buffer.concat([Buffer.from(signature, 'base64').subarray(10), Buffer.from(trustedComment)]),
+    privateKey
+  ).toString('base64');
+  const file = [
+    'untrusted comment: signature from tauri secret key',
+    signature,
+    `trusted comment: ${trustedComment}`,
+    globalSignature,
+    '',
+  ].join('\n');
+  return Buffer.from(file, 'utf8').toString('base64');
+}
+
 test('accepts a prehashed (ED) signature', () => {
   const data = Buffer.from('installer bytes');
 
@@ -31,12 +49,12 @@ test('accepts a prehashed (ED) signature', () => {
   assert.deepEqual(result, { ok: true });
 });
 
-test('accepts a direct (Ed) signature and armored files', () => {
+test('accepts a direct (Ed) signature and armored public keys', () => {
   const data = Buffer.from('installer bytes');
 
   const result = verifyMinisign({
     publicKey: `untrusted comment: minisign public key\n${publicKeyBlob()}\n`,
-    signature: `untrusted comment: signature\n${signatureBlob(data, 'Ed')}\n`,
+    signature: signatureBlob(data, 'Ed'),
     data,
   });
 
@@ -59,16 +77,92 @@ test('accepts the public key in the base64-of-file form Tauri stores', () => {
 
 test('accepts the signature file form Tauri writes', () => {
   const data = Buffer.from('installer bytes');
-  const signatureFile = [
-    'untrusted comment: signature from tauri secret key',
-    signatureBlob(data),
-    'trusted comment: timestamp:1793757252\tfile:app.exe\tversion:0.1.0',
-    Buffer.alloc(64).toString('base64'),
-    '',
-  ].join('\n');
-  const wrapped = Buffer.from(signatureFile, 'utf8').toString('base64');
+  const wrapped = armoredSignature(data);
 
-  const result = verifyMinisign({ publicKey: publicKeyBlob(), signature: wrapped, data });
+  const result = verifyMinisign({
+    publicKey: publicKeyBlob(),
+    signature: wrapped,
+    data,
+    announcedVersion: '0.1.0',
+    requireSignedVersion: true,
+  });
+
+  assert.deepEqual(result, { ok: true });
+});
+
+test('rejects a direct armored file instead of accepting a manifest-invalid shape', () => {
+  const armored = Buffer.from(armoredSignature(Buffer.from('installer bytes')), 'base64').toString(
+    'utf8'
+  );
+
+  assert.throws(() => decodeSignature(armored), /base64-wrapped|four-line/);
+});
+
+test('accepts updater-equivalent semver spellings', () => {
+  const data = Buffer.from('installer bytes');
+  const wrapped = armoredSignature(data, 'vv1.2.3+build.7');
+
+  const result = verifyMinisign({
+    publicKey: publicKeyBlob(),
+    signature: wrapped,
+    data,
+    announcedVersion: '1.2.3+build.7',
+    requireSignedVersion: true,
+  });
+
+  assert.deepEqual(result, { ok: true });
+});
+
+test('rejects a tampered trusted comment before reading its version', () => {
+  const data = Buffer.from('installer bytes');
+  const tamperedFile = Buffer.from(armoredSignature(data), 'base64')
+    .toString('utf8')
+    .replace('version:0.1.0', 'version:9.9.9');
+  const wrapped = Buffer.from(tamperedFile, 'utf8').toString('base64');
+
+  const result = verifyMinisign({
+    publicKey: publicKeyBlob(),
+    signature: wrapped,
+    data,
+    announcedVersion: '9.9.9',
+    requireSignedVersion: true,
+  });
+
+  assert.equal(result.ok, false);
+  assert.match(result.reason, /global signature/);
+});
+
+test('rejects a missing signed version when required', () => {
+  const data = Buffer.from('installer bytes');
+
+  const result = verifyMinisign({
+    publicKey: publicKeyBlob(),
+    signature: signatureBlob(data),
+    data,
+    announcedVersion: '0.1.0',
+    requireSignedVersion: true,
+  });
+
+  assert.equal(result.ok, false);
+  assert.match(result.reason, /trusted comment has no version/);
+});
+
+test('accepts the tauri-plugin-updater 2.14.1 official signed-version vector', () => {
+  // Source: https://docs.rs/tauri-plugin-updater/2.14.1/src/tauri_plugin_updater/updater.rs.html#2117-2123
+  const publicKey =
+    'untrusted comment: minisign public key: A49EF4746FA6E6D7\nRWTX5qZvdPSepDGWg2bz8n6ArQnBMwgQK1geVosorcbLzcunD+KJ+cYe';
+  const signatureFile = `untrusted comment: signature from tauri secret key
+RUTX5qZvdPSepPF2zsjvP/L/TQtBLRnWRvaq+4omK1UEugtQp/USrGiI1v762sDy3id3aor7bRC9ETyeot6lMHHrWoZ5hjUM1Qc=
+trusted comment: timestamp:1791649051\tfile:payload\tversion:2.0.0
+DDq2CLOEl5cQmC2eJRHlnZPVViOZsu1CjpPKQoei4A/XBfkDqGO0B+QMrcrHgEQ5qV3mne75tdFWhJpqUXh9AA==`;
+
+  const result = verifyMinisign({
+    publicKey,
+    signature: Buffer.from(signatureFile, 'utf8').toString('base64'),
+    data: Buffer.from('test'),
+    announcedVersion: '2.0.0',
+    requireSignedVersion: true,
+  });
 
   assert.deepEqual(result, { ok: true });
 });

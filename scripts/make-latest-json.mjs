@@ -19,6 +19,7 @@ import {
   readReleaseMeta,
   readReleaseVersions,
   requireReleaseUrl,
+  SEMVER,
   UPDATER_PLATFORM,
 } from './lib/release-meta.mjs';
 
@@ -60,6 +61,9 @@ function parseArgs(argv) {
 
 runMain('make-latest-json', () => {
   const options = parseArgs(process.argv.slice(2));
+  if (!SEMVER.test(options.version)) {
+    throw new Error(`release version must be semantic: ${options.version}`);
+  }
   const signaturePath = `${options.installer}.sig`;
 
   // Error priority: a missing signature (forgot TAURI_SIGNING_PRIVATE_KEY) is
@@ -87,7 +91,7 @@ runMain('make-latest-json', () => {
   }
 
   // Never publish a manifest for bytes the updater itself would reject.
-  const { publicKey } = readReleaseMeta(options.root);
+  const { publicKey, requireSignedVersion } = readReleaseMeta(options.root);
   if (publicKey === null) {
     throw new Error('no updater public key: set plugins.updater.pubkey in tauri.conf.json');
   }
@@ -95,6 +99,8 @@ runMain('make-latest-json', () => {
     publicKey,
     signature,
     data: installerBytes,
+    announcedVersion: options.version,
+    requireSignedVersion,
   });
   if (!verification.ok) {
     throw new Error(`signature verification failed: ${verification.reason}`);

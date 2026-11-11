@@ -5,7 +5,7 @@ import path from 'node:path';
 import { test } from 'node:test';
 
 import { scriptFor, spawnCheck, withTempRoots } from './helpers.mjs';
-import { publicKeyBlob, writeFixture } from './release-fixtures.mjs';
+import { publicKeyBlob, rawSignatureBlob, writeFixture } from './release-fixtures.mjs';
 
 const scriptPath = scriptFor('verify-release');
 const { makeRoot } = withTempRoots({ prefix: 'beadazzled-release-' });
@@ -26,6 +26,85 @@ test('a matching artifact, manifest and signature pass', () => {
   assert.equal(summary.version, '0.1.0');
   assert.equal(summary.signature.verified, true);
   assert.equal(summary.sha256.length, 64);
+});
+
+test('a signed version that differs from the manifest fails', () => {
+  const root = makeRoot();
+  const { installer } = writeFixture(root, { signedVersion: '9.9.9' });
+
+  const result = run(root, installer);
+
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /signed version 9\.9\.9 does not match manifest version 0\.1\.0/);
+});
+
+test('a missing signed version fails when the updater requires it', () => {
+  const root = makeRoot();
+  const { installer } = writeFixture(root, {
+    signature: rawSignatureBlob(Buffer.from('installer bytes')),
+  });
+
+  const result = run(root, installer);
+
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /trusted comment has no version/);
+});
+
+test('a direct armored signature fails even when both files carry the same text', () => {
+  const root = makeRoot();
+  const { installer } = writeFixture(root);
+  const signaturePath = `${installer}.sig`;
+  const armored = Buffer.from(readFileSync(signaturePath, 'utf8').trim(), 'base64').toString(
+    'utf8'
+  );
+  writeFileSync(signaturePath, armored);
+  const manifestPath = path.join(path.dirname(installer), 'latest.json');
+  const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
+  manifest.platforms['windows-x86_64'].signature = armored;
+  writeFileSync(manifestPath, JSON.stringify(manifest));
+
+  const result = run(root, installer);
+
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /base64-wrapped|four-line/);
+});
+
+test('a signature box without the untrusted comment line fails verification', () => {
+  const root = makeRoot();
+  const { installer } = writeFixture(root);
+  const signaturePath = `${installer}.sig`;
+  const wrapped = Buffer.from(
+    Buffer.from(readFileSync(signaturePath, 'utf8').trim(), 'base64')
+      .toString('utf8')
+      .split('\n')
+      .filter((line) => !line.startsWith('untrusted comment:'))
+      .join('\n'),
+    'utf8'
+  ).toString('base64');
+  writeFileSync(signaturePath, wrapped);
+  const manifestPath = path.join(path.dirname(installer), 'latest.json');
+  const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
+  manifest.platforms['windows-x86_64'].signature = wrapped;
+  writeFileSync(manifestPath, JSON.stringify(manifest));
+
+  const result = run(root, installer);
+
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /four-line/);
+});
+
+test('whitespace around the manifest signature is not trimmed into a pass', () => {
+  const root = makeRoot();
+  const { installer } = writeFixture(root);
+  const manifestPath = path.join(path.dirname(installer), 'latest.json');
+  const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
+  manifest.platforms['windows-x86_64'].signature += '\n';
+  writeFileSync(manifestPath, JSON.stringify(manifest));
+
+  const result = run(root, installer);
+
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /latest\.json signature does not match the \.sig file/);
 });
 
 test('the platform sha256 in latest.json is checked against the installer', () => {

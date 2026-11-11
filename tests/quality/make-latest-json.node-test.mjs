@@ -188,6 +188,57 @@ test('a path-like version cannot redirect the expected release URL', () => {
   assert.equal(existsSync(path.join(dir, 'latest.json')), false);
 });
 
+test('a signed version mismatch is rejected instead of writing a manifest', () => {
+  const root = makeRoot();
+  writeRepo(root);
+  const dir = path.join(root, 'release');
+  const { installer } = writeInstaller(dir, { signedVersion: '9.9.9' });
+
+  const made = spawnCheck(makeScript, ['--root', root, '--installer', installer]);
+
+  assert.equal(made.status, 1);
+  assert.match(made.stderr, /signed version 9\.9\.9 does not match manifest version 0\.1\.0/);
+  assert.equal(existsSync(path.join(dir, 'latest.json')), false);
+});
+
+test('a direct armored signature is rejected instead of writing an updater-invalid manifest', () => {
+  const root = makeRoot();
+  writeRepo(root);
+  const dir = path.join(root, 'release');
+  const { installer } = writeInstaller(dir);
+  const signaturePath = `${installer}.sig`;
+  const armored = Buffer.from(readFileSync(signaturePath, 'utf8').trim(), 'base64').toString(
+    'utf8'
+  );
+  writeFileSync(signaturePath, armored);
+
+  const made = spawnCheck(makeScript, ['--root', root, '--installer', installer]);
+
+  assert.equal(made.status, 1);
+  assert.match(made.stderr, /base64-wrapped|four-line/);
+  assert.equal(existsSync(path.join(dir, 'latest.json')), false);
+});
+
+test('a signature box without the untrusted comment line is rejected', () => {
+  const root = makeRoot();
+  writeRepo(root);
+  const dir = path.join(root, 'release');
+  const { installer } = writeInstaller(dir);
+  const signaturePath = `${installer}.sig`;
+  const armored = Buffer.from(readFileSync(signaturePath, 'utf8').trim(), 'base64')
+    .toString('utf8')
+    .split('\n')
+    .filter((line) => !line.startsWith('untrusted comment:'))
+    .join('\n');
+  writeFileSync(signaturePath, Buffer.from(armored, 'utf8').toString('base64'));
+
+  const made = spawnCheck(makeScript, ['--root', root, '--installer', installer]);
+
+  assert.equal(made.status, 1);
+  assert.match(made.stderr, /four-line/);
+  assert.equal(existsSync(path.join(dir, 'latest.json')), false);
+});
+
 test('a missing installer with a present signature is still reported', () => {
   const root = makeRoot();
   writeRepo(root);
