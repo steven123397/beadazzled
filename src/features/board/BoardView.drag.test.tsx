@@ -1,12 +1,13 @@
-import { act, render, screen, waitFor } from '@testing-library/react';
+import { act, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, expect, test, vi } from 'vitest';
 import type { ComponentProps } from 'react';
 import type { DragEndEvent } from '@dnd-kit/core';
 
 import type { Issue } from '@/bindings/bd';
-import { I18nProvider } from '@/lib/i18n/I18nProvider';
 import type { UseWrite } from '@/lib/writes/useWrite';
+import { fakeEchoWrites as fakeWrites } from '@/test/detail-writes';
+import { makeIssue as issue, renderWithI18n } from '@/test/fixtures';
 
 import { BoardView } from './BoardView';
 
@@ -27,80 +28,21 @@ vi.mock('@dnd-kit/core', async (importOriginal) => {
   };
 });
 
-vi.mock('@tanstack/react-virtual', () => ({
-  useVirtualizer: (options: {
-    count: number;
-    estimateSize: (index: number) => number;
-    getItemKey: (index: number) => string | number;
-  }) => {
-    const sizes = Array.from({ length: options.count }, (_, index) => options.estimateSize(index));
-    const starts: number[] = [];
-    let total = 0;
-    for (const size of sizes) {
-      starts.push(total);
-      total += size;
-    }
-    return {
-      getTotalSize: () => total,
-      getVirtualItems: () =>
-        sizes.map((size, index) => ({
-          index,
-          start: starts[index] ?? 0,
-          size,
-          key: options.getItemKey(index),
-        })),
-      scrollToIndex: vi.fn(),
-      scrollToOffset: vi.fn(),
-    };
-  },
-}));
-
-const TS = '2026-11-01T00:00:00Z';
-
-function issue(id: string, overrides: Partial<Issue> = {}): Issue {
-  return {
-    id,
-    title: `Issue ${id}`,
-    description: '',
-    status: 'open',
-    priority: 2,
-    issue_type: 'task',
-    created_at: TS,
-    updated_at: TS,
-    labels: [],
-    dependency_count: 0,
-    dependent_count: 0,
-    comment_count: 0,
-    ...overrides,
-  };
-}
-
-function fakeWrites(overrides: Partial<UseWrite> = {}): UseWrite {
-  return {
-    pending: [],
-    error: null,
-    result: null,
-    canWrite: true,
-    disabledReason: null,
-    isPending: () => false,
-    submit: vi.fn(async () => ({ status: 'ok' as const, echo: 'echoed' as const })),
-    clearError: vi.fn(),
-    ...overrides,
-  };
-}
+vi.mock('@tanstack/react-virtual', async () => {
+  const { makeVirtualizer } = await import('@/test/virtualizer');
+  return { useVirtualizer: makeVirtualizer };
+});
 
 function renderBoard(issues: readonly Issue[], writes?: UseWrite) {
-  return render(
-    <I18nProvider initialLanguage="en">
-      <MemoryRouter initialEntries={['/w/p1/board']}>
-        <Routes>
-          <Route
-            path="/w/:projectId/board"
-            element={<BoardView projectId="p1" issues={issues} writes={writes} />}
-          />
-        </Routes>
-      </MemoryRouter>
-    </I18nProvider>
+  return renderWithI18n(
+    <MemoryRouter initialEntries={['/w/p1/board']}>
+      <Routes>
+        <Route
+          path="/w/:projectId/board"
+          element={<BoardView projectId="p1" issues={issues} writes={writes} />}
+        />
+      </Routes>
+    </MemoryRouter>
   );
 }
 

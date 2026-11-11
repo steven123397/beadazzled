@@ -1,17 +1,13 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, screen } from '@testing-library/react';
 import { expect, test, vi } from 'vitest';
 
-import { I18nProvider } from '@/lib/i18n/I18nProvider';
+import { renderWithI18n } from '@/test/fixtures';
 
 import { Comments } from './Comments';
 
 function renderComments(props: Partial<Parameters<typeof Comments>[0]> = {}) {
   const onSubmit = vi.fn(async () => true);
-  render(
-    <I18nProvider initialLanguage="en">
-      <Comments onSubmit={onSubmit} {...props} />
-    </I18nProvider>
-  );
+  renderWithI18n(<Comments onSubmit={onSubmit} {...props} />);
   return { onSubmit };
 }
 
@@ -78,11 +74,7 @@ test('an empty draft cannot be submitted', () => {
 });
 
 test('without a write callback there is no composer', () => {
-  render(
-    <I18nProvider initialLanguage="en">
-      <Comments comments={[]} />
-    </I18nProvider>
-  );
+  renderWithI18n(<Comments comments={[]} />);
 
   expect(screen.queryByRole('textbox')).toBeNull();
   expect(screen.getByText('No comments yet.')).toBeInTheDocument();

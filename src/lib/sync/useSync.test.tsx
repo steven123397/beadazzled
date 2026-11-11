@@ -2,31 +2,19 @@ import { act, renderHook, waitFor } from '@testing-library/react';
 import { expect, test, vi } from 'vitest';
 
 import type { Issue, JournalRecord, SyncState } from '@/bindings/bd';
+import { makeIssue, TEST_TS } from '@/test/fixtures';
 
 import type { SyncApi, SyncEvent, SyncSnapshot } from './api';
 import { useSync } from './useSync';
 
-function issue(id: string, title = `Issue ${id}`, updatedAt = '2026-11-01T00:00:00Z'): Issue {
-  return {
-    id,
-    title,
-    description: '',
-    status: 'open',
-    priority: 2,
-    issue_type: 'task',
-    created_at: '2026-11-01T00:00:00Z',
-    updated_at: updatedAt,
-    labels: [],
-    dependency_count: 0,
-    dependent_count: 0,
-    comment_count: 0,
-  };
+function issue(id: string, title = `Issue ${id}`, updatedAt = TEST_TS): Issue {
+  return makeIssue(id, { title, updated_at: updatedAt });
 }
 
 function record(seq: number, issueValue: Issue): JournalRecord {
   return {
     seq,
-    ts: '2026-11-01T00:00:00Z',
+    ts: TEST_TS,
     op: 'update',
     issue_id: issueValue.id,
     issue: issueValue,
@@ -171,4 +159,130 @@ test('a refresh rejection from a previous workspace does not replace the state',
 
   await waitFor(() => expect(result.current.state.kind).toBe('loading'));
   expect(result.current.state.kind).not.toBe('bd-unavailable');
+});
+
+test('unmounting during listener setup unsubscribes without starting', async () => {
+  const fake = fakeApi();
+  let release: () => void = () => undefined;
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const unlisteners: Array<ReturnType<typeof vi.fn>> = [];
+  const listen = vi.spyOn(fake.api, 'listen').mockImplementation(async () => {
+    await gate;
+    const unlisten = vi.fn();
+    unlisteners.push(unlisten);
+    return unlisten;
+  });
+
+  const { unmount } = renderHook(() =>
+    useSync({ workspace: '/repo/p1', ready: true, api: fake.api })
+  );
+  await waitFor(() => expect(listen).toHaveBeenCalledTimes(3));
+
+  unmount();
+  act(() => release());
+
+  await waitFor(() => {
+    expect(unlisteners).toHaveLength(3);
+    for (const unlisten of unlisteners) {
+      expect(unlisten).toHaveBeenCalledTimes(1);
+    }
+  });
+  expect(fake.start).not.toHaveBeenCalled();
+});
+
+test('a listener registration failure becomes an internal unavailable state', async () => {
+  const fake = fakeApi();
+  vi.spyOn(fake.api, 'listen').mockRejectedValueOnce(new Error('listen failed'));
+
+  const { result } = renderHook(() =>
+    useSync({ workspace: '/repo/p1', ready: true, api: fake.api })
+  );
+
+  await waitFor(() =>
+    expect(result.current.state).toEqual({
+      kind: 'bd-unavailable',
+      error: { code: 'INTERNAL', message: 'listen failed' },
+    })
+  );
+  expect(fake.start).not.toHaveBeenCalled();
+});
+
+test.each([
+  { name: 'sync is disabled', workspace: '/repo/p1', ready: true, enabled: false },
+  { name: 'the workspace is missing', workspace: null, ready: true, enabled: true },
+  { name: 'bd is not ready', workspace: '/repo/p1', ready: false, enabled: true },
+])('refresh is a no-op when $name', ({ workspace, ready, enabled }) => {
+  const fake = fakeApi();
+  const { result } = renderHook(() => useSync({ workspace, ready, enabled, api: fake.api }));
+
+  act(() => result.current.refresh());
+
+  expect(fake.refresh).not.toHaveBeenCalled();
+});
+
+test('a current-workspace refresh rejection preserves the bridge detail', async () => {
+  const fake = fakeApi();
+  fake.refresh.mockRejectedValue({
+    code: 'BD_TIMEOUT',
+    message: 'slow',
+    detail: { operation: 'refresh' },
+  });
+  const { result } = renderHook(() =>
+    useSync({ workspace: '/repo/p1', ready: true, api: fake.api })
+  );
+  await waitFor(() => expect(fake.start).toHaveBeenCalled());
+
+  act(() => result.current.refresh());
+
+  await waitFor(() =>
+    expect(result.current.state).toEqual({
+      kind: 'bd-unavailable',
+      error: {
+        code: 'BD_TIMEOUT',
+        message: 'slow',
+        detail: { operation: 'refresh' },
+      },
+    })
+  );
+});
+
+test('a failed baseline after a sequence gap becomes visible', async () => {
+  const fake = fakeApi();
+  fake.refresh.mockRejectedValue(new Error('baseline failed'));
+  const { result } = renderHook(() =>
+    useSync({ workspace: '/repo/p1', ready: true, api: fake.api })
+  );
+  await waitFor(() => expect(fake.start).toHaveBeenCalled());
+
+  act(() => {
+    fake.emit('snapshot', { issues: [issue('bza-1')], since: 5 } satisfies SyncSnapshot);
+  });
+  act(() => {
+    fake.emit('records', [record(7, issue('bza-1'))]);
+  });
+
+  await waitFor(() =>
+    expect(result.current.state).toEqual({
+      kind: 'bd-unavailable',
+      error: { code: 'INTERNAL', message: 'baseline failed' },
+    })
+  );
+});
+
+test('stop failures are swallowed during workspace teardown', async () => {
+  const fake = fakeApi();
+  const { result, rerender } = renderHook(
+    ({ workspace }: { workspace: string | null }) =>
+      useSync({ workspace, ready: true, api: fake.api }),
+    { initialProps: { workspace: '/repo/p1' as string | null } }
+  );
+  await waitFor(() => expect(fake.start).toHaveBeenCalled());
+  fake.stop.mockRejectedValue(new Error('stop failed'));
+
+  rerender({ workspace: null });
+
+  await waitFor(() => expect(fake.stop).toHaveBeenCalledTimes(2));
+  expect(result.current.state).toEqual({ kind: 'loading', step: 'export' });
 });

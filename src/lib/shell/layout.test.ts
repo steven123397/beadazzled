@@ -1,20 +1,8 @@
 import { expect, test } from 'vitest';
 
-import { loadSidebarCollapsed, SIDEBAR_STORAGE_KEY, saveSidebarCollapsed } from './layout';
+import { memoryStorage, withThrowingLocalStorage } from '@/test/storage';
 
-function memoryStorage(entries: Record<string, string> = {}): Storage {
-  const data = new Map(Object.entries(entries));
-  return {
-    get length() {
-      return data.size;
-    },
-    clear: () => data.clear(),
-    getItem: (key: string) => data.get(key) ?? null,
-    key: (index: number) => [...data.keys()][index] ?? null,
-    removeItem: (key: string) => void data.delete(key),
-    setItem: (key: string, value: string) => void data.set(key, value),
-  };
-}
+import { loadSidebarCollapsed, SIDEBAR_STORAGE_KEY, saveSidebarCollapsed } from './layout';
 
 test('a fresh profile starts expanded', () => {
   expect(loadSidebarCollapsed(memoryStorage())).toBe(false);
@@ -55,22 +43,8 @@ test('a storage that throws on read or write degrades instead of crashing', () =
   expect(() => saveSidebarCollapsed(true, throwingWrite)).not.toThrow();
 });
 test('a throwing window.localStorage getter degrades instead of crashing', () => {
-  const descriptor = Object.getOwnPropertyDescriptor(window, 'localStorage');
-  Object.defineProperty(window, 'localStorage', {
-    configurable: true,
-    get() {
-      throw new Error('SecurityError');
-    },
-  });
-
-  try {
+  withThrowingLocalStorage(() => {
     expect(loadSidebarCollapsed()).toBe(false);
     expect(() => saveSidebarCollapsed(true)).not.toThrow();
-  } finally {
-    if (descriptor === undefined) {
-      Reflect.deleteProperty(window, 'localStorage');
-    } else {
-      Object.defineProperty(window, 'localStorage', descriptor);
-    }
-  }
+  });
 });

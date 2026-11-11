@@ -1,68 +1,27 @@
-import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { Link, MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { beforeEach, expect, test, vi } from 'vitest';
+import type { ReactNode } from 'react';
 
 import type { Issue, SyncState } from '@/bindings/bd';
-import { I18nProvider } from '@/lib/i18n/I18nProvider';
+import { makeIssue as issue, renderWithI18n } from '@/test/fixtures';
 
 import { ListView } from './ListView';
 import { LIST_POSITION_PREFIX, saveListPosition } from './position';
 import { createListViewState } from '@/lib/view/state';
 import { saveSavedView } from '@/lib/view/storage';
 
-vi.mock('@tanstack/react-virtual', () => ({
-  useVirtualizer: (options: {
-    count: number;
-    estimateSize: (index: number) => number;
-    getItemKey: (index: number) => string | number;
-  }) => {
-    const sizes = Array.from({ length: options.count }, (_, index) => options.estimateSize(index));
-    const starts: number[] = [];
-    let total = 0;
-    for (const size of sizes) {
-      starts.push(total);
-      total += size;
-    }
-    return {
-      getTotalSize: () => total,
-      getVirtualItems: () =>
-        sizes.map((size, index) => ({
-          index,
-          start: starts[index] ?? 0,
-          size,
-          key: options.getItemKey(index),
-        })),
-      scrollToIndex: vi.fn(),
-      scrollToOffset: vi.fn(),
-    };
-  },
-}));
+vi.mock('@tanstack/react-virtual', async () => {
+  const { makeVirtualizer } = await import('@/test/virtualizer');
+  return { useVirtualizer: makeVirtualizer };
+});
 
-const TS = '2026-11-01T00:00:00Z';
 const healthy: SyncState = { kind: 'healthy', lastSeq: 1, lastEventAt: null };
 const loading: SyncState = { kind: 'loading', step: 'export' };
 const unavailable: SyncState = {
   kind: 'bd-unavailable',
   error: { code: 'BD_NOT_FOUND', message: 'bd missing' },
 };
-
-function issue(id: string, overrides: Partial<Issue> = {}): Issue {
-  return {
-    id,
-    title: `Issue ${id}`,
-    description: '',
-    status: 'open',
-    priority: 2,
-    issue_type: 'task',
-    created_at: TS,
-    updated_at: TS,
-    labels: [],
-    dependency_count: 0,
-    dependent_count: 0,
-    comment_count: 0,
-    ...overrides,
-  };
-}
 
 function LocationProbe() {
   const location = useLocation();
@@ -74,36 +33,31 @@ function renderList({
   entry = '/w/p1/list',
   syncState = healthy,
   onRefresh,
-  withInput = false,
-  withLink = false,
+  children,
 }: {
   issues: readonly Issue[];
   entry?: string;
   syncState?: SyncState;
   onRefresh?: () => void;
-  withInput?: boolean;
-  withLink?: boolean;
+  children?: ReactNode;
 }) {
   const refresh = onRefresh ?? vi.fn();
-  render(
-    <I18nProvider initialLanguage="en">
-      <MemoryRouter initialEntries={[entry]}>
-        {withInput ? <input aria-label="Other input" /> : null}
-        {withLink ? <Link to="/w/p1/list">Go to list</Link> : null}
-        <Routes>
-          <Route
-            path="/w/:projectId/list"
-            element={
-              <ListView projectId="p1" issues={issues} syncState={syncState} onRefresh={refresh} />
-            }
-          />
-          <Route path="/w/:projectId/issue/:issueId" element={<div>detail</div>} />
-        </Routes>
-        <LocationProbe />
-      </MemoryRouter>
-    </I18nProvider>
+  const renderResult = renderWithI18n(
+    <MemoryRouter initialEntries={[entry]}>
+      {children}
+      <Routes>
+        <Route
+          path="/w/:projectId/list"
+          element={
+            <ListView projectId="p1" issues={issues} syncState={syncState} onRefresh={refresh} />
+          }
+        />
+        <Route path="/w/:projectId/issue/:issueId" element={<div>detail</div>} />
+      </Routes>
+      <LocationProbe />
+    </MemoryRouter>
   );
-  return { refresh };
+  return { ...renderResult, refresh };
 }
 
 function row(id: string): HTMLElement {
@@ -185,7 +139,7 @@ test('clicking a row opens it', () => {
 });
 
 test('J and K are ignored while typing in an input', () => {
-  renderList({ issues: [issue('bza-1')], withInput: true });
+  renderList({ issues: [issue('bza-1')], children: <input aria-label="Other input" /> });
   const input = screen.getByRole('textbox', { name: 'Other input' });
 
   input.focus();
@@ -208,7 +162,7 @@ test('restores the saved scroll offset and focused row', async () => {
 });
 
 test('a saved focus that is filtered out does not steal focus later', async () => {
-  saveListPosition('p1', { scrollTop: 0, focusedId: 'bza-2' });
+  saveListPosition('p1', { scrollTop: 40, focusedId: 'bza-2' });
 
   renderList({
     issues: [issue('bza-1', { title: 'Keep me' }), issue('bza-2', { title: 'Other work' })],
@@ -216,9 +170,7 @@ test('a saved focus that is filtered out does not steal focus later', async () =
   });
 
   // Let the restore pass finish while bza-2 is excluded by the deep link.
-  await act(async () => {
-    await new Promise((resolve) => setTimeout(resolve, 50));
-  });
+  await waitFor(() => expect(screen.getByRole('list')).toHaveProperty('scrollTop', 40));
   expect(document.querySelector('[data-issue-id="bza-2"]')).toBeNull();
 
   fireEvent.change(screen.getByRole('searchbox', { name: 'Search tickets' }), {
@@ -230,18 +182,7 @@ test('a saved focus that is filtered out does not steal focus later', async () =
 });
 
 test('saves the scroll offset and focused row on unmount', async () => {
-  const view = render(
-    <I18nProvider initialLanguage="en">
-      <MemoryRouter initialEntries={['/w/p1/list']}>
-        <Routes>
-          <Route
-            path="/w/:projectId/list"
-            element={<ListView projectId="p1" issues={[issue('bza-1'), issue('bza-2')]} />}
-          />
-        </Routes>
-      </MemoryRouter>
-    </I18nProvider>
-  );
+  const view = renderList({ issues: [issue('bza-1'), issue('bza-2')] });
 
   fireEvent.keyDown(window, { key: 'j' });
   await waitFor(() => expect(row('bza-1')).toHaveFocus());
@@ -390,7 +331,7 @@ test('clicking the list link keeps the active filters', async () => {
   renderList({
     issues: [issue('a', { title: 'Fix scroll' }), issue('b', { title: 'Other work' })],
     entry: '/w/p1/list?q=fix',
-    withLink: true,
+    children: <Link to="/w/p1/list">Go to list</Link>,
   });
 
   const search = screen.getByRole('searchbox', { name: 'Search tickets' });

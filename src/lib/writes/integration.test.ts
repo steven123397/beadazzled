@@ -1,6 +1,7 @@
 import { afterEach, expect, test, vi } from 'vitest';
 
-import type { BridgeError, CreateSpec, Issue, JournalRecord, WriteCommand } from '@/bindings/bd';
+import type { BridgeError, CreateSpec, JournalRecord, WriteCommand } from '@/bindings/bd';
+import { makeIssue as issue, TEST_TS as TS } from '@/test/fixtures';
 
 import { createIssue, updateIssue } from './commands';
 import { describeError } from '@/lib/errors';
@@ -8,26 +9,6 @@ import { submitWrite, type WriteFlow } from './flow';
 import { createTicketStore } from '../sync/store';
 import { createEchoWaiter } from '../sync/echo';
 import { createWriteQueue, type WriteOutcome } from './queue';
-
-const TS = '2026-11-01T00:00:00Z';
-
-function issue(id: string, overrides: Partial<Issue> = {}): Issue {
-  return {
-    id,
-    title: `Issue ${id}`,
-    description: '',
-    status: 'open',
-    priority: 2,
-    issue_type: 'task',
-    created_at: TS,
-    updated_at: TS,
-    labels: [],
-    dependency_count: 0,
-    dependent_count: 0,
-    comment_count: 0,
-    ...overrides,
-  };
-}
 
 function record(seq: number, issueId: string): JournalRecord {
   return {

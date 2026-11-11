@@ -1,31 +1,15 @@
 import { DndContext } from '@dnd-kit/core';
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import { fireEvent, screen, within } from '@testing-library/react';
 import { expect, test, vi } from 'vitest';
 
 import type { Issue } from '@/bindings/bd';
-import { I18nProvider } from '@/lib/i18n/I18nProvider';
+import { makeIssue, renderWithI18n } from '@/test/fixtures';
 
 import { Card } from './Card';
 import type { BoardCard } from './columns';
 
-const TS = '2026-11-01T00:00:00Z';
-
 function issue(overrides: Partial<Issue> = {}): Issue {
-  return {
-    id: 'bza-1',
-    title: 'Board card',
-    description: '',
-    status: 'open',
-    priority: 1,
-    issue_type: 'task',
-    created_at: TS,
-    updated_at: TS,
-    labels: [],
-    dependency_count: 0,
-    dependent_count: 0,
-    comment_count: 0,
-    ...overrides,
-  };
+  return makeIssue('bza-1', { title: 'Board card', priority: 1, ...overrides });
 }
 
 function card(overrides: Partial<BoardCard> = {}): BoardCard {
@@ -35,20 +19,18 @@ function card(overrides: Partial<BoardCard> = {}): BoardCard {
 function renderCard(value: BoardCard, props: { pending?: boolean; focused?: boolean } = {}) {
   const onOpen = vi.fn();
   const onFocus = vi.fn();
-  render(
-    <I18nProvider initialLanguage="en">
-      <DndContext>
-        <Card
-          card={value}
-          column="ready"
-          start={0}
-          focused={props.focused ?? false}
-          pending={props.pending}
-          onOpen={onOpen}
-          onFocus={onFocus}
-        />
-      </DndContext>
-    </I18nProvider>
+  renderWithI18n(
+    <DndContext>
+      <Card
+        card={value}
+        column="ready"
+        start={0}
+        focused={props.focused ?? false}
+        pending={props.pending}
+        onOpen={onOpen}
+        onFocus={onFocus}
+      />
+    </DndContext>
   );
   return { onOpen, onFocus };
 }

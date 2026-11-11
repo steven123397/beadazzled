@@ -5,45 +5,18 @@ import type { BdStatus, Issue, SyncState, WorkspaceEntry, WorkspaceSnapshot } fr
 import { setDraftGuard } from '@/lib/draft-guard';
 import type { SyncApi, SyncEvent, SyncSnapshot } from '@/lib/sync/api';
 import type { WorkspaceApi } from '@/lib/workspace/api';
+import { chooseStatus } from '@/test/detail-ui';
+import { makeIssue } from '@/test/fixtures';
+import { makeEntry, makeWorkspaceSnapshot } from '@/test/workspace';
 
-import { App } from './App';
+import { App, type AppProps } from './App';
 
 function issue(id: string, title: string): Issue {
-  return {
-    id,
-    title,
-    description: '',
-    status: 'open',
-    priority: 2,
-    issue_type: 'task',
-    created_at: '2026-11-01T00:00:00Z',
-    updated_at: '2026-11-01T00:00:00Z',
-    labels: [],
-    dependency_count: 0,
-    dependent_count: 0,
-    comment_count: 0,
-  };
-}
-
-/** Pick a status from the detail rail's popover. */
-function chooseStatus(option: RegExp) {
-  const details = document.querySelector<HTMLDetailsElement>('details[aria-label="Status"]');
-  if (details === null) {
-    throw new Error('no Status menu');
-  }
-  details.open = true;
-  fireEvent.click(within(details).getByRole('radio', { name: option }));
+  return makeIssue(id, { title });
 }
 
 function entry(projectId: string, name = projectId): WorkspaceEntry {
-  return {
-    path: `/repo/${projectId}`,
-    name,
-    projectId,
-    isWorktree: false,
-    lastOpenedAt: '2026-11-01T00:00:00Z',
-    checkpoint: null,
-  };
+  return makeEntry({ path: `/repo/${projectId}`, name, projectId });
 }
 
 function snapshot(
@@ -51,20 +24,7 @@ function snapshot(
   active: string | null,
   extra: Partial<WorkspaceSnapshot> = {}
 ): WorkspaceSnapshot {
-  return {
-    config: {
-      schemaVersion: 1,
-      bdPath: null,
-      language: 'en',
-      theme: 'system',
-      lastWorkspacePath: null,
-      workspaces,
-    },
-    missing: [],
-    active,
-    corruptBackup: null,
-    ...extra,
-  };
+  return makeWorkspaceSnapshot({ config: { workspaces }, active, ...extra });
 }
 
 const bdReady: BdStatus = { kind: 'ready', path: 'bd', version: '1.3.2' };
@@ -88,6 +48,19 @@ function fakeApi(overrides: Partial<WorkspaceApi> = {}): WorkspaceApi {
     flush: async () => undefined,
     ...overrides,
   };
+}
+
+function activeApi(overrides: Partial<WorkspaceApi> = {}): WorkspaceApi {
+  return fakeApi({
+    snapshot: async () => snapshot([entry('p1', 'alpha')], '/repo/p1'),
+    ...overrides,
+  });
+}
+
+async function mountList({ workspaceApi = activeApi(), ...props }: AppProps = {}) {
+  const view = render(<App workspaceApi={workspaceApi} {...props} />);
+  await screen.findByRole('heading', { name: 'List' });
+  return view;
 }
 
 const healthy: SyncState = { kind: 'healthy', lastSeq: 42, lastEventAt: null };
@@ -146,13 +119,7 @@ test('shows the welcome screen when no workspace is registered', async () => {
 test('redirects the root to the active workspace list', async () => {
   window.location.hash = '#/';
 
-  render(
-    <App
-      workspaceApi={fakeApi({
-        snapshot: async () => snapshot([entry('p1', 'alpha')], '/repo/p1'),
-      })}
-    />
-  );
+  render(<App workspaceApi={activeApi()} />);
 
   expect(
     await screen.findByRole('heading', { name: 'List' }, { timeout: 3000 })
@@ -164,13 +131,7 @@ test('restores a deep link and shows the sync state in the status bar', async ()
   window.location.hash = '#/w/p1/issue/bza-1';
 
   render(
-    <App
-      workspaceApi={fakeApi({
-        snapshot: async () => snapshot([entry('p1', 'alpha')], '/repo/p1'),
-      })}
-      issues={[issue('bza-1', 'Deep linked')]}
-      syncState={healthy}
-    />
+    <App workspaceApi={activeApi()} issues={[issue('bza-1', 'Deep linked')]} syncState={healthy} />
   );
 
   expect(
@@ -182,13 +143,7 @@ test('restores a deep link and shows the sync state in the status bar', async ()
 test('falls back to welcome when the deep link names an unknown workspace', async () => {
   window.location.hash = '#/w/missing/list';
 
-  render(
-    <App
-      workspaceApi={fakeApi({
-        snapshot: async () => snapshot([entry('p1', 'alpha')], '/repo/p1'),
-      })}
-    />
-  );
+  render(<App workspaceApi={activeApi()} />);
 
   expect(await screen.findByRole('heading', { name: /welcome/i })).toBeInTheDocument();
   expect(screen.getByText('That workspace is no longer available.')).toBeInTheDocument();
@@ -220,13 +175,7 @@ test('a deep link to a registered non-active workspace switches to it', async ()
 test('a bare project route redirects to its list', async () => {
   window.location.hash = '#/w/p1';
 
-  render(
-    <App
-      workspaceApi={fakeApi({
-        snapshot: async () => snapshot([entry('p1', 'alpha')], '/repo/p1'),
-      })}
-    />
-  );
+  render(<App workspaceApi={activeApi()} />);
 
   expect(await screen.findByRole('heading', { name: 'List' })).toBeInTheDocument();
   expect(window.location.hash).toBe('#/w/p1/list');
@@ -235,13 +184,7 @@ test('a bare project route redirects to its list', async () => {
 test('welcome with an active workspace redirects to the list', async () => {
   window.location.hash = '#/welcome';
 
-  render(
-    <App
-      workspaceApi={fakeApi({
-        snapshot: async () => snapshot([entry('p1', 'alpha')], '/repo/p1'),
-      })}
-    />
-  );
+  render(<App workspaceApi={activeApi()} />);
 
   expect(await screen.findByRole('heading', { name: 'List' })).toBeInTheDocument();
   expect(window.location.hash).toBe('#/w/p1/list');
@@ -250,14 +193,7 @@ test('welcome with an active workspace redirects to the list', async () => {
 test('escape returns from an issue route to the list', async () => {
   window.location.hash = '#/w/p1/issue/bza-1';
 
-  render(
-    <App
-      workspaceApi={fakeApi({
-        snapshot: async () => snapshot([entry('p1', 'alpha')], '/repo/p1'),
-      })}
-      issues={[issue('bza-1', 'Deep linked')]}
-    />
-  );
+  render(<App workspaceApi={activeApi()} issues={[issue('bza-1', 'Deep linked')]} />);
   await screen.findByRole('heading', { name: 'Deep linked' }, { timeout: 3000 });
 
   fireEvent.keyDown(window, { key: 'Escape' });
@@ -269,14 +205,7 @@ test('escape returns from an issue route to the list', async () => {
 test('escape closes an overlay without leaving the issue route', async () => {
   window.location.hash = '#/w/p1/issue/bza-1';
 
-  render(
-    <App
-      workspaceApi={fakeApi({
-        snapshot: async () => snapshot([entry('p1', 'alpha')], '/repo/p1'),
-      })}
-      issues={[issue('bza-1', 'Deep linked')]}
-    />
-  );
+  render(<App workspaceApi={activeApi()} issues={[issue('bza-1', 'Deep linked')]} />);
   await screen.findByRole('heading', { name: 'Deep linked' }, { timeout: 3000 });
 
   fireEvent.keyDown(window, { key: 'k', ctrlKey: true });
@@ -344,15 +273,7 @@ test('settings stays reachable without a workspace', async () => {
 test('ctrl+k opens the palette and searches tickets', async () => {
   window.location.hash = '#/w/p1/list';
 
-  render(
-    <App
-      workspaceApi={fakeApi({
-        snapshot: async () => snapshot([entry('p1', 'alpha')], '/repo/p1'),
-      })}
-      issues={[issue('bza-9xy', 'Detail reading')]}
-    />
-  );
-  await screen.findByRole('heading', { name: 'List' });
+  await mountList({ issues: [issue('bza-9xy', 'Detail reading')] });
 
   fireEvent.keyDown(window, { key: 'k', ctrlKey: true });
   expect(screen.getByRole('dialog', { name: 'Command palette' })).toBeInTheDocument();
@@ -366,14 +287,7 @@ test('ctrl+k opens the palette and searches tickets', async () => {
 test('the help panel is generated from the shortcut registry', async () => {
   window.location.hash = '#/w/p1/list';
 
-  render(
-    <App
-      workspaceApi={fakeApi({
-        snapshot: async () => snapshot([entry('p1', 'alpha')], '/repo/p1'),
-      })}
-    />
-  );
-  await screen.findByRole('heading', { name: 'List' });
+  await mountList();
 
   fireEvent.keyDown(window, { key: '?' });
 
@@ -419,15 +333,7 @@ test('production sync wiring feeds the status bar and ticket search', async () =
   window.location.hash = '#/w/p1/list';
   const sync = fakeSyncApi();
 
-  render(
-    <App
-      workspaceApi={fakeApi({
-        snapshot: async () => snapshot([entry('p1', 'alpha')], '/repo/p1'),
-      })}
-      syncEnabled
-      syncApi={sync.api}
-    />
-  );
+  render(<App workspaceApi={activeApi()} syncEnabled syncApi={sync.api} />);
   await waitFor(() => expect(sync.start).toHaveBeenCalledWith('/repo/p1'));
 
   act(() => {
@@ -453,10 +359,7 @@ test('a workspace whose bd is missing shows the list unavailable state', async (
 
   render(
     <App
-      workspaceApi={fakeApi({
-        snapshot: async () => snapshot([entry('p1', 'alpha')], '/repo/p1'),
-        bdStatus: async () => ({ kind: 'not-found', searched: [] }),
-      })}
+      workspaceApi={activeApi({ bdStatus: async () => ({ kind: 'not-found', searched: [] }) })}
       syncEnabled
       syncApi={sync.api}
     />
@@ -531,24 +434,15 @@ test('welcome names the workspaces that are missing and the corrupt config backu
 test('a healthy snapshot shows no missing or corrupt notices', async () => {
   window.location.hash = '#/welcome';
 
-  render(
-    <App
-      workspaceApi={fakeApi({
-        snapshot: async () => snapshot([entry('p1', 'alpha')], '/repo/p1'),
-      })}
-    />
-  );
-
-  await screen.findByRole('heading', { name: 'List' });
+  await mountList();
   expect(screen.queryByText(/no longer available/i)).not.toBeInTheDocument();
   expect(screen.queryByText(/damaged/i)).not.toBeInTheDocument();
 });
 
 test('ctrl+b collapses the sidebar and the choice survives a restart', async () => {
   window.location.hash = '#/w/p1/list';
-  const api = fakeApi({ snapshot: async () => snapshot([entry('p1', 'alpha')], '/repo/p1') });
-  const first = render(<App workspaceApi={api} />);
-  await screen.findByRole('heading', { name: 'List' });
+  const api = activeApi();
+  const first = await mountList({ workspaceApi: api });
 
   fireEvent.keyDown(window, { key: 'b', ctrlKey: true });
 
@@ -556,8 +450,7 @@ test('ctrl+b collapses the sidebar and the choice survives a restart', async () 
   expect(localStorage.getItem('beadazzled.sidebar.collapsed')).toBe('true');
 
   first.unmount();
-  render(<App workspaceApi={api} />);
-  await screen.findByRole('heading', { name: 'List' });
+  await mountList({ workspaceApi: api });
 
   expect(document.querySelector('#app-sidebar')).toHaveAttribute('data-collapsed', 'true');
 });
@@ -566,14 +459,7 @@ test('an unrecognised stored sidebar value falls back to expanded', async () => 
   window.location.hash = '#/w/p1/list';
   localStorage.setItem('beadazzled.sidebar.collapsed', 'garbage');
 
-  render(
-    <App
-      workspaceApi={fakeApi({
-        snapshot: async () => snapshot([entry('p1', 'alpha')], '/repo/p1'),
-      })}
-    />
-  );
-  await screen.findByRole('heading', { name: 'List' });
+  await mountList();
 
   expect(screen.getByRole('complementary', { name: 'Sidebar' })).toHaveAttribute(
     'data-collapsed',
@@ -584,14 +470,7 @@ test('an unrecognised stored sidebar value falls back to expanded', async () => 
 test('a collapsed sidebar gets out of the way and the top bar toggle restores it', async () => {
   window.location.hash = '#/w/p1/list';
 
-  render(
-    <App
-      workspaceApi={fakeApi({
-        snapshot: async () => snapshot([entry('p1', 'alpha')], '/repo/p1'),
-      })}
-    />
-  );
-  await screen.findByRole('heading', { name: 'List' });
+  await mountList();
 
   const sidebar = screen.getByRole('complementary', { name: 'Sidebar' });
   fireEvent.click(screen.getByRole('button', { name: 'Collapse sidebar' }));
@@ -615,15 +494,7 @@ async function openDiagnostics() {
 test('clicking the status bar shows bd, workspace, journal position and refresh time', async () => {
   window.location.hash = '#/w/p1/list';
 
-  render(
-    <App
-      workspaceApi={fakeApi({
-        snapshot: async () => snapshot([entry('p1', 'alpha')], '/repo/p1'),
-      })}
-      syncState={healthy}
-    />
-  );
-  await screen.findByRole('heading', { name: 'List' });
+  await mountList({ syncState: healthy });
 
   const dialog = await openDiagnostics();
 
@@ -638,14 +509,7 @@ test('clicking the status bar shows bd, workspace, journal position and refresh 
 test('escape and the backdrop both close the diagnostics dialog', async () => {
   window.location.hash = '#/w/p1/list';
 
-  render(
-    <App
-      workspaceApi={fakeApi({
-        snapshot: async () => snapshot([entry('p1', 'alpha')], '/repo/p1'),
-      })}
-    />
-  );
-  await screen.findByRole('heading', { name: 'List' });
+  await mountList();
 
   await openDiagnostics();
   fireEvent.keyDown(window, { key: 'Escape' });
@@ -659,14 +523,7 @@ test('escape and the backdrop both close the diagnostics dialog', async () => {
 test('an overlay closes with escape while a draft is open behind it', async () => {
   window.location.hash = '#/w/p1/list';
 
-  render(
-    <App
-      workspaceApi={fakeApi({
-        snapshot: async () => snapshot([entry('p1', 'alpha')], '/repo/p1'),
-      })}
-    />
-  );
-  await screen.findByRole('heading', { name: 'List' });
+  await mountList();
 
   // The detail editor arms this guard while a draft is open; single-key
   // shortcuts are suppressed then, but Escape must still reach the overlay.
@@ -684,14 +541,7 @@ test('an overlay closes with escape while a draft is open behind it', async () =
 test('browser back with a draft open asks and keeps the page', async () => {
   window.location.hash = '#/w/p1/issue/bza-1';
 
-  render(
-    <App
-      workspaceApi={fakeApi({
-        snapshot: async () => snapshot([entry('p1', 'alpha')], '/repo/p1'),
-      })}
-      issues={[issue('bza-1', 'Deep linked')]}
-    />
-  );
+  render(<App workspaceApi={activeApi()} issues={[issue('bza-1', 'Deep linked')]} />);
   await screen.findByRole('heading', { name: 'Deep linked' }, { timeout: 3000 });
 
   const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
@@ -714,15 +564,7 @@ test('opening diagnostics never calls bd again', async () => {
   window.location.hash = '#/w/p1/list';
   const bdStatus = vi.fn(async () => bdReady);
 
-  render(
-    <App
-      workspaceApi={fakeApi({
-        snapshot: async () => snapshot([entry('p1', 'alpha')], '/repo/p1'),
-        bdStatus,
-      })}
-    />
-  );
-  await screen.findByRole('heading', { name: 'List' });
+  await mountList({ workspaceApi: activeApi({ bdStatus }) });
   bdStatus.mockClear();
 
   await openDiagnostics();
@@ -738,15 +580,7 @@ test('the copied diagnostics text has a fixed shape and carries no secrets', asy
     configurable: true,
   });
 
-  render(
-    <App
-      workspaceApi={fakeApi({
-        snapshot: async () => snapshot([entry('p1', 'alpha')], '/repo/p1'),
-      })}
-      syncState={healthy}
-    />
-  );
-  await screen.findByRole('heading', { name: 'List' });
+  await mountList({ syncState: healthy });
 
   const dialog = await openDiagnostics();
   fireEvent.click(within(dialog).getByRole('button', { name: 'Copy diagnostics' }));
@@ -770,15 +604,7 @@ test('the copied diagnostics text has a fixed shape and carries no secrets', asy
 test('sync state changes are announced politely', async () => {
   window.location.hash = '#/w/p1/list';
 
-  render(
-    <App
-      workspaceApi={fakeApi({
-        snapshot: async () => snapshot([entry('p1', 'alpha')], '/repo/p1'),
-      })}
-      syncState={healthy}
-    />
-  );
-  await screen.findByRole('heading', { name: 'List' });
+  await mountList({ syncState: healthy });
 
   const live = screen.getByText('Live');
   expect(live).toHaveAttribute('aria-live', 'polite');
@@ -801,14 +627,7 @@ test('a failed copy tells the user instead of doing nothing', async () => {
     configurable: true,
   });
 
-  render(
-    <App
-      workspaceApi={fakeApi({
-        snapshot: async () => snapshot([entry('p1', 'alpha')], '/repo/p1'),
-      })}
-    />
-  );
-  await screen.findByRole('heading', { name: 'List' });
+  await mountList();
 
   const dialog = await openDiagnostics();
   fireEvent.click(within(dialog).getByRole('button', { name: 'Copy diagnostics' }));
@@ -831,8 +650,7 @@ test('a refresh keeps the routed view mounted instead of flashing the skeleton',
       return new Promise<WorkspaceSnapshot>(() => undefined);
     },
   });
-  render(<App workspaceApi={api} />);
-  await screen.findByRole('heading', { name: 'List' });
+  await mountList({ workspaceApi: api });
 
   fireEvent.keyDown(window, { key: 'r', ctrlKey: true });
   await waitFor(() => expect(snapshots).toBe(2));
@@ -863,14 +681,7 @@ test('opening a workspace from the welcome blocker leaves the screen', async () 
 test('the palette shortcut does not stack on top of diagnostics', async () => {
   window.location.hash = '#/w/p1/list';
 
-  render(
-    <App
-      workspaceApi={fakeApi({
-        snapshot: async () => snapshot([entry('p1', 'alpha')], '/repo/p1'),
-      })}
-    />
-  );
-  await screen.findByRole('heading', { name: 'List' });
+  await mountList();
 
   await openDiagnostics();
   fireEvent.keyDown(window, { key: 'k', ctrlKey: true });
@@ -884,16 +695,7 @@ test('a title edit waits for the journal echo before the page changes', async ()
   const sync = fakeSyncApi();
   const execute = vi.fn(async () => ({ ok: true as const, createdId: null }));
 
-  render(
-    <App
-      workspaceApi={fakeApi({
-        snapshot: async () => snapshot([entry('p1', 'alpha')], '/repo/p1'),
-      })}
-      syncEnabled
-      syncApi={sync.api}
-      writesApi={{ execute }}
-    />
-  );
+  render(<App workspaceApi={activeApi()} syncEnabled syncApi={sync.api} writesApi={{ execute }} />);
 
   await waitFor(() => expect(sync.start).toHaveBeenCalledWith('/repo/p1'));
 
@@ -952,16 +754,7 @@ test('a status conflict is visible and triggers a baseline refresh', async () =>
     error: { code: 'WRITE_CONFLICT' as const, message: 'stale' },
   }));
 
-  render(
-    <App
-      workspaceApi={fakeApi({
-        snapshot: async () => snapshot([entry('p1', 'alpha')], '/repo/p1'),
-      })}
-      syncEnabled
-      syncApi={sync.api}
-      writesApi={{ execute }}
-    />
-  );
+  render(<App workspaceApi={activeApi()} syncEnabled syncApi={sync.api} writesApi={{ execute }} />);
 
   await waitFor(() => expect(sync.start).toHaveBeenCalledWith('/repo/p1'));
   act(() => {
@@ -988,16 +781,7 @@ test('a board move writes through App and waits for the journal echo', async () 
   const sync = fakeSyncApi();
   const execute = vi.fn(async () => ({ ok: true as const, createdId: null }));
 
-  render(
-    <App
-      workspaceApi={fakeApi({
-        snapshot: async () => snapshot([entry('p1', 'alpha')], '/repo/p1'),
-      })}
-      syncEnabled
-      syncApi={sync.api}
-      writesApi={{ execute }}
-    />
-  );
+  render(<App workspaceApi={activeApi()} syncEnabled syncApi={sync.api} writesApi={{ execute }} />);
 
   await waitFor(() => expect(sync.start).toHaveBeenCalledWith('/repo/p1'));
 
@@ -1050,16 +834,7 @@ test('a board move conflict is visible and triggers a baseline refresh', async (
     error: { code: 'WRITE_CONFLICT' as const, message: 'stale' },
   }));
 
-  render(
-    <App
-      workspaceApi={fakeApi({
-        snapshot: async () => snapshot([entry('p1', 'alpha')], '/repo/p1'),
-      })}
-      syncEnabled
-      syncApi={sync.api}
-      writesApi={{ execute }}
-    />
-  );
+  render(<App workspaceApi={activeApi()} syncEnabled syncApi={sync.api} writesApi={{ execute }} />);
 
   await waitFor(() => expect(sync.start).toHaveBeenCalledWith('/repo/p1'));
   act(() => {
@@ -1092,15 +867,7 @@ test('the startup update check waits ten seconds and runs once', async () => {
   vi.doMock('@tauri-apps/plugin-updater', () => ({ check }));
   const setTimeoutSpy = vi.spyOn(window, 'setTimeout');
 
-  const view = render(
-    <App
-      workspaceApi={fakeApi({
-        snapshot: async () => snapshot([entry('p1', 'alpha')], '/repo/p1'),
-      })}
-      syncEnabled
-      syncApi={sync.api}
-    />
-  );
+  const view = render(<App workspaceApi={activeApi()} syncEnabled syncApi={sync.api} />);
   await waitFor(() => expect(sync.start).toHaveBeenCalledWith('/repo/p1'));
 
   try {

@@ -1,7 +1,7 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, screen } from '@testing-library/react';
 import { expect, test, vi } from 'vitest';
 
-import { I18nProvider } from '@/lib/i18n/I18nProvider';
+import { renderWithI18n } from '@/test/fixtures';
 
 import { GroupHeader } from './GroupHeader';
 
@@ -17,17 +17,15 @@ function renderHeader({
   collapsed?: boolean;
 } = {}) {
   const onToggle = vi.fn();
-  render(
-    <I18nProvider initialLanguage="en">
-      <GroupHeader
-        group={group}
-        groupKey={groupKey}
-        count={count}
-        collapsed={collapsed}
-        start={72}
-        onToggle={onToggle}
-      />
-    </I18nProvider>
+  renderWithI18n(
+    <GroupHeader
+      group={group}
+      groupKey={groupKey}
+      count={count}
+      collapsed={collapsed}
+      start={72}
+      onToggle={onToggle}
+    />
   );
   return { onToggle };
 }

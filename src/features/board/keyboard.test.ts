@@ -1,28 +1,9 @@
 import { expect, test } from 'vitest';
 
-import type { Issue } from '@/bindings/bd';
+import { makeIssue as issue } from '@/test/fixtures';
 
 import type { BoardCard, BoardColumn } from './columns';
 import { findFocus, firstCardId, focusedCard, moveFocus } from './keyboard';
-
-const TS = '2026-11-01T00:00:00Z';
-
-function issue(id: string): Issue {
-  return {
-    id,
-    title: `Issue ${id}`,
-    description: '',
-    status: 'open',
-    priority: 2,
-    issue_type: 'task',
-    created_at: TS,
-    updated_at: TS,
-    labels: [],
-    dependency_count: 0,
-    dependent_count: 0,
-    comment_count: 0,
-  };
-}
 
 function card(id: string): BoardCard {
   return { issue: issue(id), blockers: [], manual: false };

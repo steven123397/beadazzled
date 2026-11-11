@@ -3,29 +3,10 @@ import { expect, test, vi } from 'vitest';
 
 import type { Issue } from '@/bindings/bd';
 import { I18nProvider } from '@/lib/i18n/I18nProvider';
+import { makeIssue as issue, renderWithI18n } from '@/test/fixtures';
 import { createListViewState, type ListViewState } from '@/lib/view/state';
 
 import { FilterBar } from './filter-bar';
-
-const TS = '2026-11-01T00:00:00Z';
-
-function issue(id: string, overrides: Partial<Issue> = {}): Issue {
-  return {
-    id,
-    title: `Issue ${id}`,
-    description: '',
-    status: 'open',
-    priority: 2,
-    issue_type: 'task',
-    created_at: TS,
-    updated_at: TS,
-    labels: [],
-    dependency_count: 0,
-    dependent_count: 0,
-    comment_count: 0,
-    ...overrides,
-  };
-}
 
 function renderBar({
   view = createListViewState(),
@@ -41,17 +22,15 @@ function renderBar({
 } = {}) {
   const onChange = vi.fn();
   const onClear = vi.fn();
-  render(
-    <I18nProvider initialLanguage="en">
-      <FilterBar
-        view={view}
-        issues={issues}
-        visibleCount={visibleCount}
-        totalCount={issues.length}
-        onChange={onChange}
-        onClear={onClear}
-      />
-    </I18nProvider>
+  renderWithI18n(
+    <FilterBar
+      view={view}
+      issues={issues}
+      visibleCount={visibleCount}
+      totalCount={issues.length}
+      onChange={onChange}
+      onClear={onClear}
+    />
   );
   return { onChange, onClear };
 }

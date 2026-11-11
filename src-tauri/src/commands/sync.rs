@@ -304,7 +304,9 @@ pub fn sync_stop(controller: State<'_, SyncController>) {
 
 #[cfg(test)]
 mod tests {
-    use super::{follow_step, FollowStep, MAX_GAP_REBUILDS};
+    use super::{
+        follow_step, FollowStep, EVENT_RECORDS, EVENT_SNAPSHOT, EVENT_STATE, MAX_GAP_REBUILDS,
+    };
     use crate::bridge::{BridgeError, BridgeErrorCode};
     use crate::sync::FollowOutcome;
 
@@ -313,6 +315,13 @@ mod tests {
             expected: 7,
             got: 9,
         }
+    }
+
+    #[test]
+    fn emitted_event_names_match_the_frontend_listener_contract() {
+        assert_eq!(EVENT_SNAPSHOT, "sync:snapshot");
+        assert_eq!(EVENT_RECORDS, "sync:records");
+        assert_eq!(EVENT_STATE, "sync:state");
     }
 
     #[test]

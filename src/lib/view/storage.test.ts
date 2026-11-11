@@ -1,31 +1,9 @@
 import { expect, test } from 'vitest';
 
+import { memoryStorage } from '@/test/storage';
+
 import { LIST_VIEW_PREFIX, loadSavedView, saveSavedView } from './storage';
 import { createListViewState } from './state';
-
-function memoryStorage(): Storage {
-  const values = new Map<string, string>();
-  return {
-    get length() {
-      return values.size;
-    },
-    clear() {
-      values.clear();
-    },
-    getItem(key: string) {
-      return values.get(key) ?? null;
-    },
-    key(index: number) {
-      return [...values.keys()][index] ?? null;
-    },
-    removeItem(key: string) {
-      values.delete(key);
-    },
-    setItem(key: string, value: string) {
-      values.set(key, value);
-    },
-  };
-}
 
 test('a saved view round trips for its workspace', () => {
   const storage = memoryStorage();

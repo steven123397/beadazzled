@@ -1,30 +1,8 @@
 import { expect, test } from 'vitest';
 
-import { LIST_POSITION_PREFIX, loadListPosition, saveListPosition } from './position';
+import { memoryStorage } from '@/test/storage';
 
-function memoryStorage(): Storage {
-  const values = new Map<string, string>();
-  return {
-    get length() {
-      return values.size;
-    },
-    clear() {
-      values.clear();
-    },
-    getItem(key: string) {
-      return values.get(key) ?? null;
-    },
-    key(index: number) {
-      return [...values.keys()][index] ?? null;
-    },
-    removeItem(key: string) {
-      values.delete(key);
-    },
-    setItem(key: string, value: string) {
-      values.set(key, value);
-    },
-  };
-}
+import { LIST_POSITION_PREFIX, loadListPosition, saveListPosition } from './position';
 
 test('a saved position round trips for its workspace', () => {
   const storage = memoryStorage();

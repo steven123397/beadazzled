@@ -1,9 +1,11 @@
 import { expect, test } from 'vitest';
 
+import { settingsEn, settingsZhCN } from '@/features/settings/messages';
+import { withThrowingLocalStorage } from '@/test/storage';
+
 import { catalogs, loadLanguage, saveLanguage, translate, type MessageKey } from './index';
 import { en } from './en';
 import { zhCN } from './zh-CN';
-import { settingsEn, settingsZhCN } from '@/features/settings/messages';
 
 test('en and zh-CN expose the same key set', () => {
   expect(Object.keys(zhCN).sort()).toEqual(Object.keys(en).sort());
@@ -109,22 +111,8 @@ test('a storage that throws on read or write degrades to the default language', 
 });
 
 test('a throwing window.localStorage getter degrades instead of crashing', () => {
-  const descriptor = Object.getOwnPropertyDescriptor(window, 'localStorage');
-  Object.defineProperty(window, 'localStorage', {
-    configurable: true,
-    get() {
-      throw new Error('SecurityError');
-    },
-  });
-
-  try {
+  withThrowingLocalStorage(() => {
     expect(loadLanguage()).toBe('en');
     expect(() => saveLanguage('zh-CN')).not.toThrow();
-  } finally {
-    if (descriptor === undefined) {
-      Reflect.deleteProperty(window, 'localStorage');
-    } else {
-      Object.defineProperty(window, 'localStorage', descriptor);
-    }
-  }
+  });
 });

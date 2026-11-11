@@ -1,19 +1,17 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, screen } from '@testing-library/react';
 import { expect, test } from 'vitest';
 
-import { I18nProvider } from '@/lib/i18n/I18nProvider';
+import { renderWithI18n } from '@/test/fixtures';
 import { ThemeProvider } from '@/lib/theme/ThemeProvider';
 
 import { GeneralSection } from './GeneralSection';
 import './messages';
 
 function renderSection() {
-  return render(
-    <I18nProvider initialLanguage="en">
-      <ThemeProvider initialPreference="system">
-        <GeneralSection />
-      </ThemeProvider>
-    </I18nProvider>
+  return renderWithI18n(
+    <ThemeProvider initialPreference="system">
+      <GeneralSection />
+    </ThemeProvider>
   );
 }
 

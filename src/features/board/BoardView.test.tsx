@@ -5,105 +5,38 @@ import { beforeEach, expect, test, vi } from 'vitest';
 import type { Issue, SyncState } from '@/bindings/bd';
 import { I18nProvider } from '@/lib/i18n/I18nProvider';
 import type { UseWrite } from '@/lib/writes/useWrite';
+import { fakeEchoWrites as fakeWrites } from '@/test/detail-writes';
+import { makeIssue as issue, TEST_TS as TS } from '@/test/fixtures';
 
 import { BoardView } from './BoardView';
 
-vi.mock('@tanstack/react-virtual', () => ({
-  useVirtualizer: (options: {
-    count: number;
-    estimateSize: (index: number) => number;
-    getItemKey: (index: number) => string | number;
-  }) => {
-    const sizes = Array.from({ length: options.count }, (_, index) => options.estimateSize(index));
-    const starts: number[] = [];
-    let total = 0;
-    for (const size of sizes) {
-      starts.push(total);
-      total += size;
-    }
-    return {
-      getTotalSize: () => total,
-      getVirtualItems: () =>
-        sizes.map((size, index) => ({
-          index,
-          start: starts[index] ?? 0,
-          size,
-          key: options.getItemKey(index),
-        })),
-      scrollToIndex: vi.fn(),
-      scrollToOffset: vi.fn(),
-    };
-  },
-}));
+vi.mock('@tanstack/react-virtual', async () => {
+  const { makeVirtualizer } = await import('@/test/virtualizer');
+  return { useVirtualizer: makeVirtualizer };
+});
 
-const TS = '2026-11-01T00:00:00Z';
 const healthy: SyncState = { kind: 'healthy', lastSeq: 1, lastEventAt: null };
 const loading: SyncState = { kind: 'loading', step: 'export' };
-
-function issue(id: string, overrides: Partial<Issue> = {}): Issue {
-  return {
-    id,
-    title: `Issue ${id}`,
-    description: '',
-    status: 'open',
-    priority: 2,
-    issue_type: 'task',
-    created_at: TS,
-    updated_at: TS,
-    labels: [],
-    dependency_count: 0,
-    dependent_count: 0,
-    comment_count: 0,
-    ...overrides,
-  };
-}
 
 function LocationProbe() {
   const location = useLocation();
   return <output data-testid="location">{location.pathname + location.search}</output>;
 }
 
-function fakeWrites(overrides: Partial<UseWrite> = {}): UseWrite {
-  return {
-    pending: [],
-    error: null,
-    result: null,
-    canWrite: true,
-    disabledReason: null,
-    isPending: () => false,
-    submit: vi.fn(async () => ({ status: 'ok' as const, echo: 'echoed' as const })),
-    clearError: vi.fn(),
-    ...overrides,
-  };
-}
-
-function BoardHarness({ issues, writes }: { issues: readonly Issue[]; writes?: UseWrite }) {
-  return (
-    <I18nProvider initialLanguage="en">
-      <MemoryRouter initialEntries={['/w/p1/board']}>
-        <Routes>
-          <Route
-            path="/w/:projectId/board"
-            element={<BoardView projectId="p1" issues={issues} writes={writes} />}
-          />
-        </Routes>
-      </MemoryRouter>
-    </I18nProvider>
-  );
-}
-
-function renderBoard({
-  issues,
-  entry = '/w/p1/board',
-  syncState = healthy,
-  writes,
-}: {
+type BoardHarnessProps = {
   issues: readonly Issue[];
   entry?: string;
   syncState?: SyncState;
   writes?: UseWrite;
-}) {
-  return render(
+};
+
+function BoardHarness({
+  issues,
+  entry = '/w/p1/board',
+  syncState = healthy,
+  writes,
+}: BoardHarnessProps) {
+  return (
     <I18nProvider initialLanguage="en">
       <MemoryRouter initialEntries={[entry]}>
         <Routes>
@@ -119,6 +52,10 @@ function renderBoard({
       </MemoryRouter>
     </I18nProvider>
   );
+}
+
+function renderBoard(props: BoardHarnessProps) {
+  return render(<BoardHarness {...props} />);
 }
 
 function column(id: string): HTMLElement {
@@ -223,18 +160,7 @@ test('clicking a card opens its detail route', () => {
 });
 
 test('loading and empty states are distinct', () => {
-  const { unmount } = render(
-    <I18nProvider initialLanguage="en">
-      <MemoryRouter initialEntries={['/w/p1/board']}>
-        <Routes>
-          <Route
-            path="/w/:projectId/board"
-            element={<BoardView projectId="p1" issues={[]} syncState={loading} />}
-          />
-        </Routes>
-      </MemoryRouter>
-    </I18nProvider>
-  );
+  const { unmount } = renderBoard({ issues: [], syncState: loading });
   expect(screen.getByRole('status', { name: 'Loading tickets' })).toBeInTheDocument();
   unmount();
 
@@ -443,7 +369,7 @@ test('clearing the last blocker moves the card from Blocked to Ready', () => {
     dependencies: [{ issue_id: 'bza-1', depends_on_id: 'bza-2', type: 'blocks', created_at: TS }],
   });
   const blocker = issue('bza-2');
-  const { rerender } = render(<BoardHarness issues={[dependent, blocker]} />);
+  const { rerender } = renderBoard({ issues: [dependent, blocker] });
 
   expect(card('bza-1').closest('[data-column-id="blocked"]')).not.toBeNull();
 
@@ -504,7 +430,7 @@ test('Shift+Arrow on a filter control does not move a card', () => {
 });
 
 test('a stale focused card is replaced so the board stays tabbable', async () => {
-  const { rerender } = render(<BoardHarness issues={[issue('bza-1'), issue('bza-2')]} />);
+  const { rerender } = renderBoard({ issues: [issue('bza-1'), issue('bza-2')] });
 
   fireEvent.keyDown(window, { key: 'j' });
   await waitFor(() => expect(card('bza-2')).toHaveAttribute('data-focused', 'true'));

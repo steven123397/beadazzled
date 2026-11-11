@@ -1,27 +1,8 @@
 import { expect, test } from 'vitest';
 
-import type { Issue } from '@/bindings/bd';
+import { makeIssue as issue } from '@/test/fixtures';
 
 import { indexById, lookupFrom } from './index';
-
-const TS = '2026-11-01T00:00:00Z';
-
-function issue(id: string): Issue {
-  return {
-    id,
-    title: `Issue ${id}`,
-    description: '',
-    status: 'open',
-    priority: 2,
-    issue_type: 'task',
-    created_at: TS,
-    updated_at: TS,
-    labels: [],
-    dependency_count: 0,
-    dependent_count: 0,
-    comment_count: 0,
-  };
-}
 
 test('lookupFrom returns the issue and undefined for an id that is gone', () => {
   const lookup = lookupFrom(indexById([issue('a')]));
@@ -47,4 +28,11 @@ test('an issue id of __proto__ stays a normal entry', () => {
 
 test('an absent index produces an empty lookup', () => {
   expect(lookupFrom(undefined)('a')).toBeUndefined();
+});
+
+test('a plain object index never resolves through the prototype chain', () => {
+  const lookup = lookupFrom({});
+
+  expect(lookup('toString')).toBeUndefined();
+  expect(lookup('__proto__')).toBeUndefined();
 });

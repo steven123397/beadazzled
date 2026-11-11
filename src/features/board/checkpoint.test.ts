@@ -2,28 +2,9 @@ import { expect, test } from 'vitest';
 
 import type { Dependency, Issue, JournalRecord } from '@/bindings/bd';
 import { createTicketStore } from '@/lib/sync/store';
+import { makeIssue as issue, TEST_TS as TS } from '@/test/fixtures';
 
 import { buildBoard } from './columns';
-
-const TS = '2026-11-01T00:00:00Z';
-
-function issue(id: string, overrides: Partial<Issue> = {}): Issue {
-  return {
-    id,
-    title: `Issue ${id}`,
-    description: '',
-    status: 'open',
-    priority: 2,
-    issue_type: 'task',
-    created_at: TS,
-    updated_at: TS,
-    labels: [],
-    dependency_count: 0,
-    dependent_count: 0,
-    comment_count: 0,
-    ...overrides,
-  };
-}
 
 function blocks(from: string, to: string): Dependency {
   return { issue_id: from, depends_on_id: to, type: 'blocks', created_at: TS };

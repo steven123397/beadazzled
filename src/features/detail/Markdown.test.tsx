@@ -1,12 +1,12 @@
-import { render, screen } from '@testing-library/react';
+import { screen } from '@testing-library/react';
 import { expect, test, vi } from 'vitest';
 
-import { I18nProvider } from '@/lib/i18n/I18nProvider';
+import { renderWithI18n } from '@/test/fixtures';
 
 import { Markdown } from './Markdown';
 
 function renderMarkdown(ui: React.ReactElement) {
-  return render(<I18nProvider initialLanguage="en">{ui}</I18nProvider>);
+  return renderWithI18n(ui);
 }
 
 test('GFM tables, task lists, strikethrough, code and nested lists all render', () => {

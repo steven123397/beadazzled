@@ -526,6 +526,41 @@ fn the_line_cursor_stops_exactly_at_the_limit() {
 }
 
 #[test]
+fn a_scan_reports_incomplete_when_pipe_grace_expires() {
+    let dir = temp_dir("scan-grace");
+    let workspace = workspace(&dir);
+    let mut request = request(&workspace, "exit-with-grandchild");
+    request.env.push(env("FAKE_BD_SLEEP_MS", "10000"));
+
+    let output = runner()
+        .run_scan(&request, ScanBounds { max_lines: 10 })
+        .expect("a scan returns the partial output when stdout stays open");
+
+    assert_eq!(output.stop, ScanStop::Incomplete);
+    assert_eq!(output.exit_code, Some(0));
+}
+
+#[test]
+fn a_scan_stops_at_the_total_stdout_limit() {
+    let dir = temp_dir("scan-total-limit");
+    let workspace = workspace(&dir);
+    let mut request = request(&workspace, "large");
+    request.limits = OutputLimits {
+        total: 500,
+        line: 1000,
+        stderr: 1024,
+    };
+    request.env.push(env("FAKE_BD_OUTPUT_BYTES", "600"));
+    request.env.push(env("FAKE_BD_NEWLINE_EVERY", "300"));
+
+    let output = runner()
+        .run_scan(&request, ScanBounds { max_lines: 10 })
+        .expect("a bounded scan returns OutputLimit instead of an error");
+
+    assert_eq!(output.stop, ScanStop::OutputLimit);
+}
+
+#[test]
 fn scans_wait_for_the_workspace_lock() {
     let dir = temp_dir("scan-lock");
     let workspace = workspace(&dir);

@@ -1,30 +1,10 @@
 import { expect, test } from 'vitest';
 
-import type { Issue } from '@/bindings/bd';
 import { selectVisibleIssues } from '@/lib/view/select';
 import { createListViewState } from '@/lib/view/state';
+import { makeIssue as issue } from '@/test/fixtures';
 
 import { groupIssues } from './group';
-
-const TS = '2026-11-01T00:00:00Z';
-
-function issue(id: string, overrides: Partial<Issue> = {}): Issue {
-  return {
-    id,
-    title: `Issue ${id}`,
-    description: '',
-    status: 'open',
-    priority: 2,
-    issue_type: 'task',
-    created_at: TS,
-    updated_at: TS,
-    labels: [],
-    dependency_count: 0,
-    dependent_count: 0,
-    comment_count: 0,
-    ...overrides,
-  };
-}
 
 test('none returns a single group that preserves the input order', () => {
   const issues = [issue('b'), issue('a')];

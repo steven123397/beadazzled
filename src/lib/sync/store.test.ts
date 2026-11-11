@@ -1,28 +1,13 @@
 import { expect, test } from 'vitest';
 
 import type { Issue, JournalRecord } from '@/bindings/bd';
+import { makeIssue, TEST_TS as TS } from '@/test/fixtures';
 
 import { applyRecords } from './reducer';
 import { createTicketStore } from './store';
 
-const TS = '2026-11-01T00:00:00Z';
-
 function issue(id: string, overrides: Partial<Issue> = {}): Issue {
-  return {
-    id,
-    title: `Issue ${id}`,
-    description: `Description ${id}`,
-    status: 'open',
-    priority: 2,
-    issue_type: 'task',
-    created_at: TS,
-    updated_at: TS,
-    labels: [],
-    dependency_count: 0,
-    dependent_count: 0,
-    comment_count: 0,
-    ...overrides,
-  };
+  return makeIssue(id, { description: `Description ${id}`, ...overrides });
 }
 
 function record(

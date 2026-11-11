@@ -1,5 +1,7 @@
 import { expect, test } from 'vitest';
 
+import { withThrowingLocalStorage } from '@/test/storage';
+
 import { applyTheme, loadTheme, resolveTheme, saveTheme, type Theme } from './theme';
 
 function withMatchMedia(prefersDark: boolean): () => void {
@@ -82,22 +84,8 @@ test('a storage that throws on read or write degrades to the default theme', () 
 });
 
 test('a throwing window.localStorage getter degrades instead of crashing', () => {
-  const descriptor = Object.getOwnPropertyDescriptor(window, 'localStorage');
-  Object.defineProperty(window, 'localStorage', {
-    configurable: true,
-    get() {
-      throw new Error('SecurityError');
-    },
-  });
-
-  try {
+  withThrowingLocalStorage(() => {
     expect(loadTheme()).toBe('system');
     expect(() => saveTheme('dark')).not.toThrow();
-  } finally {
-    if (descriptor === undefined) {
-      Reflect.deleteProperty(window, 'localStorage');
-    } else {
-      Object.defineProperty(window, 'localStorage', descriptor);
-    }
-  }
+  });
 });
