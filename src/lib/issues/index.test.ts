@@ -29,3 +29,10 @@ test('an issue id of __proto__ stays a normal entry', () => {
 test('an absent index produces an empty lookup', () => {
   expect(lookupFrom(undefined)('a')).toBeUndefined();
 });
+
+test('a plain object index never resolves through the prototype chain', () => {
+  const lookup = lookupFrom({});
+
+  expect(lookup('toString')).toBeUndefined();
+  expect(lookup('__proto__')).toBeUndefined();
+});
