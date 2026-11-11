@@ -1,6 +1,7 @@
-import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { Link, MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { beforeEach, expect, test, vi } from 'vitest';
+import type { ReactNode } from 'react';
 
 import type { Issue, SyncState } from '@/bindings/bd';
 import { makeIssue as issue, renderWithI18n } from '@/test/fixtures';
@@ -32,21 +33,18 @@ function renderList({
   entry = '/w/p1/list',
   syncState = healthy,
   onRefresh,
-  withInput = false,
-  withLink = false,
+  children,
 }: {
   issues: readonly Issue[];
   entry?: string;
   syncState?: SyncState;
   onRefresh?: () => void;
-  withInput?: boolean;
-  withLink?: boolean;
+  children?: ReactNode;
 }) {
   const refresh = onRefresh ?? vi.fn();
-  renderWithI18n(
+  const renderResult = renderWithI18n(
     <MemoryRouter initialEntries={[entry]}>
-      {withInput ? <input aria-label="Other input" /> : null}
-      {withLink ? <Link to="/w/p1/list">Go to list</Link> : null}
+      {children}
       <Routes>
         <Route
           path="/w/:projectId/list"
@@ -59,7 +57,7 @@ function renderList({
       <LocationProbe />
     </MemoryRouter>
   );
-  return { refresh };
+  return { ...renderResult, refresh };
 }
 
 function row(id: string): HTMLElement {
@@ -141,7 +139,7 @@ test('clicking a row opens it', () => {
 });
 
 test('J and K are ignored while typing in an input', () => {
-  renderList({ issues: [issue('bza-1')], withInput: true });
+  renderList({ issues: [issue('bza-1')], children: <input aria-label="Other input" /> });
   const input = screen.getByRole('textbox', { name: 'Other input' });
 
   input.focus();
@@ -172,10 +170,7 @@ test('a saved focus that is filtered out does not steal focus later', async () =
   });
 
   // Let the restore pass finish while bza-2 is excluded by the deep link.
-  await act(async () => {
-    await new Promise((resolve) => setTimeout(resolve, 50));
-  });
-  expect(document.querySelector('[data-issue-id="bza-2"]')).toBeNull();
+  await waitFor(() => expect(document.querySelector('[data-issue-id="bza-2"]')).toBeNull());
 
   fireEvent.change(screen.getByRole('searchbox', { name: 'Search tickets' }), {
     target: { value: '' },
@@ -186,16 +181,7 @@ test('a saved focus that is filtered out does not steal focus later', async () =
 });
 
 test('saves the scroll offset and focused row on unmount', async () => {
-  const view = renderWithI18n(
-    <MemoryRouter initialEntries={['/w/p1/list']}>
-      <Routes>
-        <Route
-          path="/w/:projectId/list"
-          element={<ListView projectId="p1" issues={[issue('bza-1'), issue('bza-2')]} />}
-        />
-      </Routes>
-    </MemoryRouter>
-  );
+  const view = renderList({ issues: [issue('bza-1'), issue('bza-2')] });
 
   fireEvent.keyDown(window, { key: 'j' });
   await waitFor(() => expect(row('bza-1')).toHaveFocus());
@@ -344,7 +330,7 @@ test('clicking the list link keeps the active filters', async () => {
   renderList({
     issues: [issue('a', { title: 'Fix scroll' }), issue('b', { title: 'Other work' })],
     entry: '/w/p1/list?q=fix',
-    withLink: true,
+    children: <Link to="/w/p1/list">Go to list</Link>,
   });
 
   const search = screen.getByRole('searchbox', { name: 'Search tickets' });

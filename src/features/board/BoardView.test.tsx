@@ -6,7 +6,7 @@ import type { Issue, SyncState } from '@/bindings/bd';
 import { I18nProvider } from '@/lib/i18n/I18nProvider';
 import type { UseWrite } from '@/lib/writes/useWrite';
 import { fakeEchoWrites as fakeWrites } from '@/test/detail-writes';
-import { makeIssue as issue, renderWithI18n, TEST_TS as TS } from '@/test/fixtures';
+import { makeIssue as issue, TEST_TS as TS } from '@/test/fixtures';
 
 import { BoardView } from './BoardView';
 
@@ -23,46 +23,39 @@ function LocationProbe() {
   return <output data-testid="location">{location.pathname + location.search}</output>;
 }
 
-function BoardHarness({ issues, writes }: { issues: readonly Issue[]; writes?: UseWrite }) {
+type BoardHarnessProps = {
+  issues: readonly Issue[];
+  entry?: string;
+  syncState?: SyncState;
+  writes?: UseWrite;
+};
+
+function BoardHarness({
+  issues,
+  entry = '/w/p1/board',
+  syncState = healthy,
+  writes,
+}: BoardHarnessProps) {
   return (
     <I18nProvider initialLanguage="en">
-      <MemoryRouter initialEntries={['/w/p1/board']}>
+      <MemoryRouter initialEntries={[entry]}>
         <Routes>
           <Route
             path="/w/:projectId/board"
-            element={<BoardView projectId="p1" issues={issues} writes={writes} />}
+            element={
+              <BoardView projectId="p1" issues={issues} syncState={syncState} writes={writes} />
+            }
           />
+          <Route path="/w/:projectId/issue/:issueId" element={<div>detail</div>} />
         </Routes>
+        <LocationProbe />
       </MemoryRouter>
     </I18nProvider>
   );
 }
 
-function renderBoard({
-  issues,
-  entry = '/w/p1/board',
-  syncState = healthy,
-  writes,
-}: {
-  issues: readonly Issue[];
-  entry?: string;
-  syncState?: SyncState;
-  writes?: UseWrite;
-}) {
-  return renderWithI18n(
-    <MemoryRouter initialEntries={[entry]}>
-      <Routes>
-        <Route
-          path="/w/:projectId/board"
-          element={
-            <BoardView projectId="p1" issues={issues} syncState={syncState} writes={writes} />
-          }
-        />
-        <Route path="/w/:projectId/issue/:issueId" element={<div>detail</div>} />
-      </Routes>
-      <LocationProbe />
-    </MemoryRouter>
-  );
+function renderBoard(props: BoardHarnessProps) {
+  return render(<BoardHarness {...props} />);
 }
 
 function column(id: string): HTMLElement {
@@ -167,16 +160,7 @@ test('clicking a card opens its detail route', () => {
 });
 
 test('loading and empty states are distinct', () => {
-  const { unmount } = renderWithI18n(
-    <MemoryRouter initialEntries={['/w/p1/board']}>
-      <Routes>
-        <Route
-          path="/w/:projectId/board"
-          element={<BoardView projectId="p1" issues={[]} syncState={loading} />}
-        />
-      </Routes>
-    </MemoryRouter>
-  );
+  const { unmount } = renderBoard({ issues: [], syncState: loading });
   expect(screen.getByRole('status', { name: 'Loading tickets' })).toBeInTheDocument();
   unmount();
 
@@ -385,7 +369,7 @@ test('clearing the last blocker moves the card from Blocked to Ready', () => {
     dependencies: [{ issue_id: 'bza-1', depends_on_id: 'bza-2', type: 'blocks', created_at: TS }],
   });
   const blocker = issue('bza-2');
-  const { rerender } = render(<BoardHarness issues={[dependent, blocker]} />);
+  const { rerender } = renderBoard({ issues: [dependent, blocker] });
 
   expect(card('bza-1').closest('[data-column-id="blocked"]')).not.toBeNull();
 
@@ -446,7 +430,7 @@ test('Shift+Arrow on a filter control does not move a card', () => {
 });
 
 test('a stale focused card is replaced so the board stays tabbable', async () => {
-  const { rerender } = render(<BoardHarness issues={[issue('bza-1'), issue('bza-2')]} />);
+  const { rerender } = renderBoard({ issues: [issue('bza-1'), issue('bza-2')] });
 
   fireEvent.keyDown(window, { key: 'j' });
   await waitFor(() => expect(card('bza-2')).toHaveAttribute('data-focused', 'true'));
