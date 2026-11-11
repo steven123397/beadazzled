@@ -14,6 +14,6 @@ if (globalThis.ResizeObserver === undefined) {
     disconnect(): void {}
   } as unknown as typeof ResizeObserver;
 }
-if (Element.prototype.scrollIntoView === undefined) {
-  Element.prototype.scrollIntoView = () => undefined;
+if (globalThis.Element !== undefined && globalThis.Element.prototype.scrollIntoView === undefined) {
+  globalThis.Element.prototype.scrollIntoView = () => undefined;
 }

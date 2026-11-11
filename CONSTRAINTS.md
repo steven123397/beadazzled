@@ -55,6 +55,14 @@
 | 交还给人之前 | ≤ 90s | bridge 单测 + 改动行覆盖率 + 架构边界 |
 | CI / review | 不限 | 全量测试、Rust 风格、依赖扫描、构建、体积与性能测量 |
 
+`check:full` 是 CI 专属命令：本地编辑循环用 `check:fast`，交还前用
+`check:task`；`check:full` 额外包含 `test:rust`、`build:app`、体积检查与
+浏览器 E2E，只用于 CI 或发布前的完整验证。
+
+`test:unit` 用 Vitest 双项目运行：纯逻辑套件在 node 项目（无 setup 文件），
+DOM/storage/renderHook/CSS 依赖套件在 jsdom 项目；新增 `.test.ts` 默认进
+node，需要 jsdom 的加进 `vitest.config.ts` 的 `jsdomTsSuites`。
+
 CI 由 `.github/workflows/ci.yml` 执行（PR 与 main push），按序为：`check:fast`、
 `format:check`、`check:rust:style`、`build`、`check:bundle`、`check:task`、
 浏览器 `e2e`（含 axe）、`check:deps`。`check:task` 中的 `test:unit` 不采集
