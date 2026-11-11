@@ -55,7 +55,7 @@ const LOADING: SyncState = { kind: 'loading', step: 'export' };
  * a route chunk keeps it out of the first-screen JavaScript budget.
  */
 const DetailRoute = lazy(() =>
-  import('@/features/detail/DetailView').then((module) => ({ default: module.DetailRoute }))
+  import('@/features/detail/DetailRoute').then((module) => ({ default: module.DetailRoute }))
 );
 
 /**

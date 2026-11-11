@@ -19,8 +19,6 @@ import { MetadataRail } from './MetadataRail';
 import { useDetailShortcuts } from './useDetailShortcuts';
 import { useDetailWrites, type EditableField } from './useDetailWrites';
 
-export { DetailRoute } from './DetailRoute';
-
 export type DetailViewProps = {
   issueId: string;
   issues: readonly Issue[];

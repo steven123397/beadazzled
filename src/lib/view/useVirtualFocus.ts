@@ -6,6 +6,8 @@ export interface VirtualizerLike {
 }
 
 export interface UseVirtualFocusOptions<T> {
+  /** Optional indexed lookup for callers that already maintain an id map. */
+  resolveIndex?: (id: string) => number;
   getItemId: (item: T) => string | undefined;
   getElementId: (id: string) => string;
 }
@@ -24,20 +26,26 @@ export function useVirtualFocus<T>(
 ) {
   const pendingFocusRef = useRef<string | null>(null);
   const [requestCount, setRequestCount] = useState(0);
-  const { getItemId, getElementId } = options;
+  const virtualizerRef = useRef(virtualizer);
+  const itemsRef = useRef(items);
+  const optionsRef = useRef(options);
+  virtualizerRef.current = virtualizer;
+  itemsRef.current = items;
+  optionsRef.current = options;
 
-  const focusItem = useCallback(
-    (id: string) => {
-      const index = items.findIndex((item) => getItemId(item) === id);
-      if (index === -1) {
-        return;
-      }
-      pendingFocusRef.current = id;
-      setRequestCount((count) => count + 1);
-      virtualizer.scrollToIndex(index, { align: 'auto' });
-    },
-    [getItemId, items, virtualizer]
-  );
+  // Keyboard listeners and animation frames may retain this callback. Read the
+  // latest snapshot when it runs instead of reattaching them on every render.
+  const focusItem = useCallback((id: string) => {
+    const { resolveIndex, getItemId } = optionsRef.current;
+    const index =
+      resolveIndex?.(id) ?? itemsRef.current.findIndex((item) => getItemId(item) === id);
+    if (index === -1) {
+      return;
+    }
+    pendingFocusRef.current = id;
+    setRequestCount((count) => count + 1);
+    virtualizerRef.current.scrollToIndex(index, { align: 'auto' });
+  }, []);
 
   const virtualItems = virtualizer.getVirtualItems();
 
@@ -46,13 +54,13 @@ export function useVirtualFocus<T>(
     if (id === null) {
       return;
     }
-    const element = document.getElementById(getElementId(id));
+    const element = document.getElementById(optionsRef.current.getElementId(id));
     if (element === null) {
       return;
     }
     pendingFocusRef.current = null;
     element.focus({ preventScroll: true });
-  }, [getElementId, requestCount, virtualItems]);
+  }, [requestCount, virtualItems]);
 
   return { focusItem, pendingFocusRef };
 }
