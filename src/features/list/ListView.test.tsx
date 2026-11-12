@@ -239,7 +239,8 @@ test('bd unavailable keeps the last loaded data and marks it stale', () => {
     syncState: unavailable,
   });
 
-  expect(screen.getByTestId('list-view')).toHaveAttribute('data-state', 'bd-unavailable');
+  expect(screen.getByTestId('list-view')).toHaveAttribute('data-state', 'ready');
+  expect(screen.getByTestId('list-view')).toHaveAttribute('data-sync', 'bd-unavailable');
   expect(screen.getByRole('alert')).toHaveTextContent(
     'bd is unavailable. Showing the last loaded tickets.'
   );
@@ -247,6 +248,22 @@ test('bd unavailable keeps the last loaded data and marks it stale', () => {
 
   fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
   expect(refresh).toHaveBeenCalledTimes(1);
+});
+
+test('bd unavailable with no filter match keeps no-match separate from stale sync', () => {
+  renderList({
+    issues: [issue('bza-1')],
+    entry: '/w/p1/list?q=zzz',
+    syncState: unavailable,
+  });
+
+  expect(screen.getByTestId('list-view')).toHaveAttribute('data-state', 'no-match');
+  expect(screen.getByTestId('list-view')).toHaveAttribute('data-sync', 'bd-unavailable');
+  expect(screen.getByRole('alert')).toHaveTextContent(
+    'bd is unavailable. Showing the last loaded tickets.'
+  );
+  expect(screen.getByText('No matching tickets')).toBeInTheDocument();
+  expect(screen.queryByRole('list')).not.toBeInTheDocument();
 });
 
 test('bd unavailable without cached data shows the error state', () => {

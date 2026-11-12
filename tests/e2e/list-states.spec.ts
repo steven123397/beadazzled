@@ -62,7 +62,8 @@ test('bd unavailable keeps cached tickets visible and marked stale', async ({ pa
   });
   await page.goto('/#/w/p1/list');
 
-  await expect(page.getByTestId('list-view')).toHaveAttribute('data-state', 'bd-unavailable');
+  await expect(page.getByTestId('list-view')).toHaveAttribute('data-state', 'ready');
+  await expect(page.getByTestId('list-view')).toHaveAttribute('data-sync', 'bd-unavailable');
   await expect(page.getByRole('alert')).toContainText(
     'bd is unavailable. Showing the last loaded tickets.'
   );

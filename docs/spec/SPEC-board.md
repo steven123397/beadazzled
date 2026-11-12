@@ -61,7 +61,7 @@ export function columnOf(issue: Issue, blockers: string[]): ColumnId {
 
 - 复用 `list` 的筛选状态（`q / priority / type / assignee / label / ready`）。
 - **状态筛选在看板隐藏**（列本身表达工作状态）；若 URL 带有 status 参数，看板忽略但保留。
-- 筛选后某列可能为空 → 显示列级空状态，列仍保留。
+- 筛选后某列可能为空 → 显示列级空状态，列仍保留；即使全部列为空也不换成整屏无匹配状态。
 - 列计数反映筛选后的卡片数；顶部显示「结果数 / 总数」。
 
 ## 拖动与写入
@@ -142,7 +142,10 @@ src/features/board/
   position.ts         每工作区记住列滚动偏移与焦点卡（详情返回恢复）
 ```
 
-筛选状态与控件来自 `src/lib/view` 与 `src/components/filter-bar.tsx`，与 list 共用。
+筛选状态、控件与内容状态派生来自 `src/lib/view` 和
+`src/components/filter-bar.tsx`，与 list 共用。Board 不向共享派生函数声明
+`no-match`，因此筛选零结果仍保留固定列（见
+[ADR-0016](../adr/0016-list-board-content-state.md)）。
 
 ## Module Code Style
 

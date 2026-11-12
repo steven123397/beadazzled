@@ -17,6 +17,10 @@ vi.mock('@tanstack/react-virtual', async () => {
 
 const healthy: SyncState = { kind: 'healthy', lastSeq: 1, lastEventAt: null };
 const loading: SyncState = { kind: 'loading', step: 'export' };
+const unavailable: SyncState = {
+  kind: 'bd-unavailable',
+  error: { code: 'BD_NOT_FOUND', message: 'bd missing' },
+};
 
 function LocationProbe() {
   const location = useLocation();
@@ -166,6 +170,49 @@ test('loading and empty states are distinct', () => {
 
   renderBoard({ issues: [], syncState: healthy });
   expect(screen.getByText('No tickets yet')).toBeInTheDocument();
+});
+
+test('bd unavailable without cached data shows the error state', () => {
+  renderBoard({ issues: [], syncState: unavailable });
+
+  expect(screen.getByTestId('board-view')).toHaveAttribute('data-state', 'bd-unavailable');
+  expect(screen.getByText('bd is unavailable')).toBeInTheDocument();
+  expect(screen.getByText('bd missing')).toBeInTheDocument();
+  expect(document.querySelector('[data-column-id]')).toBeNull();
+});
+
+test('bd unavailable keeps cached cards and marks the board stale', () => {
+  renderBoard({ issues: [issue('bza-1')], syncState: unavailable });
+
+  expect(screen.getByTestId('board-view')).toHaveAttribute('data-state', 'ready');
+  expect(screen.getByTestId('board-view')).toHaveAttribute('data-sync', 'bd-unavailable');
+  expect(card('bza-1')).toBeInTheDocument();
+  expect(
+    screen.getByText('bd is unavailable. Showing the last loaded tickets.')
+  ).toBeInTheDocument();
+});
+
+test('stale cached data with no filter match keeps empty columns and can be cleared', async () => {
+  renderBoard({
+    issues: [issue('bza-1')],
+    entry: '/w/p1/board?q=zzz',
+    syncState: unavailable,
+  });
+
+  expect(screen.getByTestId('board-view')).toHaveAttribute('data-state', 'ready');
+  expect(screen.getByTestId('board-view')).toHaveAttribute('data-sync', 'bd-unavailable');
+  expect(document.querySelectorAll('[data-column-id]')).toHaveLength(5);
+  expect(screen.getAllByText('No tickets')).toHaveLength(5);
+  expect(document.querySelector('[data-issue-id]')).toBeNull();
+  expect(screen.queryByText('No matching tickets')).not.toBeInTheDocument();
+  expect(screen.getByText('0 / 1')).toBeInTheDocument();
+  expect(
+    screen.getByText('bd is unavailable. Showing the last loaded tickets.')
+  ).toBeInTheDocument();
+
+  fireEvent.click(screen.getByRole('button', { name: 'Clear filters' }));
+
+  await waitFor(() => expect(card('bza-1')).toBeInTheDocument());
 });
 
 function card(issueId: string): HTMLElement {

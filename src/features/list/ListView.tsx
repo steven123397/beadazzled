@@ -17,6 +17,7 @@ import {
 import { isEditableTarget, isOverlayOpen, isViewTarget } from '@/lib/dom/focus';
 import { useI18n } from '@/lib/i18n/I18nProvider';
 import { indexById } from '@/lib/issues';
+import { deriveViewState } from '@/lib/view/derive-view-state';
 import { buildSearchIndex, hasActiveFilters } from '@/lib/view/filter';
 import { selectVisibleIssues } from '@/lib/view/select';
 import { createListViewState, type GroupBy } from '@/lib/view/state';
@@ -34,8 +35,6 @@ const OVERSCAN = 10;
 const INITIAL_RECT = { width: 0, height: 600 };
 
 type ListItem = { kind: 'header'; key: string; count: number } | { kind: 'row'; issue: Issue };
-
-type ListState = 'loading' | 'empty' | 'no-match' | 'bd-unavailable' | 'ready';
 
 export type ListViewProps = {
   projectId: string;
@@ -188,16 +187,11 @@ export function ListView({ projectId, issues, syncState = HEALTHY, onRefresh }: 
   }, [updateView, view]);
 
   const total = issues.length;
-  const state: ListState =
-    syncState.kind === 'loading' && total === 0
-      ? 'loading'
-      : syncState.kind === 'bd-unavailable'
-        ? 'bd-unavailable'
-        : total === 0
-          ? 'empty'
-          : visible.length === 0 && activeFilters
-            ? 'no-match'
-            : 'ready';
+  const state = deriveViewState({
+    syncKind: syncState.kind,
+    total,
+    noMatch: visible.length === 0 && activeFilters,
+  });
 
   // Restore once the first non-empty snapshot is available. Waiting matters
   // when sync paints an empty list first and fills it a frame later. The
@@ -343,9 +337,12 @@ export function ListView({ projectId, issues, syncState = HEALTHY, onRefresh }: 
             </>
           }
         />
-      ) : syncState.kind === 'bd-unavailable' && total === 0 ? (
-        <ErrorState message={syncState.error.message} onRefresh={onRefresh} />
-      ) : visible.length === 0 && activeFilters ? (
+      ) : state === 'bd-unavailable' ? (
+        <ErrorState
+          message={syncState.kind === 'bd-unavailable' ? syncState.error.message : ''}
+          onRefresh={onRefresh}
+        />
+      ) : state === 'no-match' ? (
         <NoMatchState onClear={clearFilters} />
       ) : (
         <div

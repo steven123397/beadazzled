@@ -68,10 +68,15 @@ export function selectVisibleIssues(issues: Issue[], view: ListViewState): Issue
 | 基线加载中 | 骨架屏（10 行占位） |
 | 工作区无票 | 空状态 +「新建第一条票」按钮 |
 | 有票但筛选无结果 | 「没有匹配的票」+「清除筛选」 |
-| bd 不可用 | 错误状态（来自 `sync`），保留上次数据并标注过期 |
+| bd 不可用且无缓存 | 错误状态（来自 `sync`）+ 重试 |
+| bd 不可用且有缓存 | 保留列表或无匹配状态，并标注过期；不显示整屏错误 |
 | journal 降级 | 列表正常显示，状态栏黄点 |
 
 **任何情况下不得用空列表表示加载或失败。**
+
+`data-state` 只表达上表的内容呈现，`data-sync` 表达同步健康；有缓存但过期时
+可以是 `ready` 或 `no-match` 与 `bd-unavailable` 的组合，不另设 `stale`
+内容状态（见 [ADR-0016](../adr/0016-list-board-content-state.md)）。
 
 ## Acceptance Criteria
 
@@ -104,6 +109,7 @@ src/lib/view/          列表与看板共享
   select.ts           selectVisibleIssues
   sort.ts             sortIssues
   state.ts            ListViewState 与 URL 序列化
+  derive-view-state.ts  List/Board 共享内容状态派生（ADR-0016）
   storage.ts          每个工作区记住上次视图
   filter.ts           matchesFilter / buildSearchIndex / hasActiveFilters
   ready.ts            ready 判定

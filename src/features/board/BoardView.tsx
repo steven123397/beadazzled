@@ -27,6 +27,7 @@ import { describeError } from '@/lib/errors';
 import type { MessageKey } from '@/lib/i18n';
 import { useI18n } from '@/lib/i18n/I18nProvider';
 import { indexById } from '@/lib/issues';
+import { deriveViewState } from '@/lib/view/derive-view-state';
 import { buildSearchIndex } from '@/lib/view/filter';
 import { createListViewState } from '@/lib/view/state';
 import { usePersistedView } from '@/lib/view/usePersistedView';
@@ -45,8 +46,6 @@ import { BoardDragOverlay } from './DragOverlay';
 import { firstCardId, focusedCard, moveFocus, type FocusKey } from './keyboard';
 import { adjacentDroppableColumn, planMove, type MoveRejection } from './move';
 import { loadBoardPosition, saveBoardPosition } from './position';
-
-type BoardState = 'loading' | 'empty' | 'bd-unavailable' | 'ready';
 
 type Notice = { tone: 'info' | 'error'; text: string };
 
@@ -381,14 +380,7 @@ export function BoardView({
   ]);
 
   const total = issues.length;
-  const state: BoardState =
-    syncState.kind === 'loading' && total === 0
-      ? 'loading'
-      : syncState.kind === 'bd-unavailable' && total === 0
-        ? 'bd-unavailable'
-        : total === 0
-          ? 'empty'
-          : 'ready';
+  const state = deriveViewState({ syncKind: syncState.kind, total });
 
   return (
     <section
