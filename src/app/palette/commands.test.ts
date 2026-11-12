@@ -33,6 +33,16 @@ test('builds navigation, actions and issue commands', () => {
   expect(commands.find((command) => command.id === 'issue:bza-1')?.title).toBe('Fix the shell');
 });
 
+test('issue commands encode the complete issue id as one route segment', () => {
+  const navigate = vi.fn();
+  const targetId = 'bza/1 #?';
+  const commands = buildCommands([issue(targetId, 'Reserved characters')], context({ navigate }));
+
+  commands.find((command) => command.id === `issue:${targetId}`)?.run();
+
+  expect(navigate).toHaveBeenCalledWith('/w/p1/issue/bza%2F1%20%23%3F');
+});
+
 test('skips view navigation when no workspace is open', () => {
   const commands = buildCommands([], context({ project: null }));
 

@@ -13,6 +13,10 @@ export function boardPath(projectId: string): string {
   return `/w/${projectId}/board`;
 }
 
+export function issuePath(projectId: string, issueId: string): string {
+  return `/w/${projectId}/issue/${encodeURIComponent(issueId)}`;
+}
+
 export function isIssuePath(pathname: string): boolean {
   return /^\/w\/[^/]+\/issue\//.test(pathname);
 }
