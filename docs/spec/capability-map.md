@@ -67,6 +67,7 @@ src/
   lib/                IPC 客户端、store、i18n、markdown、格式化
     issues/         中立 byId 索引与安全查找（store / view 共用）
     records.ts      无原型记录构造叶子（sync / store 共用）
+    persisted.ts    localStorage 安全读写叶子；调用方拥有编解码与回退值（ADR-0017）
   bindings/           ts-rs 生成的 TS 类型（禁止手改）
   styles/             全局样式与主题变量
 src-tauri/

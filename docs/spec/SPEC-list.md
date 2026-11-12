@@ -110,7 +110,7 @@ src/lib/view/          列表与看板共享
   sort.ts             sortIssues
   state.ts            ListViewState 与 URL 序列化
   derive-view-state.ts  List/Board 共享内容状态派生（ADR-0016）
-  storage.ts          每个工作区记住上次视图
+  storage.ts          每个工作区记住上次视图；安全读写复用 lib/persisted.ts（ADR-0017）
   filter.ts           matchesFilter / buildSearchIndex / hasActiveFilters
   ready.ts            ready 判定
   collator.ts         稳定排序
