@@ -1,3 +1,5 @@
+import { readSetting, writeSetting } from '@/lib/persisted';
+
 export type Theme = 'light' | 'dark' | 'system';
 export type ResolvedTheme = 'light' | 'dark';
 
@@ -34,22 +36,15 @@ export function systemPrefersDark(): boolean {
 
 /** Reads the saved preference; an unreadable storage means "follow the system". */
 export function loadTheme(storage?: Storage): Theme {
-  try {
-    // Resolved inside the try: reading `window.localStorage` itself throws when
-    // storage is disabled, and a default parameter would evaluate first.
-    const store = storage ?? window.localStorage;
-    const stored = store.getItem(THEME_STORAGE_KEY);
-    return isTheme(stored) ? stored : 'system';
-  } catch {
-    return 'system';
-  }
+  return readSetting(
+    THEME_STORAGE_KEY,
+    (stored) => (isTheme(stored) ? stored : 'system'),
+    'system',
+    storage
+  );
 }
 
 /** Best-effort write: a restricted profile keeps the choice for this session only. */
 export function saveTheme(preference: Theme, storage?: Storage): void {
-  try {
-    (storage ?? window.localStorage).setItem(THEME_STORAGE_KEY, preference);
-  } catch {
-    // Nothing to do: the theme is already applied in memory.
-  }
+  writeSetting(THEME_STORAGE_KEY, (value) => value, preference, storage);
 }

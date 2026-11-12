@@ -12,6 +12,7 @@ const jsdomTsSuites = [
   'src/lib/dom/focus.test.ts',
   'src/lib/i18n/i18n.test.ts',
   'src/lib/navigation-guard.test.ts',
+  'src/lib/persisted.test.ts',
   'src/lib/shell/layout.test.ts',
   'src/lib/theme/contrast.test.ts',
   'src/lib/theme/theme.test.ts',

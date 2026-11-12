@@ -195,6 +195,7 @@ src/app/
 src/components/ui/    shadcn 源码组件（button、dialog、command、sidebar 等）
 src/components/      Button、Menu、Dialog、Toast 等本项目共享原语（基于 ui/）
 src/lib/i18n/        en.ts、zh-CN.ts、t()
+src/lib/persisted.ts localStorage 安全读写；i18n / theme / layout 共用（ADR-0017）
 src/styles/          tokens.css、globals.css
 ```
 

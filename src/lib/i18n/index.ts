@@ -1,3 +1,5 @@
+import { readSetting, writeSetting } from '@/lib/persisted';
+
 import { en } from './en';
 import { zhCN } from './zh-CN';
 
@@ -28,24 +30,17 @@ export function isLanguage(value: unknown): value is Language {
 
 /** Reads the saved language; an unreadable storage falls back to English. */
 export function loadLanguage(storage?: Storage): Language {
-  try {
-    // Resolved inside the try: reading `window.localStorage` itself throws when
-    // storage is disabled, and a default parameter would evaluate first.
-    const store = storage ?? window.localStorage;
-    const stored = store.getItem(LANGUAGE_STORAGE_KEY);
-    return isLanguage(stored) ? stored : 'en';
-  } catch {
-    return 'en';
-  }
+  return readSetting(
+    LANGUAGE_STORAGE_KEY,
+    (stored) => (isLanguage(stored) ? stored : 'en'),
+    'en',
+    storage
+  );
 }
 
 /** Best-effort write: a restricted profile keeps the choice for this session only. */
 export function saveLanguage(language: Language, storage?: Storage): void {
-  try {
-    (storage ?? window.localStorage).setItem(LANGUAGE_STORAGE_KEY, language);
-  } catch {
-    // Nothing to do: the catalog switch already happened in memory.
-  }
+  writeSetting(LANGUAGE_STORAGE_KEY, (value) => value, language, storage);
 }
 
 /** Looks up `key` and substitutes `{name}` placeholders from `vars`. */
