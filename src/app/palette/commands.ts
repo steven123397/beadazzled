@@ -1,5 +1,5 @@
 import type { Issue } from '@/bindings/bd';
-import { boardPath, listPath } from '@/app/paths';
+import { boardPath, issuePath, listPath } from '@/app/paths';
 import { LANGUAGES, type Language, type MessageKey } from '@/lib/i18n';
 import { nextTheme, type Theme } from '@/lib/theme/theme';
 
@@ -133,7 +133,7 @@ export function buildCommands(issues: readonly Issue[], context: PaletteContext)
           subtitle: issue.id,
           group: 'Issues',
           keywords: `${issue.id} ${issue.status} ${issue.labels.join(' ')}`,
-          run: () => context.navigate(`/w/${projectId}/issue/${issue.id}`),
+          run: () => context.navigate(issuePath(projectId, issue.id)),
         })
       );
     }
