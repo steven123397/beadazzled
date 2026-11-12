@@ -3,16 +3,13 @@ import { useNavigate } from 'react-router-dom';
 import { Inbox, TriangleAlert } from 'lucide-react';
 
 import type { Issue, SyncState } from '@/bindings/bd';
+import { issuePath } from '@/app/paths';
 import { Button } from '@/components/ui/button';
 import { StateBadge } from '@/components/ui/state-badge';
 import { useI18n } from '@/lib/i18n/I18nProvider';
 import { cn } from '@/lib/utils';
 
 export const HEALTHY: SyncState = { kind: 'healthy', lastSeq: 0, lastEventAt: null };
-
-export function issuePath(projectId: string, issueId: string): string {
-  return `/w/${projectId}/issue/${encodeURIComponent(issueId)}`;
-}
 
 export function useOpenIssue(projectId: string): (issue: Issue) => void {
   const navigate = useNavigate();

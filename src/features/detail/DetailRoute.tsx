@@ -1,7 +1,7 @@
 import { useCallback } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 
-import { listPath } from '@/app/paths';
+import { issuePath, listPath } from '@/app/paths';
 import type { Issue } from '@/bindings/bd';
 import { confirmLeaveDraft } from '@/lib/draft-guard';
 import type { UseWrite } from '@/lib/writes/useWrite';
@@ -35,7 +35,7 @@ export function DetailRoute({ issues, loading, writes }: DetailRouteProps) {
       if (!confirmLeaveDraft()) {
         return;
       }
-      navigate(`/w/${projectId}/issue/${encodeURIComponent(id)}`);
+      navigate(issuePath(projectId, id));
     },
     [navigate, projectId]
   );
